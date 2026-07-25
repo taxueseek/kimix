@@ -1,6 +1,6 @@
 <div align="center">
 
-<h1>Kimix (<code>kimix</code>) 🌘</h1>
+<h1>Kimix (<code>kimix</code>) </h1>
 
 **通用终端 AI 代理工具** — 让你的终端拥有 AI 超能力。
 
@@ -18,7 +18,7 @@
 ### 什么是 Kimix？
 
 Kimix 是一个通用的终端 AI 代理工具，基于 [xai-org/grok-build](https://github.com/xai-org/grok-build)（Apache-2.0）的 hard fork，
-重新锚定 Kimi Code 订阅 API 和 Moonshot 开放平台。
+支持 Kimi Code 订阅 API 等平台。
 
 它以全屏 TUI 的方式运行，能理解你的工作目录、编辑文件、执行命令、搜索网络，
 管理长时运行任务。既可以交互使用，也可以在脚本 / CI 中无头运行，
