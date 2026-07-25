@@ -1,0 +1,23 @@
+[package]
+license = "Apache-2.0"
+name = "kimix-sampling-types"
+version.workspace = true
+edition.workspace = true
+description = "Pure data types for the Kimix sampling / chat-completion API layer"
+
+[dependencies]
+async-openai = { workspace = true }
+indexmap = { workspace = true, features = ["serde"] }
+reqwest = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["preserve_order"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+kimix-compaction = { path = "../../common/kimix-compaction" }
+kimix-tools = { path = "../kimix-tools" }
+
+[dev-dependencies]
+assert_matches = { workspace = true }
+
+[lints]
+workspace = true

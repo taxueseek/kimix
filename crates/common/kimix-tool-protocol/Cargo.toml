@@ -1,0 +1,16 @@
+[package]
+license = "Apache-2.0"
+name = "kimix-tool-protocol"
+version.workspace = true
+edition.workspace = true
+description = "Tool wire-protocol types"
+
+[dependencies]
+kimix-tool-types = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true, features = ["v7"] }
+
+[lints]
+workspace = true

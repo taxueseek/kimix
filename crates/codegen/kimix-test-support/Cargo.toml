@@ -1,0 +1,35 @@
+[package]
+license = "Apache-2.0"
+name = "kimix-test-support"
+version.workspace = true
+edition.workspace = true
+description = "Shared test-support for kimix crates: mock inference server, SSE generators, ACP stdio client, headless runner, env sandbox"
+publish = false
+
+[dependencies]
+agent-client-protocol = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+clap = { workspace = true }
+futures-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true, features = ["compat"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["fmt"] }
+kimix-acp-lib = { workspace = true }
+
+[dev-dependencies]
+reqwest = { workspace = true }
+[features]
+default = []
+default-bazel = []
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[lints]
+workspace = true

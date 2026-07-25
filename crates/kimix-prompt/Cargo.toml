@@ -1,0 +1,12 @@
+[package]
+name = "kimix-prompt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Cache-friendly prompt construction with message pipeline and injection management"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = { workspace = true }

@@ -1,0 +1,113 @@
+[package]
+license = "Apache-2.0"
+name = "kimix-workspace"
+version.workspace = true
+edition.workspace = true
+description = "Core host-local workspace library (FS, VCS, execution, discovery) for kimix-shell and remote sampler"
+
+[dependencies]
+anyhow = { workspace = true }
+arc-swap = { workspace = true }
+dunce = { workspace = true }
+kimix-version = { workspace = true }
+async-stream = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+fs2 = { workspace = true }
+dirs = "6"
+parking_lot = { workspace = true }
+git2 = { workspace = true }
+ignore = { workspace = true }
+md5 = { workspace = true }
+regex = { workspace = true }
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = [
+    "fs",
+    "io-std",
+    "macros",
+    "process",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+] }
+tracing = { workspace = true }
+uuid = { workspace = true, features = ["v4", "v5", "v7"] }
+kimix-agent = { path = "../kimix-agent" }
+kimix-tools = { path = "../kimix-tools" }
+kimix-tools-api = { path = "../kimix-tools-api" }
+kimix-workspace-types = { path = "../kimix-workspace-types" }
+kimix-config = { workspace = true }
+# Leaf config value types (RemoteSettings, BoolFlag) for the folder-trust decision.
+kimix-config-types = { workspace = true }
+toml = { workspace = true, features = ["preserve_order"] }
+dashmap = { workspace = true }
+agent-client-protocol = { workspace = true }
+kimix-acp-lib = { workspace = true }
+kimix-codebase-graph = { path = "../kimix-codebase-graph" }
+kimix-paths = { path = "../kimix-paths" }
+base64 = { workspace = true }
+infer = { workspace = true }
+sha2 = { workspace = true, features = ["force-soft"] }
+bstr = "1.12.1"
+hashbrown = "0.16.1"
+nohash-hasher = "0.2.0"
+rustc-hash = "2.1.1"
+nucleo = { workspace = true }
+indexmap = { workspace = true, features = ["serde"] }
+smallvec = { workspace = true }
+chrono = { workspace = true }
+tree-sitter = "0.25.10"
+tree-sitter-bash = "0.25"
+url = { workspace = true }
+kimix-env = { workspace = true }
+humantime-serde = { workspace = true }
+prometheus = { workspace = true }
+glob = "0.3"
+kimix-sandbox = { path = "../kimix-sandbox", default-features = false }
+kimix-hooks = { path = "../kimix-hooks" }
+kimix-hunk-tracker = { path = "../kimix-hunk-tracker" }
+kimix-mcp = { path = "../kimix-mcp" }
+kimix-file-utils = { path = "../kimix-file-utils" }
+kimix-auth = { path = "../kimix-auth" }
+kimix-log = { workspace = true }
+kimix-tty-utils = { workspace = true }
+kimix-sqlite-journal = { workspace = true }
+kimix-tool-protocol = { workspace = true }
+kimix-tool-runtime = { workspace = true }
+kimix-tool-types = { workspace = true }
+tokio-util = { workspace = true }
+urlencoding = "2"
+kimix-fast-worktree = { path = "../kimix-fast-worktree", features = ["metadata"] }
+
+kimix-fsnotify = { path = "../kimix-fsnotify" }
+tracing-subscriber = { workspace = true }
+tempfile = { workspace = true }
+zstd = { workspace = true }
+
+# Only referenced by the Unix foreign-session capability probe (O_DIRECTORY etc.).
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[features]
+default = ["sandbox-enforce"]
+compression = []
+sandbox-enforce = ["kimix-sandbox/enforce"]
+# Exposes the `#[cfg(test)]` construction seams (`WorkspaceOps::for_test`,
+# `WorkspaceHandle::for_test`, …) to dependent crates' test builds. Enable
+# from a dependent's [dev-dependencies] entry only — never in production.
+test-support = []
+default-bazel = [
+    "sandbox-enforce",
+    ]
+
+[dev-dependencies]
+filetime = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+kimix-test-utils = { path = "../../common/kimix-test-utils" }
+
+[lints]
+workspace = true

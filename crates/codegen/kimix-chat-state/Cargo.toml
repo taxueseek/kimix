@@ -1,0 +1,28 @@
+[package]
+license = "Apache-2.0"
+name = "kimix-chat-state"
+version.workspace = true
+edition.workspace = true
+description = "Actor-based chat state management for Kimix agents"
+
+[features]
+default-bazel = []
+
+[dependencies]
+indexmap = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+strum = { workspace = true }
+tokio = { workspace = true, features = ["sync", "rt", "macros"] }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+kimix-compaction = { path = "../../common/kimix-compaction" }
+kimix-sampling-types = { path = "../kimix-sampling-types" }
+kimix-token-estimation = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

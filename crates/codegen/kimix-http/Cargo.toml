@@ -1,0 +1,20 @@
+[package]
+license = "Apache-2.0"
+name = "kimix-http"
+version.workspace = true
+edition.workspace = true
+description = "Shared reqwest HTTP clients and User-Agent construction for the kimix CLI."
+
+[dependencies]
+reqwest = { workspace = true, features = ["blocking"] }
+reqwest-middleware = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+kimix-auth = { workspace = true, features = ["middleware"] }
+kimix-sampler = { path = "../kimix-sampler" }
+kimix-log = { workspace = true }
+kimix-version = { workspace = true }
+kimix-workspace = { workspace = true }
+
+[lints]
+workspace = true

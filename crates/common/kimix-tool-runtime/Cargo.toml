@@ -1,0 +1,25 @@
+[package]
+license = "Apache-2.0"
+name = "kimix-tool-runtime"
+version.workspace = true
+edition.workspace = true
+description = "Unified Tool trait, dispatch trait, error taxonomy, notifications, local tool registry, and search index"
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+indexmap = { workspace = true }
+parking_lot = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tokio-util = { workspace = true }
+kimix-tool-protocol = { workspace = true }
+kimix-tool-types = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "test-util"] }
+
+[lints]
+workspace = true

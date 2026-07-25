@@ -1,0 +1,14 @@
+[package]
+license = "Apache-2.0"
+name = "kimix-models"
+version.workspace = true
+edition.workspace = true
+description = "Kimi platform registry, /models wire contract, capability derivation, and the bundled offline fallback catalog (default_models.json)."
+
+[dependencies]
+kimix-env = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

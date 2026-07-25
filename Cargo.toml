@@ -1,0 +1,369 @@
+# Hand-maintained workspace root (PRD §8.1: the upstream monorepo generator is
+# not part of this repository, so this file is a source file here).
+# Keep members sorted; dependency versions live here, per-crate manifests
+# reference them with `workspace = true`.
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/build/kimix-proto-build",
+    "crates/codegen/ptyctl",
+    "crates/codegen/ptyctl-cli",
+    "crates/codegen/kimix-acp-lib",
+    "crates/codegen/kimix-agent-lifecycle",
+    "crates/codegen/kimix-chat-state",
+    "crates/codegen/kimix-codebase-graph",
+    "crates/codegen/kimix-crash-handler",
+    "crates/codegen/kimix-fast-worktree",
+    "crates/codegen/kimix-file-utils",
+    "crates/codegen/kimix-fsnotify",
+    "crates/codegen/kimix-gix-status",
+    "crates/codegen/kimix-agent",
+    "crates/codegen/kimix-auth",
+    "crates/codegen/kimix-config",
+    "crates/codegen/kimix-config-types",
+    "crates/codegen/kimix-env",
+    "crates/codegen/kimix-hooks",
+    "crates/codegen/kimix-http",
+    "crates/codegen/kimix-markdown",
+    "crates/codegen/kimix-mcp",
+    "crates/codegen/kimix-agent-memory",
+    "crates/codegen/kimix-mermaid",
+    "crates/codegen/kimix-models",
+    "crates/codegen/kimix-tui",
+    "crates/codegen/kimix-bin",
+    "crates/codegen/kimix-pager-minimal",
+    "crates/codegen/kimix-pager-pty-harness",
+    "crates/codegen/kimix-pager-render",
+    "crates/codegen/kimix-paths",
+    "crates/codegen/kimix-sampler",
+    "crates/codegen/kimix-sampling-types",
+    "crates/codegen/kimix-sandbox",
+    "crates/codegen/kimix-shared",
+    "crates/codegen/kimix-shell",
+    "crates/codegen/kimix-shell-base",
+    "crates/codegen/kimix-subagent-resolution",
+    "crates/codegen/kimix-test-support",
+    "crates/codegen/kimix-tools",
+    "crates/codegen/kimix-tools-api",
+    "crates/codegen/kimix-update",
+    "crates/codegen/kimix-version",
+    "crates/codegen/kimix-workspace",
+    "crates/codegen/kimix-workspace-types",
+    "crates/codegen/kimix-hooks-plugins-types",
+    "crates/codegen/kimix-hunk-tracker",
+    "crates/codegen/kimix-log",
+    "crates/codegen/kimix-prompt-queue",
+    "crates/codegen/kimix-ratatui-inline",
+    "crates/codegen/kimix-ratatui-textarea",
+    "crates/codegen/kimix-sqlite-journal",
+    "crates/codegen/kimix-system-power",
+    "crates/codegen/kimix-token-estimation",
+    "crates/codegen/kimix-tty-utils",
+    "crates/common/kimix-compaction",
+    "crates/common/kimix-test-utils",
+    "crates/common/kimix-tool-protocol",
+    "crates/common/kimix-tool-runtime",
+    "crates/common/kimix-tool-types",
+    "third_party/dagre_rust",
+    "third_party/graphlib_rust",
+    "third_party/mermaid-to-svg",
+    "third_party/ordered_hashmap",
+    "crates/kimix-core",
+    "crates/kimix-prompt",
+    "crates/kimix-bridge",
+]
+
+[workspace.package]
+version = "0.1.12"
+edition = "2024"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+agent-client-protocol = { version = "0.10.4", features = ["unstable"] }
+alacritty_terminal = "0.26.0"
+ansi-to-tui = "7.0.0"
+ansi-width = "0.1"
+anstyle = "1.0"
+anstyle-lossy = "1.1.4"
+anstyle-parse = "0.2"
+anstyle-syntect = "1.0.4"
+anyhow = { version = "1", features = ["backtrace"] }
+arboard = "3.6"
+arc-swap = "1.7"
+assert_matches = "1.5.0"
+async-compression = { version = "0.4.17", default-features = false, features = ["gzip", "zstd", "tokio"] }
+async-lsp = { version = "0.2.3", features = ["tokio", "tracing"] }
+async-openai = { version = "0.33.0", features = ["responses"] }
+async-stream = "0.3"
+async-trait = "0.1"
+axum = { version = "0.8", features = ["macros", "ws"] }
+backon = { version = "1.6" }
+backtrace = "0.3"
+base64 = "0.22"
+blake3 = "1"
+bytes = { version = "1", features = ["serde"] }
+camino = "1.1.10"
+chrono = "0.4"
+clap = { version = "4", features = ["derive", "env"] }
+clap_complete = { version = "4" }
+colored_json = "5"
+core-foundation = "0.10"
+crc32fast = "1.4"
+criterion = "0.6"
+crossbeam = "0.8"
+crossterm = "0.28"
+cryptify = "3.2"
+dashmap = "6"
+derive_more = { version = "2", features = ["add", "add_assign", "debug", "deref", "deref_mut", "display", "from", "from_str", "into", "into_iterator", "try_into"] }
+dirs = "5.0"
+documented = "0.9"
+dunce = "1"
+educe = "0.6.0"
+enum_delegate = "0.2"
+env_logger = "0.11"
+eventsource-stream = "0.2"
+fastrand = "2"
+filetime = "0.2.25"
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+fontdb = "0.23"
+fs2 = "0.4"
+futures = "0.3"
+futures-util = "0.3"
+fuzzy-matcher = "0.3.7"
+gethostname = "1"
+git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
+gix = { version = "0.83", default-features = false, features = ["sha1"] }
+glob = "0.3"
+globset = "0.4"
+htmd = "0.5.4"
+html-escape = "0.2"
+http = "1"
+http-body-util = "0.1"
+humantime-serde = "1"
+ignore = "0.4"
+image = { version = "0.25.9", default-features = false }
+indexmap = { version = "2", features = ["serde"] }
+indicatif = "0.18"
+infer = "0.19.0"
+insta = "1"
+itertools = "0.14"
+jsonschema = "0.30.0"
+libc = "0.2"
+linkify = "0.10"
+lipsum = "0.9"
+log = { version = "0.4", features = ["kv", "kv_unstable"] }
+md5 = "0.8"
+mermaid-to-svg = { path = "third_party/mermaid-to-svg" }
+minijinja = "2.9"
+mockito = "1"
+moka = "0.12"
+nix = { version = "0.30", features = ["poll", "process", "signal", "sched", "term", "mount", "fs", "ioctl", "mman", "reboot", "user"] }
+notify = "8"
+notify-debouncer-mini = "0.6"
+nucleo = { git = "https://github.com/helix-editor/nucleo.git", rev = "5b74652" }
+num_cpus = "1"
+oauth2 = "5"
+obfstr = "0.4"
+once_cell = "1"
+opentelemetry = "0.32"
+opentelemetry_sdk = { version = "0.32.1", features = ["spec_unstable_metrics_views"] }
+parking_lot = "0.12.4"
+pbjson-build = "0.9"
+pdf_oxide = { version = "0.3.43", features = ["rendering"] }
+petgraph = { version = "0.6.5", default-features = false, features = ["serde-1", "stable_graph"] }
+portable-pty = "0.9"
+pprof = "0.15"
+pretty_assertions = "1"
+prometheus = { version = "0.14", features = ["process"] }
+prost = "0.14"
+prost-build = "0.14"
+pulldown-cmark = "0.13"
+quick-xml = "0.41"
+rand = "0.9"
+ratatui = { version = "0.29" }
+ratatui-core = "0.1"
+rayon = "1"
+reflink-copy = "0.1"
+regex = "1"
+reqwest = { version = "0.12", features = ["rustls-tls", "stream", "json", "multipart", "http2", "blocking", "socks"], default-features = false }
+reqwest-middleware = { version = "0.4.1", features = ["json", "multipart"] }
+resvg = { version = "0.47", default-features = false, features = ["text"] }
+ring = "0.17"
+rsa = "0.9"
+runfiles = "0.1"
+rustc-hash = "2"
+schemars = "1"
+scraper = "0.23"
+semver = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_path_to_error = "0.1"
+serde_yaml = "0.9"
+serial_test = "3"
+sha2 = { version = "0.10", features = ["force-soft"] }
+shlex = "1"
+signal-hook = "0.3"
+similar = "2.7"
+siphasher = "1"
+smallvec = "1"
+strip-ansi-escapes = "0.2.1"
+strum = { version = "0.27", features = ["derive"] }
+supports-color = "3.0"
+syntect = "5.3"
+tar = "0.4"
+tempfile = "3"
+terminput = "0.3"
+termwiz = { version = "0.23", default-features = false }
+textwrap = "0.16"
+thiserror = "2"
+tikv-jemalloc-ctl = "0.6"
+tikv-jemalloc-sys = "0.6"
+tikv-jemallocator = { version = "0.6", features = ["profiling", "unprefixed_malloc_on_supported_platforms"] }
+time = "0.3"
+tiny-skia = "0.12"
+tokio = { version = "1", features = ["full"] }
+tokio-retry = "0.3"
+tokio-stream = "0.1"
+tokio-util = { version = "0.7", features = ["rt"] }
+toml = "0.9"
+toml_edit = "0.22"
+tonic = { version = "0.14", features = ["tls-aws-lc", "gzip", "deflate", "zstd"] }
+tonic-prost = "0.14"
+tonic-prost-build = "0.14"
+tower = "0.5"
+tower-http = "0.6"
+tracing = "0.1"
+tracing-opentelemetry = "0.33"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["env-filter", "smallvec", "tracing-log", "std", "ansi"] }
+tui-scrollbar = "0.2"
+two-face = { version = "0.4", default-features = false, features = ["syntect-fancy"] }
+unicode-segmentation = "1.12.0"
+unicode-width = "0.2"
+url = "2"
+urlencoding = "2"
+uuid = { version = "1", features = ["serde", "v4", "v5"] }
+vte = "0.15.0"
+wait-timeout = "0.2"
+walkdir = "2"
+webbrowser = { version = "1.0.4" }
+which = "8"
+windows = { version = "0.62", features = ["Win32_Security", "Win32_Security_Authorization", "Win32_Foundation", "Win32_System_Threading", "Win32_System_JobObjects", "Win32_System_Console", "Win32_System_Pipes"] }
+wiremock = "0.6"
+wl-clipboard-rs = "0.9"
+kimix-acp-lib = { path = "crates/codegen/kimix-acp-lib" }
+kimix-agent-lifecycle = { path = "crates/codegen/kimix-agent-lifecycle" }
+kimix-gix-status = { path = "crates/codegen/kimix-gix-status" }
+kimix-agent = { path = "crates/codegen/kimix-agent" }
+kimix-auth = { path = "crates/codegen/kimix-auth" }
+kimix-config = { path = "crates/codegen/kimix-config" }
+kimix-config-types = { path = "crates/codegen/kimix-config-types" }
+kimix-env = { path = "crates/codegen/kimix-env" }
+kimix-http = { path = "crates/codegen/kimix-http" }
+kimix-markdown = { path = "crates/codegen/kimix-markdown" }
+kimix-mcp = { path = "crates/codegen/kimix-mcp" }
+kimix-agent-memory = { path = "crates/codegen/kimix-agent-memory" }
+kimix-memory = { path = "crates/codegen/kimix-agent-memory" }
+kimix-mermaid = { path = "crates/codegen/kimix-mermaid" }
+kimix-models = { path = "crates/codegen/kimix-models" }
+kimix-sampler = { path = "crates/codegen/kimix-sampler" }
+kimix-shared = { path = "crates/codegen/kimix-shared" }
+kimix-shell = { path = "crates/codegen/kimix-shell" }
+kimix-shell-base = { path = "crates/codegen/kimix-shell-base" }
+kimix-log = { path = "crates/codegen/kimix-log" }
+kimix-test-support = { path = "crates/codegen/kimix-test-support" }
+kimix-tools = { path = "crates/codegen/kimix-tools" }
+kimix-tools-api = { path = "crates/codegen/kimix-tools-api" }
+kimix-version = { path = "crates/codegen/kimix-version" }
+kimix-workspace = { path = "crates/codegen/kimix-workspace" }
+kimix-workspace-types = { path = "crates/codegen/kimix-workspace-types" }
+kimix-hooks-plugins-types = { path = "crates/codegen/kimix-hooks-plugins-types" }
+kimix-prompt-queue = { path = "crates/codegen/kimix-prompt-queue" }
+kimix-proto-build = { path = "crates/build/kimix-proto-build" }
+kimix-ratatui-inline = { path = "crates/codegen/kimix-ratatui-inline" }
+kimix-ratatui-textarea = { path = "crates/codegen/kimix-ratatui-textarea" }
+kimix-sqlite-journal = { path = "crates/codegen/kimix-sqlite-journal" }
+kimix-system-power = { path = "crates/codegen/kimix-system-power" }
+kimix-test-utils = { path = "crates/common/kimix-test-utils" }
+kimix-token-estimation = { path = "crates/codegen/kimix-token-estimation" }
+kimix-tool-protocol = { path = "crates/common/kimix-tool-protocol" }
+kimix-tool-runtime = { path = "crates/common/kimix-tool-runtime" }
+kimix-tool-types = { path = "crates/common/kimix-tool-types" }
+kimix-tty-utils = { path = "crates/codegen/kimix-tty-utils" }
+zbus = { version = "5" }
+zip = { version = "8", default-features = false, features = ["deflate"] }
+zstd = "0.13"
+
+[profile.release]
+incremental = true
+panic = "abort"
+
+# Hardened release profile for shipping to end users (alpha + stable).
+# Use `cargo build --profile release-dist` for distribution builds.
+# Not used by default `--release` to avoid slowing down local dev builds (~2.2x).
+#
+# Hardening: thin LTO for cross-crate optimization with reasonable link times,
+# codegen-units=1 maximizes optimization (whole-program analysis, no CGU boundaries).
+# debug=1 emits line-tables DWARF; strip=false keeps symbols so CI can extract
+# .debug sidecars (Linux) or .dSYM bundles (macOS) before stripping post-build.
+# Linker flags (RELRO, NX stack) are set per-target in .cargo/config.toml.
+[profile.release-dist]
+inherits = "release"
+lto = "thin"
+codegen-units = 1
+strip = false
+debug = 1
+split-debuginfo = "off"
+
+# Desktop release profile. Functionally identical to release-dist — kept as a
+# named alias so the desktop workflow can reference it without coupling to the
+# CLI pipeline's profile name. Alpha and stable share a single release-dist
+# profile so that stable promotion can pointer-swap the alpha binary without
+# rebuilding.
+[profile.release-dist-jemalloc]
+inherits = "release-dist"
+# All settings now match the parent — this is an intentional alias.
+
+
+[profile.dev]
+panic = "abort"
+split-debuginfo = "unpacked"
+codegen-units = 128
+debug = "line-tables-only"
+opt-level = 0
+lto = false
+# Incremental caches balloon to tens of GB across this workspace's 60+ crates
+# under iterative full-workspace builds; rebuild cost is the cheaper trade.
+incremental = false
+
+[profile.bench]
+debug = true
+
+[workspace.lints.rust]
+# macOS ld cannot encode >16MB of __eh_frame in the compact unwind table and
+# says so when linking the (large) debug binary. Every profile builds with
+# panic = "abort", so Rust never unwinds and the "exception handling
+# performance" caveat does not apply — the message is noise here.
+linker_messages = "allow"
+
+[workspace.lints.clippy]
+# prost 0.14 renders proto doc-comment bullet lists in a way that trips this
+# lint on generated code. Kept in sync with bazel/lint/linters.bzl.
+doc_lazy_continuation = "allow"
+doc_overindented_list_items = "allow"
+needless_lifetimes = "warn"
+single_range_in_vec_init = "warn"
+too_many_arguments = "allow"  # TODO: reduce once merge queue is enabled
+
+# Allow uninlined_format_args lint to prevent main from breaking after merges
+# When older branches (created before this lint was added to CI) get merged,
+# they pass their own CI because their CI config doesn't include this lint check.
+# However, once merged to main, the code violates main's lint rules, causing:
+# 1. Main's CI to fail
+# 2. All new branches based off main to fail CI
+# 3. Developers having to fix lint violations from other people's merged code
+# Without a merge-queue that runs main's CI checks on the PR branch,
+# these violations slip through and break the build for everyone.
+# TODO: -> "deny" once/if merge queue enabled
+uninlined_format_args = "allow"
+

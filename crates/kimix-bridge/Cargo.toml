@@ -1,0 +1,11 @@
+[package]
+name = "kimix-bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Bridge: integrates kimix (BM25 recall, 4-layer prompt, context-budget prune) into Kimix-CLI"
+
+[dependencies]
+kimix-core = { path = "../kimix-core" }
+kimix-agent-memory = { path = "../codegen/kimix-agent-memory" }
+kimix-prompt = { path = "../kimix-prompt" }

@@ -1,0 +1,854 @@
+use agent_client_protocol as acp;
+
+use crate::agent::config::ModelEntry;
+
+/// Shared, live handle to the agent's current ACP auth method id.
+///
+/// `Arc` so a clone can cross the per-session-thread boundary at spawn; the
+/// `ArcSwapOption` interior lets the agent's `authenticate` handler publish a
+/// new method that every running session's per-turn auth gate observes on its
+/// next turn -- no re-spawn. `None` until the first `authenticate`. Auth is
+/// process-global (one user, one `AuthManager`), so all sessions sharing one
+/// cell is correct.
+pub(crate) type SharedAuthMethodId = std::sync::Arc<arc_swap::ArcSwapOption<acp::AuthMethodId>>;
+
+/// Construct a [`SharedAuthMethodId`]. `None` is the pre-`authenticate` state.
+pub(crate) fn new_shared_auth_method_id(initial: Option<acp::AuthMethodId>) -> SharedAuthMethodId {
+    std::sync::Arc::new(arc_swap::ArcSwapOption::new(
+        initial.map(std::sync::Arc::new),
+    ))
+}
+
+/// Env var that, when set, advertises `xai.api_key` as a viable auth method.
+///
+/// Kept as a constant so test code and the production check stay in sync.
+pub const XAI_API_KEY_ENV_VAR: &str = "XAI_API_KEY";
+
+/// Legacy env var name. Checked as a fallback when `XAI_API_KEY` is not set,
+/// so existing deployments that use the old name keep working.
+pub const LEGACY_XAI_API_KEY_ENV_VAR: &str = "KIMIX_CODE_XAI_API_KEY";
+
+/// Read the API key from the environment.
+///
+/// Checks `XAI_API_KEY` first, then falls back to the legacy
+/// `KIMIX_CODE_XAI_API_KEY` for backward compatibility.
+pub fn read_xai_api_key_env() -> Result<String, std::env::VarError> {
+    std::env::var(XAI_API_KEY_ENV_VAR).or_else(|_| std::env::var(LEGACY_XAI_API_KEY_ENV_VAR))
+}
+
+/// Returns `true` if either `XAI_API_KEY` or `KIMIX_CODE_XAI_API_KEY` is set.
+pub fn has_xai_api_key_env() -> bool {
+    read_xai_api_key_env().is_ok()
+}
+
+/// Whether `xai.api_key` should be advertised (and pushed FIRST) when building
+/// the `auth_methods` list at `initialize()` time.
+///
+/// Regression: `xai.api_key` must stay first when only per-model credentials
+/// exist (no global `XAI_API_KEY`). Deferring it made BYOK users hit the login
+/// screen because the pager uses `auth_methods.first()` for startup metadata.
+///
+/// [`build_auth_methods`] consumes this predicate and pins the ordering;
+/// its tests catch call-site and predicate regressions.
+///
+/// Probes `std::env` at call time and consults each `ModelEntry` for a
+/// resolvable api_key/env_key -- both inputs can change between calls, so the
+/// result is not cached.
+pub fn should_advertise_xai_api_key<'a, I>(models: I) -> bool
+where
+    I: IntoIterator<Item = &'a ModelEntry>,
+{
+    has_xai_api_key_env() || models.into_iter().any(ModelEntry::has_own_credentials)
+}
+
+/// Inputs to [`build_auth_methods`].
+///
+/// Booleans are computed by the caller (`MvpAgent::initialize()`) because they
+/// depend on async side effects (token refresh) and shared mutable state
+/// (`AuthManager`). The list-construction logic itself is pure so it can be
+/// unit-tested without any of that machinery.
+pub struct AuthMethodsBuildInputs<'a> {
+    /// True if `xai.api_key` should be advertised AT ALL. Caller computes via
+    /// [`should_advertise_xai_api_key`].
+    pub has_external_api_key: bool,
+    /// True if a cached session token is available (either present at startup
+    /// or recovered via silent refresh).
+    pub has_cached_token: bool,
+    /// Optional display label for the interactive login method.
+    pub login_label: Option<&'a str>,
+    /// True if Grok CLI is installed (so we can offer the Grok session bridge).
+    pub has_grok_cli: bool,
+}
+
+/// Output of [`build_auth_methods`].
+pub struct BuiltAuthMethods {
+    /// Auth methods in advertised order. ORDER IS THE CONTRACT: the pager's
+    /// `startup_auth_metadata()` reads `methods.first()` to decide whether
+    /// interactive login is needed.
+    pub methods: Vec<acp::AuthMethod>,
+    /// The default `auth_method_id` to install on the agent. `cached_token`
+    /// wins over `xai.api_key` when both are present; `None` means an
+    /// interactive login is required.
+    pub default_auth_method_id: Option<acp::AuthMethodId>,
+}
+
+/// Build the `auth_methods` list and default `auth_method_id` from
+/// pre-computed inputs.
+///
+/// REGRESSION GUARD: when `has_external_api_key` is true, the **first** entry
+/// MUST be `xai.api_key`. A prior change deferred it to the END for per-model
+/// credentials, which made the pager send per-model-key users to the login
+/// screen. Unit tests lock this.
+///
+/// Ordering (when each method is enabled):
+/// 1. `xai.api_key`     (if `has_external_api_key`)
+/// 2. `cached_token`    (if `has_cached_token`)
+/// 3. `kimi-code`        (the Kimi Code device login)
+/// 4. `moonshot-cn`      (Moonshot Open Platform API-key login, always)
+/// 5. `moonshot-ai`      (Moonshot Open Platform API-key login, always)
+///
+/// The moonshot methods are for the INTERACTIVE login picker only: they come
+/// after `kimi-code` so they can never become `auth_methods.first()` (the
+/// pager's startup metadata / eager-auth fallback reads `first()`), and they
+/// are never the `default_auth_method_id` (a configured moonshot key already
+/// authenticates eagerly via `xai.api_key` — the catalog entries it stamps
+/// satisfy `should_advertise_xai_api_key`).
+///
+/// `default_auth_method_id`:
+/// - `cached_token` if `has_cached_token`
+/// - `xai.api_key`  else if `has_external_api_key`
+/// - `None`         otherwise
+pub fn build_auth_methods(inputs: AuthMethodsBuildInputs<'_>) -> BuiltAuthMethods {
+    let AuthMethodsBuildInputs {
+        has_external_api_key,
+        has_cached_token,
+        login_label,
+        has_grok_cli,
+    } = inputs;
+
+    let mut methods: Vec<acp::AuthMethod> = Vec::new();
+    let mut default_auth_method_id: Option<acp::AuthMethodId> = None;
+
+    if has_external_api_key {
+        methods.push(xai_api_key_auth_method());
+        default_auth_method_id = Some(acp::AuthMethodId::new(XAI_API_KEY_METHOD_ID));
+    }
+
+    if has_cached_token {
+        methods.push(cached_token_auth_method());
+        // cached_token wins over xai.api_key for default_auth_method_id so
+        // is_session_based_auth() returns true and OAuth refresh stays alive.
+        let overrode_api_key = default_auth_method_id.is_some();
+        default_auth_method_id = Some(acp::AuthMethodId::new(CACHED_TOKEN_AUTH_METHOD_ID));
+        if overrode_api_key {
+            kimix_log::unified_log::info(
+                "auth method priority: cached_token overrides xai.api_key for default_auth_method_id",
+                None,
+                Some(serde_json::json!({
+                    "has_external_api_key": has_external_api_key,
+                    "has_cached_token": has_cached_token,
+                })),
+            );
+        }
+    }
+
+    methods.push(kimi_code_auth_method(login_label));
+    methods.push(moonshot_auth_method(kimix_models::PlatformId::MoonshotCn));
+    methods.push(moonshot_auth_method(kimix_models::PlatformId::MoonshotAi));
+    // Native xAI login always available (device-code OIDC).
+    methods.push(xai_session_auth_method());
+    if has_grok_cli {
+        methods.push(grok_session_auth_method());
+    }
+
+    BuiltAuthMethods {
+        methods,
+        default_auth_method_id,
+    }
+}
+
+/// ACP session auth method. Use `is_session_based_method` for classification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthMethodKind {
+    XaiApiKey,
+    CachedToken,
+    KimiCode,
+    /// Moonshot Open Platform API-key login (moonshot.cn).
+    MoonshotCn,
+    /// Moonshot Open Platform API-key login (moonshot.ai).
+    MoonshotAi,
+    /// Native xAI OIDC session (`kimix login --xai`).
+    XaiSession,
+    /// Grok CLI session bridge (legacy / fallback).
+    GrokSession,
+    Unknown,
+}
+
+impl AuthMethodKind {
+    pub fn from_id(id: &acp::AuthMethodId) -> Self {
+        match id.0.as_ref() {
+            XAI_API_KEY_METHOD_ID => Self::XaiApiKey,
+            CACHED_TOKEN_AUTH_METHOD_ID => Self::CachedToken,
+            KIMI_CODE_METHOD_ID => Self::KimiCode,
+            XAI_SESSION_METHOD_ID => Self::XaiSession,
+            MOONSHOT_CN_METHOD_ID => Self::MoonshotCn,
+            MOONSHOT_AI_METHOD_ID => Self::MoonshotAi,
+            GROK_SESSION_METHOD_ID => Self::GrokSession,
+            _ => Self::Unknown,
+        }
+    }
+
+    /// API key auth: no auth.json session, no refresh, no browser round-trip.
+    /// The moonshot methods qualify — they validate a configured platform key
+    /// and then behave exactly like an external-API-key session.
+    pub fn is_api_key(self) -> bool {
+        matches!(self, Self::XaiApiKey | Self::MoonshotCn | Self::MoonshotAi)
+    }
+
+    /// `true` for session-based methods (cached_token, interactive login, xAI/Grok session).
+    pub fn is_session_based(self) -> bool {
+        matches!(
+            self,
+            Self::CachedToken | Self::KimiCode | Self::XaiSession | Self::GrokSession
+        )
+    }
+
+    /// Requires user interaction (device-code login in the browser).
+    pub fn needs_interactive_login(self) -> bool {
+        matches!(self, Self::KimiCode | Self::XaiSession)
+    }
+
+    pub fn auth_error_message(self) -> &'static str {
+        if self.is_session_based() {
+            AUTH_ERROR_SESSION_EXPIRED
+        } else {
+            AUTH_ERROR_API_KEY
+        }
+    }
+}
+
+/// `true` for session-based ACP methods (cached_token, interactive login).
+pub fn is_session_based_method(method_id: &acp::AuthMethodId) -> bool {
+    AuthMethodKind::from_id(method_id).is_session_based()
+}
+
+/// Per-model BYOK status: whether the selected model carries its own
+/// `[model.*]` `api_key`/`env_key`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModelByok {
+    /// Model has its own per-model key (not refreshable).
+    Byok,
+    /// Model has no per-model key (session auth governs).
+    NotByok,
+    /// Config couldn't be loaded/parsed — BYOK status indeterminate.
+    Unknown,
+}
+
+impl ModelByok {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Byok => "byok",
+            Self::NotByok => "not_byok",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// Whether this session+model uses a refreshable session token.
+///
+/// Gates on stable inputs, not `Credentials.auth_type`: that field collapses
+/// to `ApiKey` when the session-token cache is momentarily empty and
+/// `XAI_API_KEY` is set, which demoted live sessions to non-refreshable
+/// api-key mode and 401'd every prompt until restart. `model_byok` still
+/// excludes genuine per-model BYOK, whose keys are not refreshable.
+///
+/// `Unknown` (BYOK status indeterminate — config currently unparseable, no
+/// sampling config yet, or the per-model memo was cleared) must **not** demote
+/// a live session to non-refreshable api-key mode: that re-sends the stale
+/// buffered token on every turn and 401s with `bad-credentials` until restart.
+/// It refreshes when `endpoint_is_first_party` — the request targets the
+/// first-party API, where sending the session token cannot leak to a
+/// third-party BYOK endpoint. A definite `NotByok` always refreshes (it only
+/// ever routes to the session endpoint); a definite `Byok` never does.
+pub fn session_token_auth_gate(
+    is_session_based_method: bool,
+    model_byok: ModelByok,
+    endpoint_is_first_party: bool,
+) -> bool {
+    is_session_based_method
+        && match model_byok {
+            ModelByok::NotByok => true,
+            ModelByok::Byok => false,
+            ModelByok::Unknown => endpoint_is_first_party,
+        }
+}
+
+pub const AUTH_ERROR_SESSION_EXPIRED: &str =
+    "Session expired. Run `kimix login` to re-authenticate.";
+
+pub const AUTH_ERROR_API_KEY: &str = "Authentication failed. Run `kimix login`, set XAI_API_KEY, or add api_key to ~/.kimix/config.toml.";
+
+/// Next ACP method id when `cached_token` cannot proceed (missing / expired):
+/// prefer non-interactive `xai.api_key` when advertiseable, else the
+/// interactive device login.
+pub fn method_id_after_cached_token_unavailable(has_external_api_key: bool) -> &'static str {
+    if has_external_api_key {
+        XAI_API_KEY_METHOD_ID
+    } else {
+        KIMI_CODE_METHOD_ID
+    }
+}
+
+pub const XAI_API_KEY_METHOD_ID: &str = "xai.api_key";
+pub fn xai_api_key_auth_method() -> acp::AuthMethod {
+    acp::AuthMethod::Agent(
+        acp::AuthMethodAgent::new(
+            acp::AuthMethodId::new(XAI_API_KEY_METHOD_ID),
+            "xai.api_key".to_string(),
+        )
+        .description(Some(format!(
+            "{XAI_API_KEY_ENV_VAR} or api_key/env_key in config.toml"
+        ))),
+    )
+}
+
+pub const CACHED_TOKEN_AUTH_METHOD_ID: &str = "cached_token";
+pub fn cached_token_auth_method() -> acp::AuthMethod {
+    acp::AuthMethod::Agent(
+        acp::AuthMethodAgent::new(
+            acp::AuthMethodId::new(CACHED_TOKEN_AUTH_METHOD_ID),
+            "cached_token".to_string(),
+        )
+        .description(Some("Cached Kimi Code session".to_string())),
+    )
+}
+
+/// Interactive login method id, advertised over ACP by this agent and
+/// selected by the in-repo pager. Both sides of the ACP boundary live in
+/// this repo, so the id is renamed in lockstep everywhere.
+pub const KIMI_CODE_METHOD_ID: &str = "kimi-code";
+
+/// The Kimi Code device-code login.
+pub fn kimi_code_auth_method(label: Option<&str>) -> acp::AuthMethod {
+    let name = label.unwrap_or("Kimi Code");
+    acp::AuthMethod::Agent(
+        acp::AuthMethodAgent::new(
+            acp::AuthMethodId::new(KIMI_CODE_METHOD_ID),
+            name.to_string(),
+        )
+        .description(Some(format!("Sign in with {name}"))),
+    )
+}
+
+/// Interactive API-key login for the Moonshot open platforms. Method ids
+/// equal [`kimix_models::PlatformId::as_str`] (`moonshot-cn` / `moonshot-ai`),
+/// which is also the `[platforms.<id>]` config-table name — one id everywhere.
+pub const MOONSHOT_CN_METHOD_ID: &str = "moonshot-cn";
+pub const MOONSHOT_AI_METHOD_ID: &str = "moonshot-ai";
+
+/// Legacy id kept for ACP wire compatibility; prefer [`XAI_SESSION_METHOD_ID`].
+pub const GROK_SESSION_METHOD_ID: &str = "grok-session";
+
+/// Native xAI OIDC device-code login (`kimix login --xai`).
+pub const XAI_SESSION_METHOD_ID: &str = "xai-session";
+
+/// Native xAI session method (device-code OAuth at auth.x.ai).
+pub fn xai_session_auth_method() -> acp::AuthMethod {
+    acp::AuthMethod::Agent(
+        acp::AuthMethodAgent::new(
+            acp::AuthMethodId::new(XAI_SESSION_METHOD_ID),
+            "xAI Session".to_string(),
+        )
+        .description(Some(
+            "Sign in with xAI (device code); stores tokens in ~/.kimix/auth.json".to_string(),
+        )),
+    )
+}
+
+/// Deprecated bridge method (still advertised when Grok CLI is installed).
+pub fn grok_session_auth_method() -> acp::AuthMethod {
+    acp::AuthMethod::Agent(
+        acp::AuthMethodAgent::new(
+            acp::AuthMethodId::new(GROK_SESSION_METHOD_ID),
+            "Grok CLI Session (legacy)".to_string(),
+        )
+        .description(Some(
+            "Deprecated: prefer `kimix login --xai`. Falls back to ~/.grok/auth.json".to_string(),
+        )),
+    )
+}
+
+/// The open platform behind an interactive moonshot method id. `None` for
+/// every other id (including `kimi-code`, whose platform uses OAuth).
+pub fn moonshot_platform_for_method_id(id: &acp::AuthMethodId) -> Option<kimix_models::PlatformId> {
+    match id.0.as_ref() {
+        MOONSHOT_CN_METHOD_ID => Some(kimix_models::PlatformId::MoonshotCn),
+        MOONSHOT_AI_METHOD_ID => Some(kimix_models::PlatformId::MoonshotAi),
+        _ => None,
+    }
+}
+
+/// Console host for an open platform, used in method descriptions and login
+/// copy ("platform.moonshot.cn" / "platform.moonshot.ai").
+pub fn moonshot_console_host(platform: kimix_models::PlatformId) -> &'static str {
+    match platform {
+        kimix_models::PlatformId::MoonshotCn => "platform.moonshot.cn",
+        _ => "platform.moonshot.ai",
+    }
+}
+
+/// A Moonshot Open Platform API-key login method.
+pub fn moonshot_auth_method(platform: kimix_models::PlatformId) -> acp::AuthMethod {
+    let host_suffix = match platform {
+        kimix_models::PlatformId::MoonshotCn => "moonshot.cn",
+        _ => "moonshot.ai",
+    };
+    acp::AuthMethod::Agent(
+        acp::AuthMethodAgent::new(
+            acp::AuthMethodId::new(platform.as_str()),
+            format!("Moonshot Open Platform (API key \u{b7} {host_suffix})"),
+        )
+        .description(Some(format!(
+            "API key from {}",
+            moonshot_console_host(platform)
+        ))),
+    )
+}
+
+/// Actionable error for a moonshot `authenticate` with no key configured.
+pub fn missing_moonshot_key_error(platform: kimix_models::PlatformId) -> String {
+    let env_var = platform
+        .api_key_env_names()
+        .first()
+        .copied()
+        .unwrap_or(kimix_models::MOONSHOT_API_KEY_ENV);
+    format!(
+        "No API key configured for {} \u{2014} paste one in the login screen or set {env_var}",
+        platform.as_str(),
+    )
+}
+
+/// Validate + accept a Moonshot open-platform API key for `authenticate`.
+///
+/// `key` is the caller-resolved credential (env > config; see
+/// `resolve_platform_api_key`) — `None` fails with the actionable
+/// missing-key message. A present key is validated with
+/// `GET {platform_base}/models` (the same endpoint the catalog fetch uses):
+/// 401 → "invalid API key"; any other non-success status or network error
+/// surfaces as-is. SECURITY: the key is only ever sent as the bearer header —
+/// it must never appear in errors or logs.
+pub(crate) async fn authenticate_platform_api_key(
+    platform: kimix_models::PlatformId,
+    key: Option<&str>,
+) -> Result<(), acp::Error> {
+    let auth_err = |message: String| {
+        let mut err = acp::Error::auth_required();
+        err.message = message;
+        err
+    };
+    let Some(key) = key else {
+        return Err(auth_err(missing_moonshot_key_error(platform)));
+    };
+    let url = format!("{}/models", platform.base_url().trim_end_matches('/'));
+    let response = crate::http::shared_client()
+        .get(&url)
+        .header("Authorization", format!("Bearer {key}"))
+        .send()
+        .await
+        .map_err(|e| auth_err(format!("Couldn't reach {}: {e}", platform.as_str())))?;
+    let status = response.status();
+    if status.as_u16() == 401 {
+        return Err(auth_err(format!(
+            "Invalid API key for {} \u{2014} check your key on {}",
+            platform.as_str(),
+            moonshot_console_host(platform),
+        )));
+    }
+    if !status.is_success() {
+        return Err(auth_err(format!(
+            "{} key validation failed: HTTP {}",
+            platform.as_str(),
+            status.as_u16(),
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::config::{Config, resolve_model_list};
+    use agent_client_protocol as acp;
+    use serial_test::serial;
+
+    /// When API-key credentials are advertiseable, fall through from a dead
+    /// `cached_token` to non-interactive `xai.api_key` (not the browser).
+    #[test]
+    fn after_cached_token_unavailable_prefers_api_key_when_advertiseable() {
+        assert_eq!(
+            method_id_after_cached_token_unavailable(true),
+            XAI_API_KEY_METHOD_ID,
+        );
+    }
+
+    /// No advertiseable API-key credentials → interactive device login.
+    #[test]
+    fn after_cached_token_unavailable_falls_to_interactive_login() {
+        assert_eq!(
+            method_id_after_cached_token_unavailable(false),
+            KIMI_CODE_METHOD_ID,
+        );
+    }
+
+    /// Classifier matrix for all auth method variants.
+    #[test]
+    fn auth_method_kind_classifier_matrix() {
+        let session_methods = [
+            CACHED_TOKEN_AUTH_METHOD_ID,
+            KIMI_CODE_METHOD_ID,
+            XAI_SESSION_METHOD_ID,
+            GROK_SESSION_METHOD_ID,
+        ];
+        for id in session_methods {
+            let kind = AuthMethodKind::from_id(&acp::AuthMethodId::new(id));
+            assert!(kind.is_session_based(), "{id} must be session-based");
+            assert!(!kind.is_api_key(), "{id} must not be api-key");
+        }
+        let api = AuthMethodKind::from_id(&acp::AuthMethodId::new(XAI_API_KEY_METHOD_ID));
+        assert!(api.is_api_key());
+        assert!(!api.is_session_based());
+        assert!(!api.needs_interactive_login());
+        // Moonshot methods are API-key shaped: NOT session-based (no token
+        // refresh may ever run for them) and no browser round-trip.
+        for id in [MOONSHOT_CN_METHOD_ID, MOONSHOT_AI_METHOD_ID] {
+            let kind = AuthMethodKind::from_id(&acp::AuthMethodId::new(id));
+            assert!(kind.is_api_key(), "{id} must classify as api-key");
+            assert!(!kind.is_session_based(), "{id} must not be session-based");
+            assert!(
+                !is_session_based_method(&acp::AuthMethodId::new(id)),
+                "is_session_based_method({id}) must stay false"
+            );
+            assert!(
+                !kind.needs_interactive_login(),
+                "{id} must not need a browser login"
+            );
+        }
+        let unknown = AuthMethodKind::from_id(&acp::AuthMethodId::new("who-knows"));
+        assert_eq!(unknown, AuthMethodKind::Unknown);
+        assert!(!unknown.is_session_based());
+        // Interactive device-code logins need a browser.
+        assert!(
+            AuthMethodKind::from_id(&acp::AuthMethodId::new(KIMI_CODE_METHOD_ID))
+                .needs_interactive_login()
+        );
+        assert!(
+            AuthMethodKind::from_id(&acp::AuthMethodId::new(XAI_SESSION_METHOD_ID))
+                .needs_interactive_login()
+        );
+        assert!(
+            !AuthMethodKind::from_id(&acp::AuthMethodId::new(CACHED_TOKEN_AUTH_METHOD_ID))
+                .needs_interactive_login()
+        );
+    }
+
+    #[test]
+    fn session_token_auth_gate_matrix() {
+        // Session method + NotByok → refresh.
+        assert!(session_token_auth_gate(true, ModelByok::NotByok, false));
+        // Session method + Byok → never.
+        assert!(!session_token_auth_gate(true, ModelByok::Byok, true));
+        // Session method + Unknown → only on first-party endpoints.
+        assert!(session_token_auth_gate(true, ModelByok::Unknown, true));
+        assert!(!session_token_auth_gate(true, ModelByok::Unknown, false));
+        // Non-session method → never.
+        assert!(!session_token_auth_gate(false, ModelByok::NotByok, true));
+    }
+
+    /// RAII guard restoring an env var on drop (panic-safe).
+    struct EnvGuard {
+        key: &'static str,
+        prev: Option<String>,
+    }
+    impl EnvGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let prev = std::env::var(key).ok();
+            unsafe { std::env::set_var(key, value) };
+            Self { key, prev }
+        }
+        fn unset(key: &'static str) -> Self {
+            let prev = std::env::var(key).ok();
+            unsafe { std::env::remove_var(key) };
+            Self { key, prev }
+        }
+    }
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            unsafe {
+                match self.prev.take() {
+                    Some(v) => std::env::set_var(self.key, v),
+                    None => std::env::remove_var(self.key),
+                }
+            }
+        }
+    }
+
+    fn default_inputs() -> AuthMethodsBuildInputs<'static> {
+        AuthMethodsBuildInputs {
+            has_external_api_key: false,
+            has_cached_token: false,
+            login_label: None,
+            has_grok_cli: false,
+        }
+    }
+
+    fn method_ids(built: &BuiltAuthMethods) -> Vec<&str> {
+        built.methods.iter().map(|m| m.id().0.as_ref()).collect()
+    }
+
+    fn default_id(built: &BuiltAuthMethods) -> Option<&str> {
+        built
+            .default_auth_method_id
+            .as_ref()
+            .map(|id| id.0.as_ref())
+    }
+
+    fn first_kind(methods: &[acp::AuthMethod]) -> Option<AuthMethodKind> {
+        methods.first().map(|m| AuthMethodKind::from_id(m.id()))
+    }
+
+    /// BYOK: `xai.api_key` must be `auth_methods.first()`; deferred-to-last
+    /// ordering sends per-model-key users to the login screen.
+    #[test]
+    fn byok_first_method_is_xai_api_key() {
+        let built = build_auth_methods(AuthMethodsBuildInputs {
+            has_external_api_key: true,
+            ..default_inputs()
+        });
+        assert_eq!(
+            method_ids(&built),
+            vec![
+                XAI_API_KEY_METHOD_ID,
+                KIMI_CODE_METHOD_ID,
+                MOONSHOT_CN_METHOD_ID,
+                MOONSHOT_AI_METHOD_ID,
+                XAI_SESSION_METHOD_ID,
+            ]
+        );
+        assert_eq!(default_id(&built), Some(XAI_API_KEY_METHOD_ID));
+        assert!(
+            !AuthMethodKind::from_id(built.methods[0].id()).needs_interactive_login(),
+            "auth_methods.first() must not need interactive login"
+        );
+    }
+
+    /// API key + cached session: `xai.api_key` stays first in the advertised
+    /// list, but the session wins the default (refresh stays alive).
+    #[test]
+    fn byok_with_cached_token_keeps_xai_api_key_first() {
+        let built = build_auth_methods(AuthMethodsBuildInputs {
+            has_external_api_key: true,
+            has_cached_token: true,
+            ..default_inputs()
+        });
+        assert_eq!(
+            method_ids(&built),
+            vec![
+                XAI_API_KEY_METHOD_ID,
+                CACHED_TOKEN_AUTH_METHOD_ID,
+                KIMI_CODE_METHOD_ID,
+                MOONSHOT_CN_METHOD_ID,
+                MOONSHOT_AI_METHOD_ID,
+                XAI_SESSION_METHOD_ID,
+            ]
+        );
+        assert_eq!(default_id(&built), Some(CACHED_TOKEN_AUTH_METHOD_ID));
+    }
+
+    /// Session-only user: cached_token first, interactive logins after it.
+    #[test]
+    fn session_only_user_first_method_is_cached_token() {
+        let built = build_auth_methods(AuthMethodsBuildInputs {
+            has_cached_token: true,
+            ..default_inputs()
+        });
+        assert_eq!(
+            method_ids(&built),
+            vec![
+                CACHED_TOKEN_AUTH_METHOD_ID,
+                KIMI_CODE_METHOD_ID,
+                MOONSHOT_CN_METHOD_ID,
+                MOONSHOT_AI_METHOD_ID,
+                XAI_SESSION_METHOD_ID,
+            ]
+        );
+        assert_eq!(default_id(&built), Some(CACHED_TOKEN_AUTH_METHOD_ID));
+        assert_eq!(
+            first_kind(&built.methods),
+            Some(AuthMethodKind::CachedToken)
+        );
+    }
+
+    /// Fresh user: Kimi Code first, Moonshot keys, then native xAI Session.
+    /// No default method (login required).
+    #[test]
+    fn fresh_user_advertises_picker_methods_kimi_code_first() {
+        let built = build_auth_methods(default_inputs());
+        assert_eq!(
+            method_ids(&built),
+            vec![
+                KIMI_CODE_METHOD_ID,
+                MOONSHOT_CN_METHOD_ID,
+                MOONSHOT_AI_METHOD_ID,
+                XAI_SESSION_METHOD_ID,
+            ]
+        );
+        assert_eq!(default_id(&built), None);
+        assert_eq!(first_kind(&built.methods), Some(AuthMethodKind::KimiCode));
+    }
+
+    /// When Grok CLI is installed, the Grok session bridge is advertised
+    /// after the native xAI session method.
+    #[test]
+    fn grok_cli_advertises_session_bridge() {
+        let built = build_auth_methods(AuthMethodsBuildInputs {
+            has_grok_cli: true,
+            ..default_inputs()
+        });
+        assert_eq!(
+            method_ids(&built),
+            vec![
+                KIMI_CODE_METHOD_ID,
+                MOONSHOT_CN_METHOD_ID,
+                MOONSHOT_AI_METHOD_ID,
+                XAI_SESSION_METHOD_ID,
+                GROK_SESSION_METHOD_ID,
+            ]
+        );
+        // Grok session is never the default — user must explicitly select it.
+        assert_eq!(default_id(&built), None);
+    }
+
+    /// The moonshot methods must never be the default (eager) method: the
+    /// pager authenticates `default_auth_method_id` without user interaction,
+    /// and a configured moonshot key already rides the `xai.api_key` path.
+    #[test]
+    fn moonshot_methods_are_never_the_default() {
+        for (api, cached) in [(false, false), (true, false), (false, true), (true, true)] {
+            let built = build_auth_methods(AuthMethodsBuildInputs {
+                has_external_api_key: api,
+                has_cached_token: cached,
+                ..default_inputs()
+            });
+            assert!(
+                !matches!(
+                    default_id(&built),
+                    Some(MOONSHOT_CN_METHOD_ID) | Some(MOONSHOT_AI_METHOD_ID)
+                ),
+                "default must not be a moonshot method (api={api}, cached={cached})"
+            );
+        }
+    }
+
+    /// `XAI_API_KEY` alone (no per-model creds) triggers advertising
+    /// `xai.api_key` as the first method.
+    #[test]
+    #[serial]
+    fn global_external_api_key_advertises_xai_api_key_first() {
+        let _set = EnvGuard::set(XAI_API_KEY_ENV_VAR, "xai-external-key");
+        let cfg = Config::default();
+        let models = resolve_model_list(&cfg, None);
+        let has_external_api_key = should_advertise_xai_api_key(models.values());
+        assert!(has_external_api_key);
+        let built = build_auth_methods(AuthMethodsBuildInputs {
+            has_external_api_key,
+            ..default_inputs()
+        });
+        assert_eq!(first_kind(&built.methods), Some(AuthMethodKind::XaiApiKey));
+    }
+
+    /// Legacy env var fallback keeps working.
+    #[test]
+    #[serial]
+    fn legacy_env_var_fallback_advertises_xai_api_key() {
+        let _unset = EnvGuard::unset(XAI_API_KEY_ENV_VAR);
+        let _set = EnvGuard::set(LEGACY_XAI_API_KEY_ENV_VAR, "legacy-key");
+        assert!(has_xai_api_key_env());
+        assert_eq!(read_xai_api_key_env().unwrap(), "legacy-key");
+    }
+
+    /// The new env var takes precedence over the legacy one.
+    #[test]
+    #[serial]
+    fn new_env_var_takes_precedence_over_legacy() {
+        let _new = EnvGuard::set(XAI_API_KEY_ENV_VAR, "new-key");
+        let _legacy = EnvGuard::set(LEGACY_XAI_API_KEY_ENV_VAR, "legacy-key");
+        assert_eq!(read_xai_api_key_env().unwrap(), "new-key");
+    }
+
+    /// Moonshot authenticate with no configured key: actionable error naming
+    /// the platform, the login screen, and the platform-scoped env var. No
+    /// HTTP is attempted (`key: None` short-circuits).
+    #[tokio::test]
+    async fn moonshot_authenticate_without_key_is_actionable() {
+        let err = authenticate_platform_api_key(kimix_models::PlatformId::MoonshotCn, None)
+            .await
+            .expect_err("missing key must fail");
+        assert_eq!(
+            err.message,
+            "No API key configured for moonshot-cn \u{2014} paste one in the login screen \
+             or set KIMIX_MOONSHOT_CN_API_KEY"
+        );
+    }
+
+    /// Moonshot authenticate validates the key against `GET {base}/models`;
+    /// a 200 accepts the key.
+    #[tokio::test]
+    #[serial]
+    async fn moonshot_authenticate_valid_key_succeeds() {
+        use wiremock::matchers::{header, method, path};
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(method("GET"))
+            .and(path("/models"))
+            .and(header("Authorization", "Bearer sk-good"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({ "data": [] })),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let _base = EnvGuard::set(kimix_models::MOONSHOT_CN_BASE_URL_ENV, &server.uri());
+        authenticate_platform_api_key(kimix_models::PlatformId::MoonshotCn, Some("sk-good"))
+            .await
+            .expect("200 from /models must validate the key");
+    }
+
+    /// A 401 from `/models` is an invalid key — the error names the platform
+    /// and console, and NEVER contains the key itself.
+    #[tokio::test]
+    #[serial]
+    async fn moonshot_authenticate_401_is_invalid_key_error() {
+        use wiremock::matchers::{method, path};
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(method("GET"))
+            .and(path("/models"))
+            .respond_with(wiremock::ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+        let _base = EnvGuard::set(kimix_models::MOONSHOT_AI_BASE_URL_ENV, &server.uri());
+        let err = authenticate_platform_api_key(
+            kimix_models::PlatformId::MoonshotAi,
+            Some("sk-bad-secret"),
+        )
+        .await
+        .expect_err("401 must fail");
+        assert_eq!(
+            err.message,
+            "Invalid API key for moonshot-ai \u{2014} check your key on platform.moonshot.ai"
+        );
+        assert!(
+            !err.message.contains("sk-bad-secret"),
+            "the key must never leak into errors"
+        );
+    }
+}

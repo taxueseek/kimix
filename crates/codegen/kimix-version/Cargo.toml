@@ -1,0 +1,12 @@
+[package]
+license = "Apache-2.0"
+name = "kimix-version"
+version.workspace = true
+edition.workspace = true
+description = "Lockstepped kimix CLI version."
+
+[dependencies]
+semver = { workspace = true }
+
+[lints]
+workspace = true
