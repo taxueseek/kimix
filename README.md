@@ -9,10 +9,6 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.97.0-orange)](rust-toolchain.toml)
 
-![Kimix demo](video/Kimix.gif)
-
-[高清演示 (mp4)](video/Kimix.mp4)
-
 </div>
 
 ---
