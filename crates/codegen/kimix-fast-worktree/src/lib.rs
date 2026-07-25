@@ -24,6 +24,7 @@ pub mod sync;
 #[cfg(target_os = "linux")]
 pub(crate) mod util;
 mod worktree;
+pub mod snapshot;
 
 #[cfg(target_os = "linux")]
 pub use api::cleanup_orphaned_btrfs_snapshots;

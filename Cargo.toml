@@ -310,7 +310,6 @@ panic = "abort"
 [profile.release-dist]
 inherits = "release"
 lto = "thin"
-codegen-units = 1
 strip = false
 debug = 1
 split-debuginfo = "off"
