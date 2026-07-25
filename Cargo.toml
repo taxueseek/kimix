@@ -309,7 +309,6 @@ panic = "abort"
 # Linker flags (RELRO, NX stack) are set per-target in .cargo/config.toml.
 [profile.release-dist]
 inherits = "release"
-lto = "thin"
 strip = false
 debug = 1
 split-debuginfo = "off"
