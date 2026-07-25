@@ -677,9 +677,9 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "aws-config"
-version = "1.10.0"
+version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "701418aa459dac33e50a0f8e818e5662a16bc018a6ac7423659b70f3799d67a8"
+checksum = "1b180a3c8b55960db3426d8964b8745e652466a1a49fe1a2eda828046d30b5e4"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
@@ -744,9 +744,9 @@ dependencies = [
 
 [[package]]
 name = "aws-runtime"
-version = "1.9.0"
+version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6b50a43f3ccdf331521c6d6c68b7cc9668b6e09d439ebda9569df5722324d76"
+checksum = "c9007227e10b5fed2f3e0a2beff489211e2b5604c400b7a9d5d81ca9d64c24bb"
 dependencies = [
  "aws-credential-types",
  "aws-sigv4",
@@ -772,9 +772,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-s3"
-version = "1.139.0"
+version = "1.140.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a159b9721a6a41468f967d1029bece78f410b0beb0594498435deb6ff72bfe48"
+checksum = "e9660cf991e512fbe6094f1041ff3d3282bc5aeeeb6184e8de437ec2de024a10"
 dependencies = [
  "arc-swap",
  "aws-credential-types",
@@ -809,9 +809,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-sso"
-version = "1.104.0"
+version = "1.105.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b53416d16c278234845392e38d93bd4481d2f09daa0f005a2277f0aa91f59c22"
+checksum = "6ffd0fbe7873cb548a7aa60f9573c268fff94155397fd4f14dc9f1ecaaab8516"
 dependencies = [
  "arc-swap",
  "aws-credential-types",
@@ -835,9 +835,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-ssooidc"
-version = "1.106.0"
+version = "1.107.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc9b706c3305ed0285d5b1b696c747aa34950f830fb03e3e6c76890f99b9f188"
+checksum = "175763eb222a46377df7aa257a3bca980ab3e96703fefc8f4d0b8da6ad2e254c"
 dependencies = [
  "arc-swap",
  "aws-credential-types",
@@ -861,9 +861,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-sts"
-version = "1.109.0"
+version = "1.110.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32d214cdfa5bbe17f117e76a7643fadf32a5234fb597322ef8b1fb4b2f17dbbd"
+checksum = "dd8b14781dfbff48984017d57167b6ea0b6471c6920ec52b44a2677c7feb3c13"
 dependencies = [
  "arc-swap",
  "aws-credential-types",
@@ -1033,9 +1033,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-runtime"
-version = "1.12.0"
+version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bea94a9ff8464016338c851e24b472d7131c388c88898a502e781815b2ee6045"
+checksum = "07505b34e8f4b3591a4fa69e9792b52289b95488dbbc68c3c0075b7bedb245e1"
 dependencies = [
  "aws-smithy-async",
  "aws-smithy-http",
@@ -1058,9 +1058,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-runtime-api"
-version = "1.13.0"
+version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22ed1ebe6e0a95ea84570225f5a8208dec4b8f77e61a9b0d6f51773fcb4612f0"
+checksum = "3b98f2e1fd67ec06618f9c291e5e495a468e60519e44c9c1979cd0521f3affdb"
 dependencies = [
  "aws-smithy-async",
  "aws-smithy-runtime-api-macros",
@@ -1588,9 +1588,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.3.0"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c89588d05638b5b4594a3348a2d6c20277e43a7f5c5202b05cc56888475a47b8"
+checksum = "5add81bb678e6cb321aff7fa0dc7689ad82b112dbc032cea19f91d6b8e3582b9"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -2797,9 +2797,9 @@ checksum = "b2972feb8dffe7bc8c5463b1dacda1b0dfbed3710e50f977d965429692d74cd8"
 
 [[package]]
 name = "either"
-version = "1.16.0"
+version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e"
+checksum = "9e5e8f6c15a24b9a3ee5efec809ccd006d3b30e8b3bb63c39af737c7f87daa1d"
 
 [[package]]
 name = "elliptic-curve"
@@ -3114,6 +3114,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "caf1079563223d5d59d83c85886a56e586cfd5c1a26292e971a0fa266531ac5a"
 
 [[package]]
+name = "fax"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70ed8646f3993cad0585c6669ffba6f7e5440a0bfb0a1f16600cae33ce7cf307"
+
+[[package]]
 name = "fdeflate"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3261,6 +3267,15 @@ name = "font-types"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b38ad915f6dadd993ced50848a8291a543bd41ca62bc10740d5e64e2ab4cfd7"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
+name = "font-types"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0a7299a780854a6d391be2ae1c8521c9368471b559dbfd6a8dbd9f407eaff100"
 dependencies = [
  "bytemuck",
 ]
@@ -3625,9 +3640,9 @@ dependencies = [
 
 [[package]]
 name = "gix-actor"
-version = "0.41.1"
+version = "0.41.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bc998b8f746dda8565450d08a63b792ced9165d8c27a1ed3f02799ec6a7820f"
+checksum = "33f9308ad6fd35b2a865cbe4117ac61b2be59e4a9ef1621c7a9794f7c8e52c5b"
 dependencies = [
  "bstr",
  "gix-date",
@@ -3666,9 +3681,9 @@ dependencies = [
 
 [[package]]
 name = "gix-bitmap"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52ebef0c26ad305747649e727bbcd56a7b7910754eb7cea88f6dff6f93c51283"
+checksum = "7cd1d118d0f5d88b96e6f6e13b566475fef4797ead4a02c26fed36c1375066f7"
 dependencies = [
  "gix-error",
 ]
@@ -3695,9 +3710,9 @@ dependencies = [
 
 [[package]]
 name = "gix-chunk"
-version = "0.7.2"
+version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9faee47943b638e58ddd5e275a4906ad3e4b6c8584f1d41bd18ab9032ec52afb"
+checksum = "b2a871e5cab12ba568845714473505deefffb3c04eb47f4708ce344cd459c1cc"
 dependencies = [
  "gix-error",
 ]
@@ -3946,9 +3961,9 @@ dependencies = [
 
 [[package]]
 name = "gix-imara-diff"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b305d85504de270ad3525d726a6b69cc59ee7b2269b014387651107ab9f0755b"
+checksum = "1a791e6620676a875f362f3156ed213e73ca099a09bf992c18812abe65cc37b1"
 dependencies = [
  "bstr",
  "hashbrown 0.17.1",
@@ -4106,9 +4121,9 @@ dependencies = [
 
 [[package]]
 name = "gix-path"
-version = "0.12.2"
+version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbbecb0f8dc5cdf6cbde69133f7072064dfc9da4cf0046913afb6857b07300fa"
+checksum = "1ed3e8d7a82e886e17a72e03d4ba0c13db6f2219b6cd4e2900b4cae426ec20c9"
 dependencies = [
  "bstr",
  "gix-trace",
@@ -4233,9 +4248,9 @@ dependencies = [
 
 [[package]]
 name = "gix-sec"
-version = "0.14.1"
+version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab8519976e4c7e486270740a5400369f37940779b80bd1377d94cfa1125d01b3"
+checksum = "af4fe6c152c1d50aea36f299825702cd37e303307832fec1d0fdd5844e47ce2f"
 dependencies = [
  "bitflags 2.13.1",
  "gix-path",
@@ -4309,9 +4324,9 @@ dependencies = [
 
 [[package]]
 name = "gix-trace"
-version = "0.1.20"
+version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44dc45eae785c0eb14173e0f152e6e224dcf4d45b6a6999a3aed22af541ad678"
+checksum = "be3eb81d9dc914335923e50d52829c551feefd6a72d176c4130c546b67a60814"
 
 [[package]]
 name = "gix-transport"
@@ -4360,9 +4375,9 @@ dependencies = [
 
 [[package]]
 name = "gix-utils"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d773a906e39472c2b00aaf1993cd120d40198c1ff6db07c0ee9a44d4431b66c1"
+checksum = "b1795bd2a970ca8b2185318c2abb97d955c71992f1cf28de73ad3b593a9f3ce8"
 dependencies = [
  "bstr",
  "fastrand",
@@ -4372,9 +4387,9 @@ dependencies = [
 
 [[package]]
 name = "gix-validate"
-version = "0.11.2"
+version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bc6fc771c4063ba7cd2f47b91fb6076251c6a823b64b7fe7b8874b0fe4afae3"
+checksum = "9a034e84d1e04e1b1f20f51f12491da230b6ac8b925d0c8e1b89bcd87a7c5ccc"
 dependencies = [
  "bstr",
 ]
@@ -4516,6 +4531,18 @@ dependencies = [
  "cfg-if",
  "crunchy",
  "zerocopy",
+]
+
+[[package]]
+name = "harfrust"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c03d949a14aa089bbb282f7dd76a498a7f684428e4257202efc119ec010376f9"
+dependencies = [
+ "bitflags 2.13.1",
+ "bytemuck",
+ "read-fonts 0.41.0",
+ "smallvec",
 ]
 
 [[package]]
@@ -5432,7 +5459,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-acp-lib"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "agent-client-protocol",
  "async-trait",
@@ -5446,7 +5473,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-agent"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "chrono",
  "dirs 6.0.0",
@@ -5476,7 +5503,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-agent-lifecycle"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "async-trait",
  "tokio",
@@ -5485,7 +5512,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-agent-memory"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -5521,7 +5548,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-auth"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "async-trait",
  "http 1.4.2",
@@ -5534,7 +5561,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-bin"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "clap",
@@ -5569,7 +5596,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-bridge"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "kimix-agent-memory",
  "kimix-core",
@@ -5578,7 +5605,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-chat-state"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "indexmap",
  "kimix-compaction",
@@ -5595,7 +5622,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-codebase-graph"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "ahash",
  "clap",
@@ -5631,7 +5658,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-compaction"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5644,7 +5671,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-config"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "base64",
  "blake3",
@@ -5667,7 +5694,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-config-types"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "agent-client-protocol",
  "indexmap",
@@ -5681,7 +5708,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-core"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "blake3",
  "chrono",
@@ -5704,7 +5731,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-crash-handler"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "backtrace",
  "libc",
@@ -5715,7 +5742,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-env"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "tracing",
  "url",
@@ -5723,7 +5750,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-fast-worktree"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "bytes",
@@ -5755,7 +5782,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-file-utils"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "aws-config",
@@ -5779,7 +5806,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-fsnotify"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "criterion",
  "dunce",
@@ -5799,7 +5826,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-gix-status"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "gix",
  "kimix-test-utils",
@@ -5809,7 +5836,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-hooks"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "fastrand",
  "kimix-config",
@@ -5828,7 +5855,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-hooks-plugins-types"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "serde",
  "serde_json",
@@ -5836,7 +5863,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-http"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "kimix-auth",
  "kimix-log",
@@ -5851,7 +5878,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-hunk-tracker"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "chrono",
  "dunce",
@@ -5872,7 +5899,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-log"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5890,7 +5917,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-markdown"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anstyle",
  "anstyle-lossy",
@@ -5913,7 +5940,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-mcp"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "agent-client-protocol",
  "async-trait",
@@ -5951,7 +5978,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-mermaid"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "fontdb",
  "image",
@@ -5969,7 +5996,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-models"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "kimix-env",
  "serde",
@@ -5978,7 +6005,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-pager-minimal"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "chrono",
  "crossterm",
@@ -5995,7 +6022,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-pager-pty-harness"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
@@ -6020,7 +6047,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-pager-render"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "agent-client-protocol",
  "anstyle",
@@ -6072,7 +6099,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-paths"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "camino",
  "serde",
@@ -6082,7 +6109,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-prompt"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "serde",
  "serde_json",
@@ -6090,7 +6117,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-prompt-queue"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "serde",
  "serde_json",
@@ -6098,7 +6125,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-proto-build"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "pbjson-build",
@@ -6109,7 +6136,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-ratatui-inline"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "ansi-width",
  "anstyle-parse 0.2.7",
@@ -6126,7 +6153,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-ratatui-textarea"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "arboard",
  "chrono",
@@ -6147,7 +6174,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-sampler"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "async-openai",
  "async-stream",
@@ -6170,7 +6197,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-sampling-types"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "assert_matches",
  "async-openai",
@@ -6186,7 +6213,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-sandbox"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6236,7 +6263,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-shell"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
@@ -6371,7 +6398,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-shell-base"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6396,7 +6423,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-sqlite-journal"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "libc",
  "rusqlite",
@@ -6407,7 +6434,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-subagent-resolution"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "kimix-sampling-types",
  "kimix-tool-types",
@@ -6422,7 +6449,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-system-power"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "windows-sys 0.59.0",
  "zbus",
@@ -6430,7 +6457,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-test-support"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
@@ -6452,7 +6479,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-test-utils"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "runfiles",
  "tracing",
@@ -6461,11 +6488,11 @@ dependencies = [
 
 [[package]]
 name = "kimix-token-estimation"
-version = "0.1.11"
+version = "0.1.12"
 
 [[package]]
 name = "kimix-tool-protocol"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "kimix-tool-types",
  "serde",
@@ -6476,7 +6503,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-tool-runtime"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6494,7 +6521,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-tool-types"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "minijinja",
  "schemars 1.2.1",
@@ -6504,7 +6531,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-tools"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -6549,7 +6576,7 @@ dependencies = [
  "parking_lot",
  "pdf_oxide",
  "pulldown-cmark",
- "quick-xml 0.41.0",
+ "quick-xml",
  "regex",
  "reqwest 0.12.28",
  "schemars 1.2.1",
@@ -6580,7 +6607,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-tools-api"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "kimix-proto-build",
  "kimix-tool-protocol",
@@ -6593,7 +6620,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-tty-utils"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "libc",
  "nix 0.30.1",
@@ -6603,7 +6630,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-tui"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "agent-client-protocol",
  "ansi-to-tui",
@@ -6690,7 +6717,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-update"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "dunce",
@@ -6719,14 +6746,14 @@ dependencies = [
 
 [[package]]
 name = "kimix-version"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "semver",
 ]
 
 [[package]]
 name = "kimix-workspace"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
@@ -6805,7 +6832,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-workspace-types"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "base64",
  "chrono",
@@ -6910,9 +6937,9 @@ checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 
 [[package]]
 name = "libgit2-sys"
-version = "0.18.5+1.9.4"
+version = "0.18.7+1.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "005d6ae6eac1912906073e069f7db60b1fa98e052a68227824afe3e3a1c59ca2"
+checksum = "23c7391e4b9f4ffab1a624223cc1d7385ff9a678f490768add717de7ea2f4d89"
 dependencies = [
  "cc",
  "libc",
@@ -7857,16 +7884,16 @@ dependencies = [
 
 [[package]]
 name = "office_oxide"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7150eeae2b40a6926717058d0575ee2f48a36806725376a2ff6b2e69b61c88e9"
+checksum = "317c254cebe5b87c74a0fbd84e889d51ec0c4db885fa5aca98700ad85fd9ec5f"
 dependencies = [
  "atoi_simd",
  "encoding_rs",
  "fast-float2",
  "libc",
  "log",
- "quick-xml 0.41.0",
+ "quick-xml",
  "serde",
  "serde_json",
  "thiserror 2.0.19",
@@ -8084,9 +8111,9 @@ dependencies = [
 
 [[package]]
 name = "pdf_oxide"
-version = "0.3.74"
+version = "0.3.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b97a8330bf3a3a4011ad84704b3bdcb9b0ef3fd5b03a1bdc371dde40bee1689"
+checksum = "2e00ca5f52780bb764da7fc1783c0c6f549fcf960d69734c8d7cf7996bdbb49d"
 dependencies = [
  "aes",
  "base64",
@@ -8099,10 +8126,11 @@ dependencies = [
  "encoding_rs",
  "env_logger",
  "fast_image_resize",
- "fax",
+ "fax 0.3.0",
  "flate2",
  "fontdb",
  "getrandom 0.4.3",
+ "harfrust",
  "hayro-jbig2",
  "hayro-jpeg2000",
  "image",
@@ -8115,9 +8143,8 @@ dependencies = [
  "office_oxide",
  "phf 0.14.0",
  "qcms",
- "quick-xml 0.41.0",
+ "quick-xml",
  "regex",
- "rustybuzz",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -8162,9 +8189,9 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pest"
-version = "2.8.7"
+version = "2.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47627dd7305c6a2d6c8c6bcd24c5a4c17dbbf425f4f9c5313e724b38fc9782e9"
+checksum = "7df728be843c7070fab6ab7c328c4e9e9d78e23bf749c0669c86ee7ebfa050a2"
 dependencies = [
  "memchr",
  "ucd-trie",
@@ -8172,9 +8199,9 @@ dependencies = [
 
 [[package]]
 name = "pest_derive"
-version = "2.8.7"
+version = "2.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b4254325ecad416ab689e27ba51da03ba01a9632bc6e108f5fe7c3c4ad29d58"
+checksum = "9e2dd6fc3b26b3462ee188aac870f5a41d398f1cd5e2408d16531bd71c9591fd"
 dependencies = [
  "pest",
  "pest_generator",
@@ -8182,9 +8209,9 @@ dependencies = [
 
 [[package]]
 name = "pest_generator"
-version = "2.8.7"
+version = "2.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c4c0e91ead7a8f7acecbca6f003fc2e8282b1dbe2dd9c9d2f16aba42995e0a7"
+checksum = "6a7a9205cfb6f596a9e8b689c0a15f9ceb7a1aafae7aaf788150ac65b29975b6"
 dependencies = [
  "pest",
  "pest_meta",
@@ -8195,9 +8222,9 @@ dependencies = [
 
 [[package]]
 name = "pest_meta"
-version = "2.8.7"
+version = "2.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9744bc48116fee06334924bb5f2bad41eed5e89bd26e29b0b799f9a3f82c210"
+checksum = "85abd351c0de1e8384fc791a0737111a350394937e92b956b743dac12429f57c"
 dependencies = [
  "pest",
 ]
@@ -8499,7 +8526,7 @@ checksum = "7da1d65da6dd5d1e44199ac0f58712d241c0f439f80adea8924d832384087f85"
 dependencies = [
  "base64",
  "indexmap",
- "quick-xml 0.41.0",
+ "quick-xml",
  "serde",
  "time",
 ]
@@ -8839,7 +8866,7 @@ dependencies = [
 
 [[package]]
 name = "ptyctl"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
@@ -8858,7 +8885,7 @@ dependencies = [
 
 [[package]]
 name = "ptyctl-cli"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "axum",
@@ -8918,15 +8945,6 @@ name = "quick-error"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
-
-[[package]]
-name = "quick-xml"
-version = "0.39.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdcc8dd4e2f670d309a5f0e83fe36dfdc05af317008fea29144da1a2ac858e5e"
-dependencies = [
- "memchr",
-]
 
 [[package]]
 name = "quick-xml"
@@ -9177,7 +9195,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4ed38b89c2c77ff968c524145ad65fb010f38af5c7a224b53b81d47ac2daa81"
 dependencies = [
  "bytemuck",
- "font-types",
+ "font-types 0.11.3",
+]
+
+[[package]]
+name = "read-fonts"
+version = "0.41.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "046a7d674daf459825b32f5062056d6882db0d2f5a479fbd76ccfc870ac18709"
+dependencies = [
+ "bytemuck",
+ "font-types 0.12.2",
+ "once_cell",
 ]
 
 [[package]]
@@ -9661,9 +9690,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pki-types"
-version = "1.15.0"
+version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "764899a24af3980067ee14bc143654f297b22eaebfe3c7b6b211920a5a59b046"
+checksum = "2f4925028c7eb5d1fcdaf196971378ed9d2c1c4efc7dc5d011256f76c99c0a96"
 dependencies = [
  "web-time",
  "zeroize",
@@ -10486,7 +10515,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c34617370ae968efb7161bb2beb517d9084659aae19e24b89e3db25b46e4564"
 dependencies = [
  "bytemuck",
- "read-fonts",
+ "read-fonts 0.39.2",
 ]
 
 [[package]]
@@ -10562,9 +10591,9 @@ dependencies = [
 
 [[package]]
 name = "sse-stream"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39f24a9b78c40b90817bbcd1821c74ddfd74916aadd29403d001532a9195532d"
+checksum = "c123f296ade4ec4b8b0f6162116e6629f5146922ca5ab40ca9d3c2e73ab4761e"
 dependencies = [
  "bytes",
  "futures-util",
@@ -11096,7 +11125,7 @@ version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b63feaf3343d35b6ca4d50483f94843803b0f51634937cc2ec519fc32232bc52"
 dependencies = [
- "fax",
+ "fax 0.2.7",
  "flate2",
  "half",
  "quick-error",
@@ -11298,9 +11327,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-stream"
-version = "0.1.18"
+version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32da49809aab5c3bc678af03902d4ccddea2a87d028d86392a4b1560c6906c70"
+checksum = "a3d06f0b082ba57c26b79407372e57cf2a1e28124f78e9479fe80322cf53420b"
 dependencies = [
  "futures-core",
  "pin-project-lite",
@@ -12311,9 +12340,9 @@ dependencies = [
 
 [[package]]
 name = "wayland-backend"
-version = "0.3.15"
+version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2857dd20b54e916ec7253b3d6b4d5c4d7d4ca2c33c2e11c6c76a99bd8744755d"
+checksum = "016ccf01d1c58b6f8999612813e17c9b2390f7d70671428869913310f83f54b8"
 dependencies = [
  "cc",
  "downcast-rs",
@@ -12324,9 +12353,9 @@ dependencies = [
 
 [[package]]
 name = "wayland-client"
-version = "0.31.14"
+version = "0.31.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "645c7c96bb74690c3189b5c9cb4ca1627062bb23693a4fad9d8c3de958260144"
+checksum = "e3c36a0f861ad76d0901f2800b46321410d9f73f2ea88aac0650d86c32688073"
 dependencies = [
  "bitflags 2.13.1",
  "rustix 1.1.4",
@@ -12361,12 +12390,12 @@ dependencies = [
 
 [[package]]
 name = "wayland-scanner"
-version = "0.31.10"
+version = "0.31.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c324a910fd86ebdc364a3e61ec1f11737d3b1d6c273c0239ee8ff4bc0d24b4a"
+checksum = "338e30461b3a2b67d70eb30a6d89f8e0c93a833e07d2ae89085cd070c4a00ac0"
 dependencies = [
  "proc-macro2",
- "quick-xml 0.39.4",
+ "quick-xml",
  "quote",
 ]
 
@@ -13000,11 +13029,11 @@ version = "0.48.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb731d4c4d93eacc69a1ad2f270f905788a98e4a3438267bcafbe08d3431c8d8"
 dependencies = [
- "font-types",
+ "font-types 0.11.3",
  "indexmap",
  "kurbo",
  "log",
- "read-fonts",
+ "read-fonts 0.39.2",
 ]
 
 [[package]]
