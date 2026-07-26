@@ -1500,7 +1500,7 @@ mod tests {
                     r.truncated,
                     "10KB output should be truncated with 5KB limit"
                 );
-                assert!(r.output.contains("[Output truncated"));
+                assert!(r.output.contains("bytes omitted"));
             }
             other => panic!("Expected Success, got {:?}", other),
         }

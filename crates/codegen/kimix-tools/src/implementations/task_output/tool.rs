@@ -3,7 +3,7 @@
 use crate::computer::types::TaskSnapshot;
 use crate::types::process_manager::format_system_time_rfc3339;
 use crate::util::truncate::{
-    DEFAULT_SOFT_WRAP_WIDTH, PREVIEW_SIZE, soft_wrap_lines, truncate_with_preview,
+    DEFAULT_SOFT_WRAP_WIDTH, PREVIEW_SIZE, soft_wrap_lines, truncate_head_tail_bytes,
 };
 use kimix_tool_types::TaskOutputResult;
 
@@ -13,11 +13,14 @@ pub(crate) fn snapshot_to_result(
     read_file_tool_name: &str,
     max_output_bytes: usize,
 ) -> TaskOutputResult {
-    // Truncate output to protect model's context window
+    // Truncate output to protect model's context window.
+    // 头尾保留：尾部通常携带命令最终错误/结果，比头部更关键；
+    // 标注含省略/总字节数与取全文方式，避免模型把截断当作完整输出。
+    // 展示预算仍保持 PREVIEW_SIZE 量级（与原先 head-only preview 相同），
+    // 仅将「只留头部」升级为「头尾各半 + 显式标注」，不增加上下文占用。
     let (output, truncated) = if s.output.len() > max_output_bytes {
-        truncate_with_preview(
+        truncate_head_tail_bytes(
             &s.output,
-            max_output_bytes,
             PREVIEW_SIZE,
             Some(&format!(
                 "Use {} on {} for full content",
@@ -159,7 +162,7 @@ mod tests {
         let result = snapshot_to_result(snapshot, "read_file", DEFAULT_TOOL_OUTPUT_BYTES);
 
         assert!(result.truncated);
-        assert!(result.output.contains("[Output truncated"));
+        assert!(result.output.contains("bytes omitted"));
         assert!(result.output.len() < 10_000);
     }
 
@@ -228,7 +231,7 @@ mod tests {
             "10KB output should be truncated with 5KB custom limit"
         );
         assert!(
-            result_custom.output.contains("[Output truncated"),
+            result_custom.output.contains("bytes omitted"),
             "should contain truncation marker"
         );
         assert!(
