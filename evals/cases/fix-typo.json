@@ -1,0 +1,13 @@
+{
+  "name": "fix-typo",
+  "files": {
+    "hello.py": "def greet():\n    return 'helo wrold'\n"
+  },
+  "prompt": "Fix the two typos in the greeting string in hello.py (it should read 'hello world'). Do not change anything else.",
+  "assert": [
+    { "type": "file_contains", "path": "hello.py", "pattern": "hello world" },
+    { "type": "file_contains", "path": "hello.py", "pattern": "def greet" }
+  ],
+  "max_turns": 6,
+  "timeout_sec": 180
+}

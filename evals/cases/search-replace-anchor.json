@@ -1,0 +1,14 @@
+{
+  "name": "search-replace-anchor",
+  "files": {
+    "config.txt": "host=localhost\nport=8080\ndebug=false\nlog_level=info\n"
+  },
+  "prompt": "In config.txt, change ONLY the debug setting from false to true. Keep every other line byte-identical.",
+  "assert": [
+    { "type": "file_contains", "path": "config.txt", "pattern": "debug=true" },
+    { "type": "file_contains", "path": "config.txt", "pattern": "port=8080" },
+    { "type": "file_contains", "path": "config.txt", "pattern": "log_level=info" }
+  ],
+  "max_turns": 6,
+  "timeout_sec": 180
+}

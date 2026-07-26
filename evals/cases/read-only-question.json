@@ -1,0 +1,12 @@
+{
+  "name": "read-only-question",
+  "files": {
+    "main.py": "import sys\n\nif __name__ == '__main__':\n    print(sys.version)\n"
+  },
+  "prompt": "What does main.py print when executed? Answer in one short sentence. Do NOT modify any files.",
+  "assert": [
+    { "type": "file_unchanged" }
+  ],
+  "max_turns": 4,
+  "timeout_sec": 120
+}

@@ -1,0 +1,14 @@
+{
+  "name": "fix-failing-test",
+  "files": {
+    "calc.py": "def add(a, b):\n    return a - b\n",
+    "test_calc.py": "from calc import add\n\ndef test_add():\n    assert add(2, 3) == 5\n"
+  },
+  "prompt": "The test in test_calc.py fails. Fix the bug in calc.py so the test passes, then run: python3 -m pytest test_calc.py -q (if pytest is unavailable, run: python3 -c \"from calc import add; assert add(2,3)==5\")",
+  "assert": [
+    { "type": "file_contains", "path": "calc.py", "pattern": "return a \\+ b" },
+    { "type": "command_succeeds", "cmd": "python3 -c \"from calc import add; assert add(2,3)==5\"" }
+  ],
+  "max_turns": 10,
+  "timeout_sec": 240
+}
