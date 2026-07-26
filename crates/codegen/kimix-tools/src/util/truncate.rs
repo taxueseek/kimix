@@ -227,6 +227,51 @@ pub fn truncate_front_and_back(s: &str, max_chars: usize) -> (String, bool) {
     (result, true)
 }
 
+/// 头尾保留式截断（字节预算）：保留前一半与后一半字节，中间显式标注
+/// 省略字节数 / 总字节数与可选的取全文提示。
+///
+/// 与 `truncate_with_preview`（仅保留头部）相比，尾部通常携带命令的
+/// 最终错误信息，对模型更关键；显式标注避免模型把截断输出当作完整
+/// 结果（静默截断会让 agent 「撒谎」）。标注文案保持英文，与 bash /
+/// MCP 截断标记风格一致。
+///
+/// Returns `(result, was_truncated)`。结果总长 ≤ `max_bytes`（标注计入
+/// 预算；预算小于标注长度时退化为纯头部截断并尽量保留标注）。
+pub fn truncate_head_tail_bytes(
+    s: &str,
+    max_bytes: usize,
+    footer_hint: Option<&str>,
+) -> (String, bool) {
+    if s.len() <= max_bytes {
+        return (s.to_string(), false);
+    }
+
+    let hint = footer_hint.map(|h| format!(". {h}")).unwrap_or_default();
+    // 先用最大可能位数（省略数 ≤ 总字节数）占位计算标注长度，保证最终
+    // 结果不超预算；切分后再用精确省略数重建标注。
+    let marker = format!("\n\n[... {} of {} bytes omitted{hint} ...]\n\n", s.len(), s.len());
+    // 标注计入预算；预算放不下标注时退化为头部截断（仍尽力带标注）。
+    if max_bytes <= marker.len() + 2 {
+        let head = truncate_str(s, max_bytes.saturating_sub(marker.len()));
+        return (format!("{head}{marker}"), true);
+    }
+
+    let content_budget = max_bytes - marker.len();
+    let head_budget = content_budget / 2;
+    let tail_budget = content_budget - head_budget;
+
+    let head_end = s.floor_char_boundary(head_budget);
+    let tail_start = s.ceil_char_boundary(s.len() - tail_budget);
+    let omitted = tail_start - head_end;
+
+    let marker = format!("\n\n[... {omitted} of {} bytes omitted{hint} ...]\n\n", s.len());
+    let mut result = String::with_capacity(head_end + marker.len() + (s.len() - tail_start));
+    result.push_str(&s[..head_end]);
+    result.push_str(&marker);
+    result.push_str(&s[tail_start..]);
+    (result, true)
+}
+
 /// Truncate a string by keeping the first and last halves of a **character**
 /// budget, inserting `"..."` in the middle. Used in the image-description
 /// pipeline.
@@ -317,7 +362,9 @@ mod tests {
 
     #[test]
     fn estimate_tokens_rounds_down() {
-        assert_eq!(estimate_tokens("abc"), 0);
+        // 非空字符串下限为 1 token（kimix-token-estimation 新契约：
+        // 短消息不计为 0）；"" 仍为 0
+        assert_eq!(estimate_tokens("abc"), 1);
         assert_eq!(estimate_tokens("abcdefg"), 1);
     }
 
@@ -542,6 +589,53 @@ mod tests {
     fn wrap_lines_preserves_trailing_newline() {
         assert_eq!(soft_wrap_lines("hello\n", 2_000), "hello\n");
         assert_eq!(soft_wrap_lines("hello", 2_000), "hello");
+    }
+
+    // ---- truncate_head_tail_bytes ----
+
+    #[test]
+    fn head_tail_short_string_not_truncated() {
+        let (result, truncated) = truncate_head_tail_bytes("hello", 100, None);
+        assert_eq!(result, "hello");
+        assert!(!truncated);
+    }
+
+    #[test]
+    fn head_tail_keeps_both_ends_with_counts() {
+        let s = "a".repeat(1_000) + &"b".repeat(5_000) + &"c".repeat(1_000);
+        let (result, truncated) = truncate_head_tail_bytes(&s, 2_000, None);
+        assert!(truncated);
+        assert!(result.len() <= 2_000, "result was {} bytes", result.len());
+        assert!(result.starts_with(&"a".repeat(100)));
+        assert!(result.ends_with(&"c".repeat(100)));
+        assert!(result.contains("of 7000 bytes omitted"));
+    }
+
+    #[test]
+    fn head_tail_includes_hint() {
+        let s = "x".repeat(10_000);
+        let (result, truncated) =
+            truncate_head_tail_bytes(&s, 2_000, Some("Use read_file on /tmp/out for full content"));
+        assert!(truncated);
+        assert!(result.len() <= 2_000);
+        assert!(result.contains("Use read_file on /tmp/out for full content"));
+    }
+
+    #[test]
+    fn head_tail_utf8_safe() {
+        let s = "😀".repeat(5_000);
+        let (result, truncated) = truncate_head_tail_bytes(&s, 2_000, None);
+        assert!(truncated);
+        assert!(std::str::from_utf8(result.as_bytes()).is_ok());
+        assert!(result.len() <= 2_000);
+    }
+
+    #[test]
+    fn head_tail_tiny_budget_degrades_to_head() {
+        let s = "x".repeat(10_000);
+        let (result, truncated) = truncate_head_tail_bytes(&s, 100, None);
+        assert!(truncated);
+        assert!(result.contains("bytes omitted"));
     }
 
     // ---- truncate_front_and_back ----
