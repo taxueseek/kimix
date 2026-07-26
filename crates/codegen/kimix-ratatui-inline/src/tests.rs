@@ -124,6 +124,8 @@ mod links {
     }
 
     impl Backend for RecordingBackend {
+        type Error = std::io::Error;
+
         fn draw<'a, I>(&mut self, content: I) -> io::Result<()>
         where
             I: Iterator<Item = (u16, u16, &'a Cell)>,

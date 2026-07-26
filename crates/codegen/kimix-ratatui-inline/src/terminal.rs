@@ -15,6 +15,22 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr as _;
 
+/// ratatui 0.30：`Backend` 的错误类型改为关联类型（如 CrosstermBackend
+/// 为 io::Error、TestBackend 为 Infallible）。本扩展 trait 把任意后端
+/// 结果统一映射为 `io::Result`，替代原先隐式的 `?` 转换。
+pub(crate) trait BackendResultExt<T> {
+    fn io(self) -> io::Result<T>;
+}
+
+impl<T, E> BackendResultExt<T> for Result<T, E>
+where
+    E: core::error::Error + Send + Sync + 'static,
+{
+    fn io(self) -> io::Result<T> {
+        self.map_err(io::Error::other)
+    }
+}
+
 /// A hyperlink region on a single screen row, in absolute viewport coordinates.
 ///
 /// Handed to [`Terminal::set_frame_links`] each frame. The terminal folds these
@@ -162,7 +178,7 @@ impl<'a> From<Frame<'a>> for OurFrame<'a> {
 #[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct Terminal<B>
 where
-    B: Backend,
+    B: Backend<Error: Send + Sync + 'static>,
 {
     /// The backend used to interface with the terminal
     backend: B,
@@ -195,7 +211,7 @@ where
 
 impl<B> Drop for Terminal<B>
 where
-    B: Backend,
+    B: Backend<Error: Send + Sync + 'static>,
 {
     fn drop(&mut self) {
         // Attempt to restore the cursor state
@@ -207,7 +223,7 @@ where
 
 impl<B> Terminal<B>
 where
-    B: Backend,
+    B: Backend<Error: Send + Sync + 'static>,
 {
     /// Creates a new [`Terminal`] with the given [`Backend`] with a full screen viewport.
     ///
@@ -248,7 +264,7 @@ where
     pub fn with_options(mut backend: B, options: TerminalOptions) -> io::Result<Self> {
         let area = match options.viewport {
             Viewport::Fullscreen | Viewport::Inline(_) => {
-                Rect::from((Position::ORIGIN, backend.size()?))
+                Rect::from((Position::ORIGIN, backend.size().io()?))
             }
             Viewport::Fixed(area) => area,
         };
@@ -318,7 +334,7 @@ where
         if let Some((col, row, _)) = updates.last() {
             self.last_known_cursor_pos = Position { x: *col, y: *row };
         }
-        self.backend.draw(updates.into_iter())?;
+        self.backend.draw(updates.into_iter()).io()?;
         Ok(has_changes)
     }
 
@@ -629,7 +645,7 @@ where
         self.swap_buffers();
 
         // Flush
-        self.backend.flush()?;
+        self.backend.flush().io()?;
 
         let completed_frame = CompletedFrame {
             buffer: &self.buffers[1 - self.current],
@@ -645,14 +661,14 @@ where
 
     /// Hides the cursor.
     pub fn hide_cursor(&mut self) -> io::Result<()> {
-        self.backend.hide_cursor()?;
+        self.backend.hide_cursor().io()?;
         self.hidden_cursor = true;
         Ok(())
     }
 
     /// Shows the cursor.
     pub fn show_cursor(&mut self) -> io::Result<()> {
-        self.backend.show_cursor()?;
+        self.backend.show_cursor().io()?;
         self.hidden_cursor = false;
         Ok(())
     }
@@ -677,13 +693,13 @@ where
     ///
     /// This is the position of the cursor after the last draw call.
     pub fn get_cursor_position(&mut self) -> io::Result<Position> {
-        self.backend.get_cursor_position()
+        self.backend.get_cursor_position().io()
     }
 
     /// Sets the cursor position.
     pub fn set_cursor_position<P: Into<Position>>(&mut self, position: P) -> io::Result<()> {
         let position = position.into();
-        self.backend.set_cursor_position(position)?;
+        self.backend.set_cursor_position(position).io()?;
         self.last_known_cursor_pos = position;
         Ok(())
     }
@@ -691,17 +707,18 @@ where
     /// Clear the terminal and force a full redraw on the next draw call.
     pub fn clear(&mut self) -> io::Result<()> {
         match self.viewport {
-            Viewport::Fullscreen => self.backend.clear_region(ClearType::All)?,
+            Viewport::Fullscreen => self.backend.clear_region(ClearType::All).io()?,
             Viewport::Inline(_) => {
                 self.backend
-                    .set_cursor_position(self.viewport_area.as_position())?;
-                self.backend.clear_region(ClearType::AfterCursor)?;
+                    .set_cursor_position(self.viewport_area.as_position())
+                    .io()?;
+                self.backend.clear_region(ClearType::AfterCursor).io()?;
             }
             Viewport::Fixed(_) => {
                 let area = self.viewport_area;
                 for y in area.top()..area.bottom() {
-                    self.backend.set_cursor_position(Position { x: 0, y })?;
-                    self.backend.clear_region(ClearType::AfterCursor)?;
+                    self.backend.set_cursor_position(Position { x: 0, y }).io()?;
+                    self.backend.clear_region(ClearType::AfterCursor).io()?;
                 }
             }
         }
@@ -736,7 +753,7 @@ where
 
     /// Queries the real size of the backend.
     pub fn size(&self) -> io::Result<Size> {
-        self.backend.size()
+        self.backend.size().io()
     }
 
     /// Insert some content before the current inline viewport. This has no effect when the
@@ -1039,7 +1056,7 @@ where
                     self.draw_lines_over_cleared(0, 1, buffer)?
                 };
                 first = false;
-                self.backend.scroll_region_up(0..1, 1)?;
+                self.backend.scroll_region_up(0..1, 1).io()?;
             }
 
             // Redraw the top line of the viewport.
@@ -1070,7 +1087,7 @@ where
         let viewport_top = self.viewport_area.top();
         while height > 0 {
             let to_draw = height.min(viewport_top);
-            self.backend.scroll_region_up(0..viewport_top, to_draw)?;
+            self.backend.scroll_region_up(0..viewport_top, to_draw).io()?;
             buffer = self.draw_lines_over_cleared(viewport_top - to_draw, to_draw, buffer)?;
             height -= to_draw;
         }
@@ -1093,8 +1110,8 @@ where
                 .iter()
                 .enumerate()
                 .map(|(i, c)| ((i % width) as u16, y_offset + (i / width) as u16, c));
-            self.backend.draw(iter)?;
-            self.backend.flush()?;
+            self.backend.draw(iter).io()?;
+            self.backend.flush().io()?;
         }
         Ok(remainder)
     }
@@ -1119,7 +1136,7 @@ where
                 content: to_draw.to_vec(),
             };
             self.backend.draw(old.diff(&new).into_iter())?;
-            self.backend.flush()?;
+            self.backend.flush().io()?;
         }
         Ok(remainder)
     }
@@ -1132,7 +1149,7 @@ where
                 0,
                 self.last_known_area.height.saturating_sub(1),
             ))?;
-            self.backend.append_lines(lines_to_scroll)?;
+            self.backend.append_lines(lines_to_scroll).io()?;
         }
         Ok(())
     }
@@ -1222,7 +1239,7 @@ fn diff_large_with_links<'a>(
 /// Keeping a link open across `draw`'s internal cursor moves is correct because
 /// OSC 8 is a sticky terminal mode — only the written cells inherit it, and
 /// unchanged cells in any gap keep whatever link they already had.
-fn emit_frame_with_links<B: Backend + Write>(
+fn emit_frame_with_links<B: Backend<Error: Send + Sync + 'static> + Write>(
     backend: &mut B,
     updates: &[(u16, u16, &Cell)],
     cur_ids: &[u32],
@@ -1261,9 +1278,9 @@ fn emit_frame_with_links<B: Backend + Write>(
             // dangling OSC 8 open can never be flushed to the terminal.
             let drawn = backend.draw(updates[i..j].iter().copied());
             write_osc8_close(backend)?;
-            drawn?;
+            drawn.io()?;
         } else {
-            backend.draw(updates[i..j].iter().copied())?;
+            backend.draw(updates[i..j].iter().copied()).io()?;
         }
 
         i = j;
@@ -1271,13 +1288,13 @@ fn emit_frame_with_links<B: Backend + Write>(
     Ok(())
 }
 
-fn compute_inline_size<B: Backend>(
+fn compute_inline_size<B: Backend<Error: Send + Sync + 'static>>(
     backend: &mut B,
     height: u16,
     size: Size,
     offset_in_previous_viewport: u16,
 ) -> io::Result<(Rect, Position)> {
-    let pos = backend.get_cursor_position()?;
+    let pos = backend.get_cursor_position().io()?;
     let mut row = pos.y;
 
     let max_height = size.height.min(height);
@@ -1286,7 +1303,7 @@ fn compute_inline_size<B: Backend>(
         .saturating_sub(offset_in_previous_viewport)
         .saturating_sub(1);
 
-    backend.append_lines(lines_after_cursor)?;
+    backend.append_lines(lines_after_cursor).io()?;
 
     let available_lines = size.height.saturating_sub(row).saturating_sub(1);
     let missing_lines = lines_after_cursor.saturating_sub(available_lines);
@@ -1306,7 +1323,7 @@ fn compute_inline_size<B: Backend>(
     ))
 }
 
-impl<B: Backend> Terminal<B> {
+impl<B: Backend<Error: Send + Sync + 'static>> Terminal<B> {
     /// HACK: this is added
     pub fn viewport_area(&self) -> Rect {
         self.viewport_area
