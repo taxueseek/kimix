@@ -86,10 +86,13 @@ fn spawn_async_signal_task() {
             use tokio::signal::unix::{SignalKind, signal};
             let mut sigterm = signal(SignalKind::terminate()).ok();
             let mut sighup = signal(SignalKind::hangup()).ok();
+            // SIGQUIT (Ctrl+\) would otherwise core-dump with the terminal
+            // stuck in raw mode; route it through the same graceful path.
+            let mut sigquit = signal(SignalKind::quit()).ok();
             // First signal requests the graceful quit; a second forces exit.
-            let code = next_signal_code(&mut sigterm, &mut sighup).await;
+            let code = next_signal_code(&mut sigterm, &mut sighup, &mut sigquit).await;
             request_graceful_or_exit(code);
-            let code2 = next_signal_code(&mut sigterm, &mut sighup).await;
+            let code2 = next_signal_code(&mut sigterm, &mut sighup, &mut sigquit).await;
             shutdown_with_terminal_restore(code2);
         }
         #[cfg(windows)]
@@ -132,11 +135,12 @@ fn spawn_async_signal_task() {
     });
 }
 
-/// Wait for the next SIGINT/SIGTERM/SIGHUP and map it to its exit code.
+/// Wait for the next SIGINT/SIGTERM/SIGHUP/SIGQUIT and map it to its exit code.
 #[cfg(unix)]
 async fn next_signal_code(
     sigterm: &mut Option<tokio::signal::unix::Signal>,
     sighup: &mut Option<tokio::signal::unix::Signal>,
+    sigquit: &mut Option<tokio::signal::unix::Signal>,
 ) -> i32 {
     tokio::select! {
         _ = tokio::signal::ctrl_c() => 130,
@@ -148,6 +152,10 @@ async fn next_signal_code(
             if let Some(s) = sighup.as_mut() { let _ = s.recv().await; }
             else { std::future::pending::<()>().await; }
         } => 129,
+        _ = async {
+            if let Some(s) = sigquit.as_mut() { let _ = s.recv().await; }
+            else { std::future::pending::<()>().await; }
+        } => 131,
     }
 }
 

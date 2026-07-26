@@ -1191,11 +1191,9 @@ Review code.
         assert!(result.starts_with("<skill_information>\n"));
         assert!(result.ends_with("\n</skill_information>"));
         assert!(result.contains("<skills_referenced>\n"));
-        assert!(
-            result.contains(
-                "<skill name=\"commit\" path=\"/home/user/.kimix/skills/commit/SKILL.md\"/>"
-            )
-        );
+        assert!(result.contains(
+            "<skill name=\"commit\" path=\"/home/user/.kimix/skills/commit/SKILL.md\"/>"
+        ));
         assert!(result.contains("<skill name=\"commit\" args=\"fix typo\">"));
     }
 

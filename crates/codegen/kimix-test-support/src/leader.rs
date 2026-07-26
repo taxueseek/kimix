@@ -86,7 +86,11 @@ impl acp::Client for LeaderAcpClient {
             args.update
             && let acp::ContentBlock::Text(t) = content
         {
-            self.capture.chunks.lock().expect("lock poisoned").push(t.text);
+            self.capture
+                .chunks
+                .lock()
+                .expect("lock poisoned")
+                .push(t.text);
         }
         Ok(())
     }
@@ -139,7 +143,10 @@ impl LeaderStdioClient {
             // sibling `.lock` (leader.sock -> leader.lock), and the spawned
             // leader subprocess inherits/forwards this env var, so every
             // (re-)elected leader binds the same sandboxed path.
-            .env("KIMIX_LEADER_SOCKET", home.join(".kimix").join("leader.sock"))
+            .env(
+                "KIMIX_LEADER_SOCKET",
+                home.join(".kimix").join("leader.sock"),
+            )
             .env("KIMIX_CODE_BASE_URL", server.url())
             .env("KIMIX_API_BASE_URL", server.url())
             .env("XAI_API_KEY", "test-key-for-ci")

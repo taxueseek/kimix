@@ -1613,7 +1613,10 @@ mod tests {
         );
         flush_window("s", buf, &shutdown, &gateway);
         assert!(
-            !shutdown.lock().expect("lock poisoned").is_shutting_down("crashed"),
+            !shutdown
+                .lock()
+                .expect("lock poisoned")
+                .is_shutting_down("crashed"),
             "TransportClosed alone must not mark shutting_down (C1 fix)",
         );
 
@@ -1627,7 +1630,10 @@ mod tests {
         );
         flush_window("s", buf, &shutdown, &gateway);
         assert!(
-            shutdown.lock().expect("lock poisoned").is_shutting_down("removed"),
+            shutdown
+                .lock()
+                .expect("lock poisoned")
+                .is_shutting_down("removed"),
             "ConfigRemoved must mark shutting_down (kill_on_drop guard rail)",
         );
 
@@ -1641,7 +1647,10 @@ mod tests {
         );
         flush_window("s", buf, &shutdown, &gateway);
         assert!(
-            !shutdown.lock().expect("lock poisoned").is_shutting_down("removed"),
+            !shutdown
+                .lock()
+                .expect("lock poisoned")
+                .is_shutting_down("removed"),
             "Ready must clear shutting_down",
         );
     }

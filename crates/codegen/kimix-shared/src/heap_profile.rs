@@ -17,7 +17,7 @@
 //! - Arena purge for memory release
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -58,14 +58,19 @@ impl Default for HeapProfileConfig {
     }
 }
 
+/// Stats provider signature: returns current jemalloc stats when profiling is available.
+type StatsFn = fn() -> Option<JemallocStats>;
+/// Dump provider signature: writes a heap profile to `path`.
+type DumpFn = fn(&Path) -> Result<(), String>;
+
 /// Heap profile monitor that polls jemalloc stats and triggers dumps.
 pub struct HeapProfileMonitor {
     /// Configuration.
     config: HeapProfileConfig,
     /// Stats provider function.
-    stats_fn: Option<fn() -> Option<JemallocStats>>,
+    stats_fn: Option<StatsFn>,
     /// Dump provider function.
-    dump_fn: Option<fn(&Path) -> Result<(), String>>,
+    dump_fn: Option<DumpFn>,
     /// Whether profiling is available.
     prof_available: bool,
     /// Last dump time.
@@ -145,7 +150,10 @@ impl HeapProfileMonitor {
             .unwrap_or_default()
             .as_secs();
 
-        let dump_path = self.config.dump_dir.join(format!("heap-{}.heap", timestamp));
+        let dump_path = self
+            .config
+            .dump_dir
+            .join(format!("heap-{}.heap", timestamp));
 
         if let Err(e) = std::fs::create_dir_all(&self.config.dump_dir) {
             tracing::error!(error = %e, "Failed to create dump directory");
@@ -183,14 +191,24 @@ impl HeapProfileMonitor {
         let mut dumps: Vec<PathBuf> = std::fs::read_dir(&self.config.dump_dir)?
             .filter_map(|entry| entry.ok())
             .filter(|entry| {
-                entry.path().extension().map(|e| e == "heap").unwrap_or(false)
+                entry
+                    .path()
+                    .extension()
+                    .map(|e| e == "heap")
+                    .unwrap_or(false)
             })
             .map(|entry| entry.path())
             .collect();
 
         dumps.sort_by(|a, b| {
-            let a_modified = a.metadata().and_then(|m| m.modified()).unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-            let b_modified = b.metadata().and_then(|m| m.modified()).unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+            let a_modified = a
+                .metadata()
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+            let b_modified = b
+                .metadata()
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
             b_modified.cmp(&a_modified) // Newest first
         });
 
@@ -207,7 +225,8 @@ impl HeapProfileMonitor {
 
 /// RAII guard for heap profiling.
 pub struct HeapProfileGuard {
-    monitor: Arc<HeapProfileMonitor>,
+    // Held only to keep the monitor alive for the guard's lifetime (RAII).
+    _monitor: Arc<HeapProfileMonitor>,
     handle: Option<std::thread::JoinHandle<()>>,
     stop: Arc<std::sync::atomic::AtomicBool>,
 }
@@ -227,7 +246,7 @@ impl HeapProfileGuard {
         });
 
         Self {
-            monitor,
+            _monitor: monitor,
             handle: Some(handle),
             stop,
         }

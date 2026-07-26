@@ -1104,7 +1104,10 @@ mod tests {
         scan_unjoined(std::iter::once((0, &line)), 0, &[], &mut overlay);
 
         assert_eq!(overlay.links().len(), 1);
-        assert_eq!(&*overlay.links()[0].url, "file:///tmp/kimix-impl-summary.md");
+        assert_eq!(
+            &*overlay.links()[0].url,
+            "file:///tmp/kimix-impl-summary.md"
+        );
     }
 
     #[test]

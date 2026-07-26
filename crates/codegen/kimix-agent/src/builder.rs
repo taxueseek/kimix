@@ -869,8 +869,9 @@ labeling 口径.\n",
                     .retain(|tc| !lifecycle.contains(&short_tool_name(&tc.id)));
             }
         }
-        if let kimix_tools::implementations::kimix::web_fetch::WebFetchConfig::Enabled { ref params } =
-            self.web_fetch_config
+        if let kimix_tools::implementations::kimix::web_fetch::WebFetchConfig::Enabled {
+            ref params,
+        } = self.web_fetch_config
             && let Ok(params_value) = serde_json::to_value(params)
             && let Some(obj) = params_value.as_object()
         {

@@ -34,7 +34,7 @@ pub struct FileReference {
 impl FileReference {
     /// Parse a file reference string in the format `@{file_path}` or `@{file_path}:L?{start_line}-L?{end_line}`.
     pub fn parse(input: &str) -> Option<Self> {
-        let re = Regex::new(r"^@?([^@].*?)(?::L?(\d+)-L?(\d+))?$").ok()?;
+        let re = &*FILE_REF_RE;
         let caps = re.captures(input)?;
         let path = PathBuf::from(caps.get(1)?.as_str());
         let start_line: Option<usize> = caps.get(2).and_then(|m| m.as_str().parse().ok());
@@ -98,6 +98,12 @@ pub async fn render_file_reference(file_ref: FileReference, is_cursor: bool) -> 
         })
 }
 const FILE_REGEX: &str = r"^(?:file://)?([^#]+)(?:#L(\d+)-L?(\d+))?$";
+/// Compiled once: both patterns are static, so per-call `Regex::new` is pure waste.
+static FILE_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(FILE_REGEX).expect("static FILE_REGEX must compile"));
+static FILE_REF_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(r"^@?([^@].*?)(?::L?(\d+)-L?(\d+))?$").expect("static file-ref regex must compile")
+});
 /// Render an ACP EmbeddedResource.
 ///
 /// When `is_cursor` is true, renders `<code_selection>` tags. Otherwise uses `<file_contents>`.
@@ -129,7 +135,7 @@ async fn render_text_resource(
     text_resource: &agent_client_protocol::TextResourceContents,
     is_cursor: bool,
 ) -> Option<String> {
-    let re = Regex::new(FILE_REGEX).ok()?;
+    let re = &*FILE_RE;
     let caps = re.captures(&text_resource.uri)?;
     let path = caps.get(1)?.as_str();
     let start_line: Option<usize> = caps.get(2).and_then(|m| m.as_str().parse().ok());
@@ -172,7 +178,7 @@ async fn render_text_resource(
 async fn render_diff_resource(
     text_resource: &agent_client_protocol::TextResourceContents,
 ) -> Option<String> {
-    let re = Regex::new(FILE_REGEX).ok()?;
+    let re = &*FILE_RE;
     let caps = re.captures(&text_resource.uri)?;
     let path = caps.get(1)?.as_str();
     let start_line: Option<usize> = caps.get(2).and_then(|m| m.as_str().parse().ok());

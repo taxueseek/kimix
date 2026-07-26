@@ -207,8 +207,7 @@ pub(super) fn handle_mcp_server_status(notif: &acp::ExtNotification, app: &mut A
     let Ok(payload) = serde_json::from_str::<McpServerStatusPayload>(notif.params.get()) else {
         tracing::warn!(
             "Failed to parse kimix/mcp/server_status: {}",
-            &notif.params.get()
-                [..crate::render::line_utils::floor_char_boundary(notif.params.get(), 100)]
+            &notif.params.get()[..notif.params.get().floor_char_boundary(100)]
         );
         return false;
     };

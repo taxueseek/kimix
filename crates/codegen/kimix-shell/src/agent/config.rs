@@ -2883,7 +2883,7 @@ fn default_models(endpoints: &EndpointsConfig) -> IndexMap<String, ModelEntryCon
                 reasoning_efforts: m.reasoning_efforts,
                 capabilities: m.capabilities,
                 supports_backend_search: m.supports_backend_search,
-               auth_source: None,
+                auth_source: None,
                 compactions_remaining: m.compactions_remaining,
                 compaction_at_tokens: m.compaction_at_tokens,
                 show_model_fingerprint: m.show_model_fingerprint,
@@ -3303,7 +3303,7 @@ impl ModelInfo {
             reasoning_efforts: Vec::new(),
             capabilities: Vec::new(),
             supports_backend_search: false,
-           auth_source: None,
+            auth_source: None,
             compactions_remaining: None,
             compaction_at_tokens: None,
             show_model_fingerprint: false,
@@ -3822,12 +3822,7 @@ pub fn resolve_credentials(model: &ModelEntry, session_key: Option<&str>) -> Res
         } else {
             info.base_url.clone()
         };
-        (
-            Some(key),
-            url,
-            kimix_chat_state::AuthType::ApiKey,
-            false,
-        )
+        (Some(key), url, kimix_chat_state::AuthType::ApiKey, false)
     } else if want_xai_session {
         // cli-chat-proxy.grok.com ONLY accepts Grok CLI session tokens
         // (`grok login` / `~/.grok/auth.json`). Native auth.x.ai OIDC tokens
@@ -3870,12 +3865,7 @@ pub fn resolve_credentials(model: &ModelEntry, session_key: Option<&str>) -> Res
                 "auth_source requests Grok/xAI session but no token found; \
                  run `grok login` (preferred) or `kimix login --xai`"
             );
-            (
-                None,
-                url,
-                kimix_chat_state::AuthType::SessionToken,
-                true,
-            )
+            (None, url, kimix_chat_state::AuthType::SessionToken, true)
         }
     } else if let Some(key) = session_key {
         (
@@ -4050,7 +4040,7 @@ pub fn resolve_aux_model_sampling_config(
                 reasoning_efforts: Vec::new(),
                 capabilities: Vec::new(),
                 supports_backend_search: false,
-               auth_source: None,
+                auth_source: None,
                 compactions_remaining: None,
                 compaction_at_tokens: None,
                 show_model_fingerprint: false,
@@ -4375,7 +4365,7 @@ mod tests {
             tools: Some(vec!["read_file".into()]),
             ..Default::default()
         };
-        let mut cases = vec![(AgentDefinition::default_kimix(), true)];
+        let cases = vec![(AgentDefinition::default_kimix(), true)];
         for (mut definition, expected_injection) in cases {
             overrides.apply_to_definition(&mut definition);
             assert_eq!(definition.tools, vec!["read_file".to_string()]);
@@ -5625,9 +5615,7 @@ reasoning_effort = "low"
         .unwrap();
         let cfg = Config::new_from_toml_cfg(&raw_config).expect("config should parse");
         let resolved = resolve_model_list(&cfg, None);
-        let model = resolved
-            .get("byok-flagship")
-            .expect("model should exist");
+        let model = resolved.get("byok-flagship").expect("model should exist");
         assert_eq!(model.info.api_backend, ApiBackend::Responses);
         assert!(model.info.supports_backend_search);
         assert_eq!(model.info.stream_tool_calls, Some(true));
@@ -5676,18 +5664,12 @@ reasoning_effort = "low"
         let cfg = Config::new_from_toml_cfg(&raw_config).expect("config should parse");
         let resolved = resolve_model_list(&cfg, None);
         let model = resolved.get("grok-session").expect("model should exist");
-        assert_eq!(
-            model.info.auth_source.as_deref(),
-            Some("grok_session")
-        );
+        assert_eq!(model.info.auth_source.as_deref(), Some("grok_session"));
 
         let creds = resolve_credentials(model, None);
         assert!(creds.grok_session);
         assert_eq!(creds.api_key.as_deref(), Some("jwt-from-grok"));
-        assert_eq!(
-            creds.auth_type,
-            kimix_chat_state::AuthType::SessionToken
-        );
+        assert_eq!(creds.auth_type, kimix_chat_state::AuthType::SessionToken);
 
         let sampling = sampling_config_for_model(model, creds, None);
         assert!(sampling.supports_backend_search);

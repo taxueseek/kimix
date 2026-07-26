@@ -138,13 +138,7 @@ impl RecallEngine {
     ///
     /// Optionally accepts an embedding vector for hybrid retrieval.
     /// The embedding is stored in the hybrid searcher's vector index.
-    pub fn add_turn(
-        &mut self,
-        role: &str,
-        content: &str,
-        is_compacted: bool,
-        turn_number: usize,
-    ) {
+    pub fn add_turn(&mut self, role: &str, content: &str, is_compacted: bool, turn_number: usize) {
         self.add_turn_with_embedding(role, content, is_compacted, turn_number, None);
     }
 
@@ -284,10 +278,7 @@ impl RecallEngine {
             .collect();
 
         // Sort by decayed score descending, take top-N
-        compacted.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        compacted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         compacted.truncate(max_cand);
 
         for (sr, decayed) in &compacted {
@@ -326,10 +317,7 @@ impl RecallEngine {
             .filter(|(_, decayed)| *decayed >= self.config.working_memory_threshold)
             .collect();
 
-        non_compacted.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        non_compacted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         non_compacted.truncate(max_cand);
 
         for (sr, decayed) in &non_compacted {
@@ -356,18 +344,15 @@ impl RecallEngine {
             .map(|r| {
                 let meta = &self.turns[r.doc_id];
                 let recency_factor = meta.turn_number as f64 / total_turns_f.max(1.0);
-                let boosted =
-                    r.score * (1.0 + self.config.recency_weight * recency_factor);
+                let boosted = r.score * (1.0 + self.config.recency_weight * recency_factor);
                 let decayed = decay_score(boosted, meta.turn_number, current_turn, lambda);
                 (r.doc_id, boosted, decayed)
             })
             .filter(|(_, _, decayed)| *decayed >= self.config.recency_threshold)
             .collect();
 
-        recency_candidates.sort_by(|a, b| {
-            b.2.partial_cmp(&a.2)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        recency_candidates
+            .sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
         recency_candidates.truncate(max_cand);
 
         for (doc_id, boosted, decayed) in &recency_candidates {
@@ -649,9 +634,9 @@ mod tests {
     #[test]
     fn test_hybrid_searcher_set_unset() {
         let mut engine = make_engine();
+        use crate::BM25Scorer;
         use crate::hybrid::HybridSearcher;
         use crate::vector::VectorIndex;
-        use crate::BM25Scorer;
 
         let tokenizer = crate::Tokenizer::new(2);
         let searcher = Searcher::new(tokenizer, BM25Scorer::default());

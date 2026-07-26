@@ -534,7 +534,8 @@ mod tests {
 
     #[test]
     fn per_tool_override_wins() {
-        let v = resolve_version("current", "Kimix:run_terminal_cmd", Some("legacy-0.4.10")).unwrap();
+        let v =
+            resolve_version("current", "Kimix:run_terminal_cmd", Some("legacy-0.4.10")).unwrap();
         assert_eq!(v, Some("legacy-0.4.10".to_string()));
     }
 
@@ -546,7 +547,8 @@ mod tests {
 
     #[test]
     fn override_on_unmanaged_tool_errors() {
-        let err = resolve_version("current", "Kimix:web_search", Some("legacy-0.4.10")).unwrap_err();
+        let err =
+            resolve_version("current", "Kimix:web_search", Some("legacy-0.4.10")).unwrap_err();
         assert!(err.contains("unmanaged tool"));
     }
 
@@ -629,7 +631,8 @@ mod tests {
         // Since all current versions are Active, we test the code path by
         // calling validate_and_resolve on an Active version and verifying
         // no warning, then documenting the contract.
-        let (version, warnings) = validate_and_resolve("Kimix:run_terminal_cmd", "current").unwrap();
+        let (version, warnings) =
+            validate_and_resolve("Kimix:run_terminal_cmd", "current").unwrap();
         assert_eq!(version, Some("current".to_string()));
         assert!(
             warnings.is_empty(),

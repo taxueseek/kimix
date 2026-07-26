@@ -433,8 +433,7 @@ mod tests {
     #[test]
     fn check_fork_safety_rejects_boilerplate_tag() {
         let mut parent = sample_parent();
-        parent.context.tier4_ephemeral =
-            format!("prefix {FORK_BOILERPLATE_TAG} suffix");
+        parent.context.tier4_ephemeral = format!("prefix {FORK_BOILERPLATE_TAG} suffix");
 
         let err = check_fork_safety(&parent, 0).unwrap_err();
         assert_eq!(err, ForkError::NestedForkDetected);

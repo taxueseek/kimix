@@ -33,7 +33,7 @@ pub fn build_transcript(messages: &[ConversationItem]) -> String {
         result.push_str("] ");
 
         if content.len() > MAX_CONTENT_BYTES {
-            let end = floor_char_boundary(content, MAX_CONTENT_BYTES);
+            let end = content.floor_char_boundary(MAX_CONTENT_BYTES);
             result.push_str(&content[..end]);
             result.push_str("...");
         } else {
@@ -46,23 +46,6 @@ pub fn build_transcript(messages: &[ConversationItem]) -> String {
     // Remove trailing newline to match original join behavior
     result.pop();
     result
-}
-
-/// Returns the largest valid UTF-8 character boundary index at or before `index`.
-#[inline]
-pub(super) fn floor_char_boundary(s: &str, index: usize) -> usize {
-    if index >= s.len() {
-        s.len()
-    } else if s.is_char_boundary(index) {
-        index
-    } else {
-        // UTF-8 characters are at most 4 bytes, back up at most 3 bytes
-        let mut i = index;
-        while i > 0 && !s.is_char_boundary(i) {
-            i -= 1;
-        }
-        i
-    }
 }
 
 pub fn truncate_middle_words(s: &str, max_words: usize) -> (String, Option<usize>) {

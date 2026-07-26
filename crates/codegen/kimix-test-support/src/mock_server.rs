@@ -420,7 +420,8 @@ impl MockInferenceServer {
     /// the user message. Deltas reconstruct the text byte-for-byte (newlines
     /// preserved). Subsequent calls replace the text.
     pub fn set_response(&self, text: impl Into<String>) {
-        *self.response_mode.write().expect("rwlock write poisoned") = ResponseMode::Fixed(text.into());
+        *self.response_mode.write().expect("rwlock write poisoned") =
+            ResponseMode::Fixed(text.into());
     }
 
     /// Queue a [`ScriptedResponse`] for the next request on `path` (e.g.
@@ -471,7 +472,10 @@ impl MockInferenceServer {
     /// Set the `stop_reason` emitted by the `/v1/messages` terminal
     /// `message_delta` (default `"end_turn"`).
     pub fn set_messages_stop_reason(&self, stop_reason: impl Into<String>) {
-        *self.messages_stop_reason.write().expect("rwlock write poisoned") = stop_reason.into();
+        *self
+            .messages_stop_reason
+            .write()
+            .expect("rwlock write poisoned") = stop_reason.into();
     }
 
     /// Pace all inference SSE streams: each event is emitted after `delay`.
@@ -654,12 +658,16 @@ impl MockInferenceServer {
             })
             .to_string(),
         );
-        storage.uploads.lock().expect("lock poisoned").push(StorageUpload {
-            path,
-            size,
-            body: captured_body,
-            authorization,
-        });
+        storage
+            .uploads
+            .lock()
+            .expect("lock poisoned")
+            .push(StorageUpload {
+                path,
+                size,
+                body: captured_body,
+                authorization,
+            });
         response.into_response()
     }
 
@@ -778,7 +786,8 @@ impl MockInferenceServer {
                         );
 
                         if let Some(s) = Self::pop_scripted(&scripted, "/v1/chat/completions") {
-                            return s.into_response_paced(*delay.read().expect("rwlock read poisoned"));
+                            return s
+                                .into_response_paced(*delay.read().expect("rwlock read poisoned"));
                         }
 
                         if let Some(rejection) =
@@ -824,7 +833,11 @@ impl MockInferenceServer {
                                 (events, None)
                             }
                         };
-                        let stream = paced_events(events, *delay.read().expect("rwlock read poisoned"), gate);
+                        let stream = paced_events(
+                            events,
+                            *delay.read().expect("rwlock read poisoned"),
+                            gate,
+                        );
                         Sse::new(stream)
                             .keep_alive(KeepAlive::default())
                             .into_response()
@@ -850,7 +863,8 @@ impl MockInferenceServer {
                         );
 
                         if let Some(s) = Self::pop_scripted(&scripted, "/v1/responses") {
-                            return s.into_response_paced(*delay.read().expect("rwlock read poisoned"));
+                            return s
+                                .into_response_paced(*delay.read().expect("rwlock read poisoned"));
                         }
 
                         if let Some(rejection) =
@@ -901,7 +915,11 @@ impl MockInferenceServer {
                                 sse::responses_api_events_exact(text, model)
                             }
                         };
-                        let stream = paced_events(events, *delay.read().expect("rwlock read poisoned"), None);
+                        let stream = paced_events(
+                            events,
+                            *delay.read().expect("rwlock read poisoned"),
+                            None,
+                        );
                         Sse::new(stream)
                             .keep_alive(KeepAlive::default())
                             .into_response()
@@ -928,7 +946,8 @@ impl MockInferenceServer {
                         );
 
                         if let Some(s) = Self::pop_scripted(&scripted, "/v1/messages") {
-                            return s.into_response_paced(*delay.read().expect("rwlock read poisoned"));
+                            return s
+                                .into_response_paced(*delay.read().expect("rwlock read poisoned"));
                         }
 
                         if let Some(rejection) =
@@ -982,7 +1001,11 @@ impl MockInferenceServer {
                                 sse::messages_api_events(text, model, &stop)
                             }
                         };
-                        let stream = paced_events(events, *delay.read().expect("rwlock read poisoned"), None);
+                        let stream = paced_events(
+                            events,
+                            *delay.read().expect("rwlock read poisoned"),
+                            None,
+                        );
                         Sse::new(stream)
                             .keep_alive(KeepAlive::default())
                             .into_response()

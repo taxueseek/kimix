@@ -19,8 +19,7 @@ use conditional::ConditionalSkills;
 use listing::{DEFAULT_SKILL_TOOL_NAME, compute_listing_budget_chars, format_announcement};
 
 pub use listing::{
-    LISTING_HARD_CAP_CHARS, XmlRenderMode, format_announcement_xml,
-    format_compaction_skill_listing,
+    LISTING_HARD_CAP_CHARS, XmlRenderMode, format_announcement_xml, format_compaction_skill_listing,
 };
 // Re-export budget helper under a stable name for callers outside this module.
 pub use listing::compute_listing_budget_chars as listing_budget_chars;
@@ -1481,7 +1480,10 @@ mod tests {
         let _ = mgr.take_pending_reconciliation().unwrap();
         mgr.add_discovered(vec![make_skill("review", "/d/review/SKILL.md")]);
         let r = mgr.take_pending_reconciliation().unwrap();
-        let text = r.effects.system_reminder.expect("discovery still announced");
+        let text = r
+            .effects
+            .system_reminder
+            .expect("discovery still announced");
         assert!(text.contains("review"));
         assert!(!text.contains("Absolute path:"));
         assert_eq!(r.effects.kind, SkillUpdateKind::Discovery);

@@ -525,7 +525,11 @@ mod tests {
         let tmp = repo_tmp();
         let kimix = tmp.path().join(".kimix");
         std::fs::create_dir_all(&kimix).unwrap();
-        std::fs::write(kimix.join("config.toml"), "[mcp_servers.x]\ncommand=\"y\"\n").unwrap();
+        std::fs::write(
+            kimix.join("config.toml"),
+            "[mcp_servers.x]\ncommand=\"y\"\n",
+        )
+        .unwrap();
         assert!(repo_configs_present(tmp.path()));
     }
 

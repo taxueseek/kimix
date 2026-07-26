@@ -1291,8 +1291,8 @@ async fn test_e2e_idle_resume_refreshes_model_metadata() {
                 startup_hints: StartupHints::default(),
                 forked_tool_override: None,
                 queue_persistence_enabled: false,
-        queue_writer: kimix_file_utils::events::QueueEventWriter::noop(),
-        compaction: crate::session::compaction_config::CompactionConfig {
+                queue_writer: kimix_file_utils::events::QueueEventWriter::noop(),
+                compaction: crate::session::compaction_config::CompactionConfig {
                     threshold_percent: std::cell::Cell::new(85),
                     force_compact: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
                     context_window_override: None,

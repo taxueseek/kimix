@@ -1635,7 +1635,11 @@ async fn test_headless_waits_for_short_background_task_and_exits_clean() {
     )
     .await;
 
-    assert_headless_success(&result, "kimix -p with short background task", Some(&server));
+    assert_headless_success(
+        &result,
+        "kimix -p with short background task",
+        Some(&server),
+    );
     assert_no_crashes(&result.stderr);
     assert!(
         marker.exists(),

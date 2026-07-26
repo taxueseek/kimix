@@ -119,9 +119,12 @@ pub fn render_jump_overlay(buf: &mut Buffer, area: Rect, state: &JumpState, focu
     // Ordinal gutter sized to the widest turn number.
     let ord_width = state.entries.len().to_string().len();
 
-    state
-        .list()
-        .render(buf, area, i18n::tr("Jump to which turn?"), focused, |i, ctx| {
+    state.list().render(
+        buf,
+        area,
+        i18n::tr("Jump to which turn?"),
+        focused,
+        |i, ctx| {
             let entry = &state.entries[i];
             let ordinal = format!("{:>ord_width$} ", entry.turn_idx + 1);
             let ord_style = Style::default().fg(theme.gray).bg(ctx.row_bg);
@@ -145,7 +148,8 @@ pub fn render_jump_overlay(buf: &mut Buffer, area: Rect, state: &JumpState, focu
                 Span::styled(ordinal, ord_style),
                 Span::styled(preview, text_style),
             ])
-        });
+        },
+    );
 }
 
 #[cfg(test)]

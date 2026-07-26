@@ -1,8 +1,6 @@
 use crate::auth::AuthManager;
 use crate::util::kimix_auth_credentials::KimixAuthCredentials;
-use kimix_auth::{
-    AuthCredentialProvider, CredentialSnapshot, HttpAuth,
-};
+use kimix_auth::{AuthCredentialProvider, CredentialSnapshot, HttpAuth};
 use reqwest::RequestBuilder;
 use std::sync::Arc;
 /// `api_key.id` for the active credential: hash the stable API key, never the

@@ -921,7 +921,10 @@ mod tests {
         SubagentCapabilityMode::ReadOnly.filter_tool_config(&mut config);
 
         let ids: Vec<&str> = config.tools.iter().map(|tc| tc.id.as_str()).collect();
-        assert_eq!(ids, vec!["Kimix:read_file", "Kimix:list_dir", "Kimix:grep",]);
+        assert_eq!(
+            ids,
+            vec!["Kimix:read_file", "Kimix:list_dir", "Kimix:grep",]
+        );
     }
 
     #[test]

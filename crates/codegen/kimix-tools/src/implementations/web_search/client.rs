@@ -25,8 +25,8 @@ use crate::attribution::{SharedAttributionCallback, ToolConsumer};
 use crate::types::SharedApiKeyProvider;
 use futures_util::future::join_all;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
-use std::sync::atomic::{AtomicU32, Ordering as AtomicOrdering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering as AtomicOrdering};
 
 /// Total request timeout. Mirrors kimi-cli search.py:74 (`total=180`):
 /// the service crawls pages when `include_content` is set.
@@ -76,10 +76,10 @@ struct CircuitState {
 impl CircuitState {
     fn is_open(&self) -> bool {
         let guard = self.open_until.lock();
-        if let Some(until) = *guard {
-            if std::time::Instant::now() < until {
-                return true;
-            }
+        if let Some(until) = *guard
+            && std::time::Instant::now() < until
+        {
+            return true;
         }
         false
     }
@@ -228,7 +228,10 @@ impl WebSearchClient {
                 } else {
                     format!("{tool_call_id}-q{i}")
                 };
-                async move { self.search_once(q, per_query_limit, include_content, &call_id).await }
+                async move {
+                    self.search_once(q, per_query_limit, include_content, &call_id)
+                        .await
+                }
             })
             .collect();
 

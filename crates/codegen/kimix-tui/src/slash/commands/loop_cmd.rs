@@ -36,7 +36,10 @@ fn is_interval_token(s: &str) -> bool {
     if s.len() < 2 {
         return false;
     }
-    let (digits, suffix) = s.split_at(s.len() - 1);
+    // Split before the last char (not the last byte): a multibyte suffix
+    // must yield `false`, not panic.
+    let cut = s.char_indices().last().map(|(i, _)| i).unwrap_or(0);
+    let (digits, suffix) = s.split_at(cut);
     matches!(suffix, "s" | "m" | "h" | "d")
         && digits.chars().all(|c| c.is_ascii_digit())
         && digits.parse::<u64>().is_ok_and(|n| n > 0)
@@ -44,7 +47,8 @@ fn is_interval_token(s: &str) -> bool {
 
 /// Convert an interval token like "5m" to a human string like "every 5 minutes".
 fn interval_to_human(token: &str) -> String {
-    let (digits, suffix) = token.split_at(token.len() - 1);
+    let cut = token.char_indices().last().map(|(i, _)| i).unwrap_or(0);
+    let (digits, suffix) = token.split_at(cut);
     let n: u64 = digits.parse().unwrap_or(0);
     match suffix {
         "s" => {

@@ -237,7 +237,7 @@ fn todo_gate_active_predicate_matrix() {
             "non-active status {status:?} must not enable gate"
         );
     }
-    let mut templates = vec![
+    let templates = vec![
         TemplateOverride::None,
         TemplateOverride::Codex,
         TemplateOverride::Custom("custom".into()),

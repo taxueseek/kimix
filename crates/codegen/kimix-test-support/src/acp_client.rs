@@ -100,7 +100,11 @@ impl acp::Client for TestAcpClient {
             && let acp::ContentBlock::Text(text_content) = content
             && !text_content.text.is_empty()
         {
-            self.capture.chunks.lock().expect("lock poisoned").push(text_content.text);
+            self.capture
+                .chunks
+                .lock()
+                .expect("lock poisoned")
+                .push(text_content.text);
         }
         Ok(())
     }

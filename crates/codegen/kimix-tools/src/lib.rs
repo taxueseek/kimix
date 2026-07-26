@@ -29,6 +29,7 @@ pub mod reminders;
 pub mod retry;
 pub mod tool_taxonomy;
 pub mod types;
+pub mod url_scheme;
 pub mod util;
 pub mod versions;
 

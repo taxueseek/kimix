@@ -190,13 +190,19 @@ impl HeuristicPermissionClassifier {
         // `python3 -c 'os.system("..."')` would match the "python3 " prefix.
         if let AccessKind::Bash(cmd) = access {
             let trimmed = cmd.trim_start();
-            let dangerous_flags = [" -c ", " -e ", " -m ", " << ", " -c'", " -e'", " -m'", " <<'"];
+            let dangerous_flags = [
+                " -c ", " -e ", " -m ", " << ", " -c'", " -e'", " -m'", " <<'",
+            ];
             if dangerous_flags.iter().any(|f| trimmed.contains(f)) {
                 return ClassifierVerdict::Block;
             }
             // Also block pipe-to-shell for ANY download tool (not just curl/wget/fetch).
-            if trimmed.contains("| sh") || trimmed.contains("|sh") || trimmed.contains("| bash")
-                || trimmed.contains("|bash") || trimmed.contains("| zsh") || trimmed.contains("|zsh")
+            if trimmed.contains("| sh")
+                || trimmed.contains("|sh")
+                || trimmed.contains("| bash")
+                || trimmed.contains("|bash")
+                || trimmed.contains("| zsh")
+                || trimmed.contains("|zsh")
             {
                 return ClassifierVerdict::Block;
             }
@@ -247,8 +253,12 @@ impl HeuristicPermissionClassifier {
         }
         // Pipe-to-shell: block ANY command piped to a shell, not just curl/wget/fetch.
         // This closes the bypass where python3/perl/openssl/nc were used as downloaders.
-        if blob.contains("| sh") || blob.contains("|sh") || blob.contains("| bash")
-            || blob.contains("|bash") || blob.contains("| zsh") || blob.contains("|zsh")
+        if blob.contains("| sh")
+            || blob.contains("|sh")
+            || blob.contains("| bash")
+            || blob.contains("|bash")
+            || blob.contains("| zsh")
+            || blob.contains("|zsh")
         {
             return ClassifierVerdict::Block;
         }

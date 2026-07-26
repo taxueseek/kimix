@@ -71,7 +71,13 @@ impl SearchCache {
         }
     }
 
-    pub fn put_hits(&self, query: &str, limit: u8, include_content: bool, results: Vec<SearchResult>) {
+    pub fn put_hits(
+        &self,
+        query: &str,
+        limit: u8,
+        include_content: bool,
+        results: Vec<SearchResult>,
+    ) {
         let key = Self::key(query, limit, include_content);
         let mut guard = self.inner.lock();
         if guard.len() >= MAX_ENTRIES {
@@ -79,7 +85,12 @@ impl SearchCache {
             guard.clear();
         }
         if results.is_empty() {
-            guard.insert(key, Entry::Empty { stored_at: Instant::now() });
+            guard.insert(
+                key,
+                Entry::Empty {
+                    stored_at: Instant::now(),
+                },
+            );
         } else {
             guard.insert(
                 key,

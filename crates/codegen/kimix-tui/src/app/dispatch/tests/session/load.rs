@@ -693,7 +693,12 @@ fn session_restored_load_never_sets_conversation_entry_bit() {
 #[test]
 fn auth_complete_restores_view_after_mid_session_login() {
     let mut app = test_app_with_agent();
-    dispatch(Action::Login { method_id: Some(acp::AuthMethodId::new("kimi-code")) }, &mut app);
+    dispatch(
+        Action::Login {
+            method_id: Some(acp::AuthMethodId::new("kimi-code")),
+        },
+        &mut app,
+    );
     let seq = authenticating_seq(&app);
     assert_eq!(app.active_view, ActiveView::Welcome);
     dispatch(

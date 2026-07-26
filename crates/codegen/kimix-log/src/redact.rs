@@ -51,7 +51,7 @@ static PATTERNS: Lazy<Vec<(Regex, &str)>> = Lazy::new(|| {
 /// payloads. Bounded to 64 KiB.
 pub fn redact_error_message(msg: &str) -> String {
     let msg = if msg.len() > 65536 {
-        &msg[..65536]
+        &msg[..msg.floor_char_boundary(65536)]
     } else {
         msg
     };

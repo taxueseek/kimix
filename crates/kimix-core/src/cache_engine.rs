@@ -368,12 +368,7 @@ mod tests {
     #[test]
     fn test_cache_hit_rate_calculation() {
         // ~4000 + ~3760 stable tokens，无 volatile/ephemeral → 命中率 ≈ 1.0
-        let ctx = Context::new(
-            &"a ".repeat(4000),
-            &"b ".repeat(3760),
-            "",
-            "",
-        );
+        let ctx = Context::new(&"a ".repeat(4000), &"b ".repeat(3760), "", "");
         let rate = ctx.cache_hit_rate();
         assert!(
             (0.96..=1.0).contains(&rate),
@@ -459,10 +454,7 @@ mod tests {
         // 无 Tier3 时只有 2 个分隔符（Tier1|2 与 Tier2|4）
         assert_eq!(assembled.matches("---").count(), 2);
         assert!(!assembled.contains("tool_out"));
-        assert_eq!(
-            assembled,
-            "sys\ntools\n---\nagents\nprefs\n---\nhi"
-        );
+        assert_eq!(assembled, "sys\ntools\n---\nagents\nprefs\n---\nhi");
     }
 
     #[test]

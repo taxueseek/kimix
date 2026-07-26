@@ -12,13 +12,10 @@ use super::*;
 // Re-exported for `acp_session.rs` which does `pub(crate) use interjection::*;`
 // so retained code and co-located tests keep resolving by `acp_session::` path.
 #[allow(unused_imports)]
-pub(crate) use kimix_tool_types::{
-    InterjectionBuffer, drain_formatted, format_interjection,
-};
+pub(crate) use kimix_tool_types::{InterjectionBuffer, drain_formatted, format_interjection};
 
 /// Shell instantiation of the shared entry type: images are ACP content.
-pub(crate) type PendingInterjection =
-    kimix_tool_types::PendingInterjection<acp::ImageContent>;
+pub(crate) type PendingInterjection = kimix_tool_types::PendingInterjection<acp::ImageContent>;
 
 /// Prompt-id prefix for interjections that missed their turn and were
 /// converted into standalone prompt turns (arrived while idle, or after the

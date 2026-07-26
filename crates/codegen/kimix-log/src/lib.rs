@@ -6,6 +6,7 @@
 //! env-gated performance instrumentation. No module here opens a network
 //! connection — that property is the crate's contract.
 mod appender;
+pub mod aggregator;
 pub mod debug_log;
 pub mod hooks_log;
 pub mod instrumentation;

@@ -111,7 +111,11 @@ impl SharedWriter {
 impl HunkRecordWriter for SharedWriter {
     async fn write(&mut self, record: &HunkRecord) -> std::io::Result<()> {
         // Do the work inside the lock synchronously — don't hold MutexGuard across .await
-        self.0.lock().expect("lock poisoned").records.push(record.clone());
+        self.0
+            .lock()
+            .expect("lock poisoned")
+            .records
+            .push(record.clone());
         Ok(())
     }
     async fn flush(&mut self) -> std::io::Result<()> {

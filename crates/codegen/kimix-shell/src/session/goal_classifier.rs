@@ -4544,7 +4544,10 @@ mod tests {
         ) -> Result<String, SpawnError> {
             self.spawn_count
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            self.skeptic_idxs.lock().expect("lock poisoned").push(skeptic_idx);
+            self.skeptic_idxs
+                .lock()
+                .expect("lock poisoned")
+                .push(skeptic_idx);
             self.resume_froms
                 .lock()
                 .unwrap()
@@ -5691,7 +5694,9 @@ mod tests {
                 };
                 let model = req.runtime_overrides.model.clone();
                 let resume = req.resume_from.clone();
-                cap.lock().expect("lock poisoned").push((model, resume.clone()));
+                cap.lock()
+                    .expect("lock poisoned")
+                    .push((model, resume.clone()));
                 if resume.is_some() {
                     // Resume attempt (and its inherit retry) both fail →
                     // run_one_skeptic downgrades to a cold spawn.
@@ -5791,7 +5796,11 @@ mod tests {
             let _ = tokio::fs::remove_file(details_path).await;
         }
         assert_eq!(
-            observed.resume_froms.lock().expect("lock poisoned").as_slice(),
+            observed
+                .resume_froms
+                .lock()
+                .expect("lock poisoned")
+                .as_slice(),
             [None],
             "N==1 sole judge must never resume",
         );

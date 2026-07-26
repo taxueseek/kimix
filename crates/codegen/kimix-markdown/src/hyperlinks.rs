@@ -15,9 +15,7 @@
 //! segment becomes one rendered line.  A link spanning multiple segments
 //! (a wrapped or autolink-bracketed link) produces one `HyperlinkTarget`
 //! per segment, all sharing the same `id`.
-use crate::buffers::{
-    LinkTarget, Transform, ceil_char_boundary, floor_char_boundary, unicode_display_width,
-};
+use crate::buffers::{LinkTarget, Transform, unicode_display_width};
 use crate::output::HyperlinkTarget;
 
 /// One link's projection onto the current chunk's transformed string.
@@ -166,8 +164,8 @@ pub(crate) fn emit_segment_hyperlinks(
             .saturating_sub(seg_x_offset)
             .min(segment.len());
         let e_in = (clr.xform_end - seg_x_offset).min(segment.len());
-        let s_in = floor_char_boundary(segment, s_in);
-        let e_in = ceil_char_boundary(segment, e_in);
+        let s_in = segment.floor_char_boundary(s_in);
+        let e_in = segment.ceil_char_boundary(e_in);
         if s_in >= e_in {
             continue;
         }

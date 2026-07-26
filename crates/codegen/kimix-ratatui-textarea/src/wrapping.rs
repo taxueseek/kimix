@@ -574,7 +574,7 @@ mod tests {
     #[test]
     fn wrap_ranges_trim_empty_text_does_not_panic() {
         let ranges = wrap_ranges_trim("", 1);
-        assert!(ranges.is_empty() || ranges == vec![0..0]);
+        assert!(ranges.iter().all(|r| *r == (0..0)));
     }
 
     #[test]

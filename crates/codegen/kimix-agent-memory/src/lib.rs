@@ -37,22 +37,22 @@ pub mod text_utils;
 pub mod watcher;
 
 // Merged from kimix-memory (session memory with BM25 recall)
+mod memory_analytics;
+mod memory_context;
 mod memory_recall;
 mod memory_session;
 mod memory_store;
-mod memory_context;
-mod memory_analytics;
 
 pub use backend::{MemoryBackendImpl, MemoryBackendParams};
 pub use index::{MemoryIndex, init_sqlite_vec};
 pub use storage::{MemoryScope, MemoryStorage};
 
 // Re-exports from merged kimix-memory
-pub use memory_recall::MemoryManager;
+pub use memory_analytics::{GlobalStats, SessionReport, SessionSummary, TokenUsage};
 pub use memory_context::{ContextAction, ContextConfig, ContextManager, ContextState};
+pub use memory_recall::MemoryManager;
 pub use memory_session::{Checkpoint, MemorySession, Turn};
 pub use memory_store::SessionStore;
-pub use memory_analytics::{GlobalStats, SessionReport, SessionSummary, TokenUsage};
 
 /// Embed all chunks that don't have embeddings yet.
 ///

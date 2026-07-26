@@ -3306,7 +3306,8 @@ mod tests {
             r#"{"jsonrpc":"2.0","method":"kimix/yolo_mode_changed","params":{"yolo_mode":true}}"#,
         );
         assert!(inject_client_identity_into_yolo_notification(
-            &mut json, "kimix-tui"
+            &mut json,
+            "kimix-tui"
         ));
         assert_eq!(json["params"]["clientIdentifier"], "kimix-tui");
         assert_eq!(json["params"]["yolo_mode"], true);
@@ -3316,7 +3317,8 @@ mod tests {
         let mut json = pv(r#"{"jsonrpc":"2.0","method":"kimix/other","params":{"data":1}}"#);
         let before = json.clone();
         assert!(!inject_client_identity_into_yolo_notification(
-            &mut json, "kimix-tui"
+            &mut json,
+            "kimix-tui"
         ));
         assert_eq!(json, before);
     }

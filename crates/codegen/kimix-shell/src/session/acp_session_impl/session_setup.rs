@@ -551,7 +551,10 @@ impl SessionActor {
         let turn_count = signals.as_ref().map(|s| s.turn_count).unwrap_or(0);
         let tool_call_count = signals.as_ref().map(|s| s.tool_call_count).unwrap_or(0);
         // Get the most recent turn's cache hit rate from persistent signals
-        let cache_hit_rate = signals.as_ref().map(|s| s.last_cache_hit_rate).unwrap_or(0.0);
+        let cache_hit_rate = signals
+            .as_ref()
+            .map(|s| s.last_cache_hit_rate)
+            .unwrap_or(0.0);
         let system_message = self.chat_state_handle.get_system_message().await;
         let system_prompt_tokens = system_message
             .as_ref()

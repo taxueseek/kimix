@@ -244,15 +244,15 @@ pub fn context_bar_line_for_session(
             Style::default().fg(color).bg(theme.bg_base),
         )];
         // Append cache hit rate if available and > 0
-        if let Some(rate) = cache_hit_rate {
-            if rate > 0.0 {
-                let cache_pct = (rate * 100.0).round() as u64;
-                let cache_text = format!(" 缓存{}%", cache_pct);
-                spans.push(Span::styled(
-                    cache_text,
-                    Style::default().fg(theme.text_secondary).bg(theme.bg_base),
-                ));
-            }
+        if let Some(rate) = cache_hit_rate
+            && rate > 0.0
+        {
+            let cache_pct = (rate * 100.0).round() as u64;
+            let cache_text = format!(" 缓存{}%", cache_pct);
+            spans.push(Span::styled(
+                cache_text,
+                Style::default().fg(theme.text_secondary).bg(theme.bg_base),
+            ));
         }
         Some(Line::from(spans))
     }
@@ -380,15 +380,9 @@ mod tests {
     fn test_context_bar_without_cache_hit_rate() {
         // Default state without cache hit rate shows only `used / total`.
         let theme = Theme::default();
-        let line = context_bar_line_for_session(
-            Some(8_500),
-            Some(1_000_000),
-            false,
-            &theme,
-            false,
-            None,
-        )
-        .expect("token data provided");
+        let line =
+            context_bar_line_for_session(Some(8_500), Some(1_000_000), false, &theme, false, None)
+                .expect("token data provided");
         let text = line_text(&line);
         assert_eq!(text, "8.5K / 1.0M");
     }
@@ -490,11 +484,11 @@ mod tests {
     fn gateway_chat_suppresses_context_bar_even_with_tokens() {
         let theme = Theme::default();
         assert!(
-            context_bar_line_for_session(Some(1_000), Some(1_000_000), false, &theme, true)
+            context_bar_line_for_session(Some(1_000), Some(1_000_000), false, &theme, true, None)
                 .is_none()
         );
         assert!(
-            context_bar_line_for_session(Some(1_000), Some(1_000_000), false, &theme, false)
+            context_bar_line_for_session(Some(1_000), Some(1_000_000), false, &theme, false, None)
                 .is_some()
         );
     }

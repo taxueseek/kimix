@@ -158,17 +158,15 @@ impl SessionStore {
 
     /// Total statistics across all sessions.
     pub fn global_stats(&self) -> rusqlite::Result<GlobalStats> {
-        let total_sessions: usize = self
-            .conn
-            .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))?;
+        let total_sessions: usize =
+            self.conn
+                .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))?;
 
-        let total_turns: usize = self
-            .conn
-            .query_row(
-                "SELECT COUNT(*) FROM turns WHERE branch_name = 'main'",
-                [],
-                |row| row.get(0),
-            )?;
+        let total_turns: usize = self.conn.query_row(
+            "SELECT COUNT(*) FROM turns WHERE branch_name = 'main'",
+            [],
+            |row| row.get(0),
+        )?;
 
         let total_chars: f64 = self.conn.query_row(
             "SELECT COALESCE(SUM(LENGTH(content)), 0) FROM turns",
@@ -220,12 +218,7 @@ mod tests {
         let store = SessionStore::open_in_memory().unwrap();
         let mut session = MemorySession::new("analytics-1".into());
         session.add_turn_raw(make_turn("t1", "user", "Hello, help me code", 1));
-        session.add_turn_raw(make_turn(
-            "t2",
-            "assistant",
-            "Sure, what do you need?",
-            2,
-        ));
+        session.add_turn_raw(make_turn("t2", "assistant", "Sure, what do you need?", 2));
         session.add_turn_raw(make_turn("t3", "user", "Write a function", 3));
         store.save_session(&session).unwrap();
 
@@ -240,18 +233,8 @@ mod tests {
         let store = SessionStore::open_in_memory().unwrap();
         let mut session = MemorySession::new("cost-test".into());
         // ~130 char prompt = ~100 tokens, ~260 char completion = ~200 tokens
-        session.add_turn_raw(make_turn(
-            "t1",
-            "user",
-            &"x".repeat(130),
-            1,
-        ));
-        session.add_turn_raw(make_turn(
-            "t2",
-            "assistant",
-            &"y".repeat(260),
-            2,
-        ));
+        session.add_turn_raw(make_turn("t1", "user", &"x".repeat(130), 1));
+        session.add_turn_raw(make_turn("t2", "assistant", &"y".repeat(260), 2));
         store.save_session(&session).unwrap();
 
         let report = store.analyze_session("cost-test").unwrap().unwrap();

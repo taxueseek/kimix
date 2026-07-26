@@ -1217,15 +1217,13 @@ fn login_mid_session_with_method_starts_auth() {
     assert_eq!(app.active_view, ActiveView::Welcome);
     assert!(matches!(app.auth_state, AuthState::Authenticating { .. }));
     assert!(
-        effects
-            .iter()
-            .any(|e| matches!(
-                e,
-                Effect::Authenticate {
-                    method_id,
-                    ..
-                } if method_id.0.as_ref() == "xai-session"
-            )),
+        effects.iter().any(|e| matches!(
+            e,
+            Effect::Authenticate {
+                method_id,
+                ..
+            } if method_id.0.as_ref() == "xai-session"
+        )),
         "must Authenticate with xai-session, got {effects:?}"
     );
 }
@@ -1289,7 +1287,12 @@ fn auth_complete_retries_stashed_prompt_after_mid_session_login() {
             chip_elements: Vec::new(),
         });
     }
-    dispatch(Action::Login { method_id: Some(acp::AuthMethodId::new("kimi-code")) }, &mut app);
+    dispatch(
+        Action::Login {
+            method_id: Some(acp::AuthMethodId::new("kimi-code")),
+        },
+        &mut app,
+    );
     let seq = authenticating_seq(&app);
     let effects = dispatch(
         Action::TaskComplete(TaskResult::AuthComplete {

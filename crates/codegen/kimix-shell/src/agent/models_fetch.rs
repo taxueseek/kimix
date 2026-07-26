@@ -393,7 +393,7 @@ fn platform_wire_model_to_entry(
         // models are usable by API-key users.
         supported_in_api: !platform.uses_oauth(),
         supports_backend_search: false,
-       auth_source: None,
+        auth_source: None,
         compactions_remaining: None,
         compaction_at_tokens: None,
         show_model_fingerprint: false,
@@ -1055,7 +1055,10 @@ mod tests {
     #[test]
     fn inference_url_defaults_to_proxy() {
         let ep = endpoints("https://proxy.kimix.com/v1", None, None);
-        assert_eq!(ep.resolve_inference_base_url(), "https://proxy.kimix.com/v1");
+        assert_eq!(
+            ep.resolve_inference_base_url(),
+            "https://proxy.kimix.com/v1"
+        );
     }
     #[test]
     fn inference_url_uses_models_base_url() {

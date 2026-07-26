@@ -17,7 +17,6 @@
 //! (`handle_suggest_prompt`).
 use crate::config::PromptSuggestModelPin;
 use crate::sampling::ConversationItem;
-use crate::session::helpers::chat::floor_char_boundary;
 
 /// Model used for suggestion calls when nothing pins one (no env /
 /// `[models] prompt_suggestion` / remote setting / client hint — see
@@ -117,7 +116,7 @@ fn transcript_line(role: &str, text: &str) -> Option<String> {
     }
     let mut text = text;
     if text.len() > MESSAGE_CAP_CHARS {
-        let cut = floor_char_boundary(text, MESSAGE_CAP_CHARS);
+        let cut = text.floor_char_boundary(MESSAGE_CAP_CHARS);
         text = &text[..cut];
     }
     Some(format!("{role}: {text}"))

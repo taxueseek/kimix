@@ -2421,7 +2421,10 @@ mod tests {
         state.prepare_layout(&items, 80, 10);
 
         state.copy_selected(&items);
-        assert_eq!(*clip.lock().expect("lock poisoned"), Some("item-0".to_string()));
+        assert_eq!(
+            *clip.lock().expect("lock poisoned"),
+            Some("item-0".to_string())
+        );
     }
 
     #[test]

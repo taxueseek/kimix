@@ -1,7 +1,8 @@
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::auth_provider::{AuthCredentialProvider, CredentialSnapshot, StaticAuthCredentialProvider};
+mod unit_tests {
+    use crate::auth_provider::{
+        AuthCredentialProvider, CredentialSnapshot, StaticAuthCredentialProvider,
+    };
     use crate::visibility::HttpAuth;
     use reqwest::RequestBuilder;
 

@@ -1,6 +1,5 @@
 #![allow(dead_code, unused_imports)]
 pub(crate) use kimix_log::unified_log;
-mod tracing_macros;
 pub mod active_sessions;
 pub mod agent;
 pub mod auth;
@@ -10,6 +9,7 @@ pub mod claude_import;
 pub mod claude_import_state;
 pub mod cli_models;
 pub mod config;
+mod tracing_macros;
 pub use kimix_shell_base::cpu_profile;
 pub use kimix_shell_base::env;
 pub mod extensions;

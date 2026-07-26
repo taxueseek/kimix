@@ -371,9 +371,10 @@ impl Router {
         });
 
         // candidates 非空 ⇒ scored 非空
-        let best = scored.into_iter().next().ok_or_else(|| {
-            RouterError::NoModelFound(format!("{:?}", task.required_caps))
-        })?;
+        let best = scored
+            .into_iter()
+            .next()
+            .ok_or_else(|| RouterError::NoModelFound(format!("{:?}", task.required_caps)))?;
 
         debug!(
             model_id = %best.model_id,
@@ -416,12 +417,7 @@ impl Router {
     }
 
     /// 按质量偏好微调得分。
-    fn apply_quality_hint(
-        &self,
-        raw_score: f64,
-        hint: QualityHint,
-        model: &ModelProfile,
-    ) -> f64 {
+    fn apply_quality_hint(&self, raw_score: f64, hint: QualityHint, model: &ModelProfile) -> f64 {
         match hint {
             QualityHint::Balanced => raw_score,
             // 速度偏好：上下文越大通常越慢，用窗口倒数作弱代理
@@ -672,10 +668,7 @@ mod tests {
             },
         );
         assert_eq!(router.models.len(), 1);
-        assert_eq!(
-            router.models.get("m1").map(|m| m.overall.samples),
-            Some(1)
-        );
+        assert_eq!(router.models.get("m1").map(|m| m.overall.samples), Some(1));
     }
 
     #[test]
@@ -698,7 +691,9 @@ mod tests {
         router.register(ModelProfile::new("a", "A", "https://a.example", 64_000));
         router.register(ModelProfile::new("b", "B", "https://b.example", 64_000));
 
-        let route = router.route(&balanced_task()).expect("cold start should route");
+        let route = router
+            .route(&balanced_task())
+            .expect("cold start should route");
         assert!(route.model_id == "a" || route.model_id == "b");
         assert!(route.score.is_finite());
     }

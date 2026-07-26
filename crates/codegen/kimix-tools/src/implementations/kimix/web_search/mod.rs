@@ -153,7 +153,11 @@ mod tests {
         let desc = crate::types::tool_metadata::ToolMetadata::description_template(&tool);
         assert!(desc.contains("Search the web"));
         assert!(desc.contains("Evidence"));
-        assert!(desc.contains("High-stakes") || desc.contains("high-stakes") || desc.contains("Discipline"));
+        assert!(
+            desc.contains("High-stakes")
+                || desc.contains("high-stakes")
+                || desc.contains("Discipline")
+        );
     }
 
     #[tokio::test]

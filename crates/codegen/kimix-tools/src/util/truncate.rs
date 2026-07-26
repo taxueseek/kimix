@@ -146,41 +146,8 @@ pub fn truncate_str_with_marker(s: &str, max_bytes: usize) -> Cow<'_, str> {
         );
         return Cow::Borrowed(truncate_str(s, max_bytes));
     }
-    let mut end = max_bytes - TRUNCATION_MARKER.len();
-    while !s.is_char_boundary(end) {
-        end -= 1;
-    }
+    let end = s.floor_char_boundary(max_bytes - TRUNCATION_MARKER.len());
     Cow::Owned(format!("{}{}", &s[..end], TRUNCATION_MARKER))
-}
-
-/// Find the largest byte index `<= index` that is a char boundary in `s`.
-///
-/// Polyfill for [`str::floor_char_boundary`] (stabilized in Rust 1.91; repo
-/// toolchain is 1.90). Remove once the toolchain is bumped.
-pub fn floor_char_boundary(s: &str, index: usize) -> usize {
-    if index >= s.len() {
-        return s.len();
-    }
-    let mut i = index;
-    while i > 0 && !s.is_char_boundary(i) {
-        i -= 1;
-    }
-    i
-}
-
-/// Find the smallest byte index `>= index` that is a char boundary in `s`.
-///
-/// Polyfill for [`str::ceil_char_boundary`] (stabilized in Rust 1.91; repo
-/// toolchain is 1.90). Remove once the toolchain is bumped.
-pub fn ceil_char_boundary(s: &str, index: usize) -> usize {
-    if index >= s.len() {
-        return s.len();
-    }
-    let mut i = index;
-    while i < s.len() && !s.is_char_boundary(i) {
-        i += 1;
-    }
-    i
 }
 
 /// Estimate the number of tokens in a string using the bytes/4 heuristic.
@@ -631,42 +598,43 @@ mod tests {
         assert!(result.contains("character budget"));
     }
 
-    // ---- floor_char_boundary / ceil_char_boundary ----
+    // ---- floor_char_boundary / ceil_char_boundary (std methods, kept as
+    // documentation of the boundary semantics call sites rely on) ----
 
     #[test]
     fn floor_boundary_ascii() {
-        assert_eq!(floor_char_boundary("hello", 3), 3);
+        assert_eq!("hello".floor_char_boundary(3), 3);
     }
 
     #[test]
     fn floor_boundary_mid_cjk() {
         // "日" = 3 bytes. Index 1 or 2 should snap back to 0.
-        assert_eq!(floor_char_boundary("日本", 1), 0);
-        assert_eq!(floor_char_boundary("日本", 2), 0);
-        assert_eq!(floor_char_boundary("日本", 3), 3);
+        assert_eq!("日本".floor_char_boundary(1), 0);
+        assert_eq!("日本".floor_char_boundary(2), 0);
+        assert_eq!("日本".floor_char_boundary(3), 3);
     }
 
     #[test]
     fn floor_boundary_past_end() {
-        assert_eq!(floor_char_boundary("hi", 100), 2);
+        assert_eq!("hi".floor_char_boundary(100), 2);
     }
 
     #[test]
     fn ceil_boundary_ascii() {
-        assert_eq!(ceil_char_boundary("hello", 3), 3);
+        assert_eq!("hello".ceil_char_boundary(3), 3);
     }
 
     #[test]
     fn ceil_boundary_mid_cjk() {
         // "日" = 3 bytes. Index 1 or 2 should snap forward to 3.
-        assert_eq!(ceil_char_boundary("日本", 1), 3);
-        assert_eq!(ceil_char_boundary("日本", 2), 3);
-        assert_eq!(ceil_char_boundary("日本", 3), 3);
+        assert_eq!("日本".ceil_char_boundary(1), 3);
+        assert_eq!("日本".ceil_char_boundary(2), 3);
+        assert_eq!("日本".ceil_char_boundary(3), 3);
     }
 
     #[test]
     fn ceil_boundary_past_end() {
-        assert_eq!(ceil_char_boundary("hi", 100), 2);
+        assert_eq!("hi".ceil_char_boundary(100), 2);
     }
 
     // ---- truncate_middle ----

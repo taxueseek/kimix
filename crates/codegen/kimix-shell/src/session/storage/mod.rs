@@ -790,7 +790,7 @@ pub(crate) struct RawChunkMetaPeek {
 ///
 /// This is the canonical implementation of rewind dead-branch filtering,
 /// used by both the initial replay and delta replay paths.
-pub(crate) fn filter_rewind_lines<'a>(lines: Vec<&'a str>) -> Vec<&'a str> {
+pub(crate) fn filter_rewind_lines(lines: Vec<&str>) -> Vec<&str> {
     let has_rewinds = lines.iter().any(|l| l.contains(&*REWIND_MARKER));
     if !has_rewinds {
         return lines;

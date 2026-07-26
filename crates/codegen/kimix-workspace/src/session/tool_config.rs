@@ -232,12 +232,6 @@ fn ensure_session_dir(root: &std::path::Path, session_id: &str) -> (PathBuf, std
     let created = std::fs::create_dir_all(&dir);
     (dir, created)
 }
-/// Serializes tests (across modules) that mutate the process-global
-/// `KIMIX_WORKSPACE_TOOL_STATE_ENABLED`. Aliased to the crate-wide
-/// [`crate::ENV_TEST_LOCK`] so ALL env-mutating tests share ONE lock (the
-/// hazard is the global `environ` array, not the variable's value).
-#[cfg(test)]
-pub(crate) use crate::ENV_TEST_LOCK as TOOL_STATE_ENV_LOCK;
 /// [`SessionContextFactory`] for workspace sessions.
 ///
 /// [`SessionContext::session_folder`] is `/tmp/sessions/<sanitized_id>/`

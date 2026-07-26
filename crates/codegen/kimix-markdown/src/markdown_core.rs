@@ -9,6 +9,12 @@
 //! After parsing, Kimix applies [`offset_events`]: only `~~…~~` is strikethrough.
 //! Single-tilde pairs (`~text~`) are demoted to literal `~` text so LLM output
 //! like `~**10%**` is not struck (pulldown treats those pairs as strike; we do not).
+
+// The structural-analysis API (`MarkdownStats` / `analyze` / …) is exercised
+// only by this module's tests for now; keep non-test builds warning-free
+// until a production caller is wired in.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use std::ops::Range;
 
@@ -200,6 +206,8 @@ pub enum StructuralIssue {
 
 impl StructuralIssue {
     /// Stable snake_case name for this issue (for logs, metrics, or FFI bindings).
+    /// Reserved for upcoming diagnostics surfacing; currently no caller.
+    #[allow(dead_code)]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::MalformedTable => "malformed_table",

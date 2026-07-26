@@ -49,8 +49,7 @@ fn score_one(result: SearchResult) -> ScoredHit {
 
     // final ≈ 0.40·selection + 0.35·absorption + 0.15·freshness + 0.10·engine
     // engine term omitted (single-API path) → renormalize weights slightly.
-    let credibility_fast =
-        0.45 * selection + 0.40 * absorption + 0.15 * freshness;
+    let credibility_fast = 0.45 * selection + 0.40 * absorption + 0.15 * freshness;
 
     ScoredHit {
         result,
@@ -169,7 +168,10 @@ fn authority_score(url: &str) -> f32 {
     if HIGH_CN.iter().any(|d| host.ends_with(d)) {
         return 0.82;
     }
-    if NARRATIVE.iter().any(|d| host.contains(d) || url.contains(d)) {
+    if NARRATIVE
+        .iter()
+        .any(|d| host.contains(d) || url.contains(d))
+    {
         return 0.40;
     }
     if LOW.iter().any(|d| host.ends_with(d)) {
@@ -262,7 +264,9 @@ fn looks_definition(text: &str) -> bool {
         " refers to ",
     ];
     let lower = text.to_ascii_lowercase();
-    MARKERS.iter().any(|m| lower.contains(&m.to_ascii_lowercase()))
+    MARKERS
+        .iter()
+        .any(|m| lower.contains(&m.to_ascii_lowercase()))
 }
 
 fn looks_comparison(text: &str) -> bool {
@@ -280,22 +284,19 @@ fn looks_comparison(text: &str) -> bool {
         "环比",
     ];
     let lower = text.to_ascii_lowercase();
-    MARKERS.iter().any(|m| lower.contains(&m.to_ascii_lowercase()))
+    MARKERS
+        .iter()
+        .any(|m| lower.contains(&m.to_ascii_lowercase()))
 }
 
 fn looks_howto(text: &str) -> bool {
     const MARKERS: &[&str] = &[
-        "how to",
-        "step ",
-        "tutorial",
-        "如何",
-        "怎么",
-        "步骤",
-        "教程",
-        "guide",
+        "how to", "step ", "tutorial", "如何", "怎么", "步骤", "教程", "guide",
     ];
     let lower = text.to_ascii_lowercase();
-    MARKERS.iter().any(|m| lower.contains(&m.to_ascii_lowercase()))
+    MARKERS
+        .iter()
+        .any(|m| lower.contains(&m.to_ascii_lowercase()))
 }
 
 fn looks_disclosure(text: &str) -> bool {
@@ -312,7 +313,9 @@ fn looks_disclosure(text: &str) -> bool {
         "年报",
     ];
     let lower = text.to_ascii_lowercase();
-    MARKERS.iter().any(|m| lower.contains(&m.to_ascii_lowercase()))
+    MARKERS
+        .iter()
+        .any(|m| lower.contains(&m.to_ascii_lowercase()))
 }
 
 fn looks_qa_thin(text: &str) -> bool {
@@ -331,10 +334,7 @@ fn extract_year(s: &str) -> Option<i32> {
             && bytes[i + 2].is_ascii_digit()
             && bytes[i + 3].is_ascii_digit()
         {
-            let y: i32 = std::str::from_utf8(&bytes[i..i + 4])
-                .ok()?
-                .parse()
-                .ok()?;
+            let y: i32 = std::str::from_utf8(&bytes[i..i + 4]).ok()?.parse().ok()?;
             if (1990..=2035).contains(&y) {
                 return Some(y);
             }
@@ -381,9 +381,7 @@ mod tests {
 
     #[test]
     fn serp_urls_detected() {
-        assert!(is_serp_or_jump_url(
-            "https://www.google.com/search?q=rust"
-        ));
+        assert!(is_serp_or_jump_url("https://www.google.com/search?q=rust"));
         assert!(is_serp_or_jump_url("https://www.baidu.com/s?wd=test"));
         assert!(!is_serp_or_jump_url("https://doc.rust-lang.org/book/"));
     }
@@ -403,7 +401,9 @@ mod tests {
                 site_name: "Docs".into(),
                 title: "Rust is a language".into(),
                 url: "https://doc.rust-lang.org/book/".into(),
-                snippet: "Rust is a systems programming language. Step by step guide with 10 chapters.".into(),
+                snippet:
+                    "Rust is a systems programming language. Step by step guide with 10 chapters."
+                        .into(),
                 content: String::new(),
                 date: "2026-06-01".into(),
             },

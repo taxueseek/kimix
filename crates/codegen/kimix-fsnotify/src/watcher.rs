@@ -1389,8 +1389,8 @@ pub(crate) fn start_with_timeout(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tracing::warn;
     use std::path::PathBuf;
+    use tracing::warn;
 
     #[test]
     fn test_map_event_kind() {
@@ -1481,9 +1481,7 @@ mod tests {
                     Err(e) => {
                         warn!(
                             "Watcher start attempt {}/{} failed: {}",
-                            attempt,
-                            START_RETRIES,
-                            e
+                            attempt, START_RETRIES, e
                         );
                         last_error = Some(e);
                         std::thread::sleep(Duration::from_millis(100));

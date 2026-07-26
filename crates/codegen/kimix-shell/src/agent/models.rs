@@ -3689,7 +3689,10 @@ mod tests {
     #[test]
     fn resolve_catalog_key_maps_routing_slug_to_config_key() {
         let mut models = IndexMap::new();
-        models.insert("enterprise-kimix".to_string(), make_model_entry("kimix-4.5"));
+        models.insert(
+            "enterprise-kimix".to_string(),
+            make_model_entry("kimix-4.5"),
+        );
         models.insert("kimix-4.3".to_string(), make_model_entry("kimix-4.3"));
 
         let persisted = acp::ModelId::new("kimix-4.5");
@@ -3721,7 +3724,10 @@ mod tests {
     #[test]
     fn selectable_catalog_key_for_persisted_none_when_resolved_not_available() {
         let mut models = IndexMap::new();
-        models.insert("enterprise-kimix".to_string(), make_model_entry("kimix-4.5"));
+        models.insert(
+            "enterprise-kimix".to_string(),
+            make_model_entry("kimix-4.5"),
+        );
 
         let available: IndexMap<_, _> = IndexMap::new();
         let persisted = acp::ModelId::new("kimix-4.5");

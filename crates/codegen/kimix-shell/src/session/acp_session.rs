@@ -69,9 +69,7 @@ use kimix_tools::types::output::{
     BashOutput, ReadFileOutput, ToolOutput as ToolsToolOutput, ToolRunResult,
 };
 use kimix_workspace::file_system::CodebaseIndexManager;
-use kimix_workspace::permission::{
-    AccessKind, ClientType, Decision, PermissionHandle,
-};
+use kimix_workspace::permission::{AccessKind, ClientType, Decision, PermissionHandle};
 use kimix_workspace::session::file_state::{FileStateHandle, FileStateTracker};
 use parking_lot::Mutex;
 use serde_json::json;

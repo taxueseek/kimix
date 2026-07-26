@@ -579,7 +579,10 @@ impl SessionActor {
         // ─────────────────────────────────────────────────────────────────
         {
             let origin = super::super::PromptOrigin::from_prompt_id(prompt_id);
-            if matches!(origin, super::super::PromptOrigin::User | super::super::PromptOrigin::SubagentTurn { .. }) {
+            if matches!(
+                origin,
+                super::super::PromptOrigin::User | super::super::PromptOrigin::SubagentTurn { .. }
+            ) {
                 self.maybe_inject_interrupt_reminder().await;
             }
             let mut user_chat = match &origin {
@@ -602,7 +605,8 @@ impl SessionActor {
                     ConversationItem::scheduler_fired(user_message)
                 }
                 super::super::PromptOrigin::PlanResume => ConversationItem::user(user_message),
-                super::super::PromptOrigin::SubagentTurn { .. } | super::super::PromptOrigin::User => {
+                super::super::PromptOrigin::SubagentTurn { .. }
+                | super::super::PromptOrigin::User => {
                     let mut item = ConversationItem::user(user_message);
                     if let Some(interrupt) = self
                         .events
@@ -1439,14 +1443,17 @@ impl SessionActor {
             snap.turn_cached_input_tokens = turn_span_totals.cache_read_tokens.max(0) as u64;
             // Compute and store cache hit rate for this turn
             if snap.turn_input_tokens > 0 {
-                snap.turn_cache_hit_rate = snap.turn_cached_input_tokens as f64 / snap.turn_input_tokens as f64;
+                snap.turn_cache_hit_rate =
+                    snap.turn_cached_input_tokens as f64 / snap.turn_input_tokens as f64;
             }
             for _pr in &snap.delta.prs_created_this_turn {}
         }
         // Update the persistent signals with the latest cache hit rate
         if let Some(snap) = snapshot.as_ref() {
             if snap.turn_cache_hit_rate > 0.0 {
-                self.signals_handle().set_last_cache_hit_rate(snap.turn_cache_hit_rate).await;
+                self.signals_handle()
+                    .set_last_cache_hit_rate(snap.turn_cache_hit_rate)
+                    .await;
             }
             let _ = self
                 .notifications

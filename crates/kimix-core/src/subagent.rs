@@ -97,24 +97,36 @@ impl AgentRole {
     /// 生成对应的中文系统提示词
     pub fn system_prompt(&self) -> &str {
         match self {
-            AgentRole::Coder => "\
+            AgentRole::Coder => {
+                "\
 你是软件开发者。编写健壮、可测试的代码，遵循项目现有风格。
-输出改动的最小 diff，不做无关重构。先读后写，编译后再提交。",
-            AgentRole::Reviewer => "\
+输出改动的最小 diff，不做无关重构。先读后写，编译后再提交。"
+            }
+            AgentRole::Reviewer => {
+                "\
 你是严格审查员。使用 CoVe 验证链审查代码质量与事实准确性。
-逐条指出具体问题，不泛泛而谈。只读工具，不修改代码。",
-            AgentRole::Researcher => "\
+逐条指出具体问题，不泛泛而谈。只读工具，不修改代码。"
+            }
+            AgentRole::Researcher => {
+                "\
 你是调研分析师。结构化输出调研结果，结论前置。
-先广泛搜索再深挖关键来源，标注每项结论的信息来源。只读工具。",
-            AgentRole::Architect => "\
+先广泛搜索再深挖关键来源，标注每项结论的信息来源。只读工具。"
+            }
+            AgentRole::Architect => {
+                "\
 你是软件架构师。以约束驱动设计，每个决策标注权衡理由。
-输出架构方案时附带接口定义和模块边界。只读工具。",
-            AgentRole::GeneralPurpose => "\
+输出架构方案时附带接口定义和模块边界。只读工具。"
+            }
+            AgentRole::GeneralPurpose => {
+                "\
 完成分配的任务，不多不少。先理解目标再动手，
-遇到模糊指令主动澄清。可用全部工具。",
-            AgentRole::Explore => "\
+遇到模糊指令主动澄清。可用全部工具。"
+            }
+            AgentRole::Explore => {
+                "\
 你是快速代码库探索器。先广搜定位关键文件，再深挖具体实现。
-输出文件路径 + 关键代码片段，不做修改。只读工具。",
+输出文件路径 + 关键代码片段，不做修改。只读工具。"
+            }
         }
     }
 
@@ -122,16 +134,10 @@ impl AgentRole {
     pub fn capability_tools(&self) -> Vec<&str> {
         let config = self.default_config();
         match config.capability_mode {
-            CapabilityMode::All => vec![
-                "read", "write", "edit", "exec", "grep", "glob", "list",
-            ],
+            CapabilityMode::All => vec!["read", "write", "edit", "exec", "grep", "glob", "list"],
             CapabilityMode::ReadOnly => vec!["read", "grep", "glob", "list"],
-            CapabilityMode::Execute => vec![
-                "read", "grep", "glob", "list", "exec",
-            ],
-            CapabilityMode::ReadWrite => vec![
-                "read", "write", "edit", "grep", "glob", "list",
-            ],
+            CapabilityMode::Execute => vec!["read", "grep", "glob", "list", "exec"],
+            CapabilityMode::ReadWrite => vec!["read", "write", "edit", "grep", "glob", "list"],
         }
     }
 }

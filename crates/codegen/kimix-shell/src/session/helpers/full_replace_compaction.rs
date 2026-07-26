@@ -240,12 +240,20 @@ impl ShellFullReplaceObserver {
     /// Whether any attempt so far produced a degenerate summary — lets the L5
     /// loop distinguish degenerate-exhausted from empty-exhausted.
     pub(crate) fn degenerate_seen(&self) -> bool {
-        self.state.lock().expect("lock poisoned").degenerate_rejections > 0
+        self.state
+            .lock()
+            .expect("lock poisoned")
+            .degenerate_rejections
+            > 0
     }
 
     /// The most recent rendered error/diagnostic detail, for `last_error`.
     pub(crate) fn last_error_message(&self) -> Option<String> {
-        self.state.lock().expect("lock poisoned").last_error_msg.clone()
+        self.state
+            .lock()
+            .expect("lock poisoned")
+            .last_error_msg
+            .clone()
     }
 
     /// Drain the collected telemetry. The cumulative attempt count spans all

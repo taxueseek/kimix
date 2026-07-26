@@ -28,6 +28,7 @@
 //! ```
 pub mod format;
 mod handler;
+pub mod subagent;
 pub mod symbolicate;
 pub mod terminal;
 

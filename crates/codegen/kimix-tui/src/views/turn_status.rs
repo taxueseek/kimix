@@ -646,7 +646,10 @@ fn compute_activity(
         ),
         (AgentState::TurnRunning, Some(TurnActivity::Retrying { attempt, .. })) => (
             Style::default().fg(theme.warning),
-            i18n::tr_fmt("Retrying (attempt {attempt})…", &[("attempt", &attempt.to_string())]),
+            i18n::tr_fmt(
+                "Retrying (attempt {attempt})…",
+                &[("attempt", &attempt.to_string())],
+            ),
             false,
         ),
         (AgentState::TurnRunning, Some(TurnActivity::Waiting(reason))) => (

@@ -206,12 +206,21 @@ case ":$PATH:" in
                 || err "could not write $rc — add kimix to your PATH manually: $line"
             printf '\nAdded %s to your PATH in %s.\n' "$BIN_DIR" "$rc"
         }
+        # In CI (non-interactive runner) never touch rc files; just print the
+        # manual step. `curl | sh` on a real terminal has CI unset, so the
+        # normal install flow is unaffected.
+        if [ -n "${CI:-}" ]; then
+            printf '\nAdd kimix to your PATH: export PATH="%s:$PATH"\n' "$BIN_DIR"
+            exit 0
+        fi
         EXPORT_LINE="export PATH=\"$BIN_DIR:\$PATH\""
-        case "${SHELL:-}" in
-            */zsh)
+        # basename normalizes $SHELL values like "zsh" or "/usr/bin/env zsh"
+        # that a `*/zsh` glob would miss.
+        case "$(basename "${SHELL:-sh}")" in
+            zsh)
                 persist_line "${ZDOTDIR:-$HOME}/.zshrc" "$EXPORT_LINE"
                 ;;
-            */bash)
+            bash)
                 # macOS login shells read ~/.bash_profile; Linux reads ~/.bashrc.
                 if [ "$PLATFORM_OS" = "macos" ]; then
                     persist_line "$HOME/.bash_profile" "$EXPORT_LINE"
@@ -219,7 +228,7 @@ case ":$PATH:" in
                     persist_line "$HOME/.bashrc" "$EXPORT_LINE"
                 fi
                 ;;
-            */fish)
+            fish)
                 # fish_add_path in config.fish is fish's own idempotent way
                 # to persist a PATH entry.
                 FISH_CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fish"

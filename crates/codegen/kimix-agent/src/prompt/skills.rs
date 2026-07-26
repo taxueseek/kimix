@@ -1995,7 +1995,10 @@ mod tests {
         fs::create_dir_all(&repo_root).unwrap();
         init_git_repo(&repo_root);
 
-        let auto_dir = repo_root.join(".kimix").join("skills").join("overlap-skill");
+        let auto_dir = repo_root
+            .join(".kimix")
+            .join("skills")
+            .join("overlap-skill");
         write_skill_md(&auto_dir, "overlap-skill");
 
         let config = SkillsConfig {
