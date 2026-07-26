@@ -14,6 +14,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Removed
 - 清理内部设计文档和研究材料，仅保留公开使用文档
 
+## [0.1.13] - 2026-07-26
+
+### Added
+- prompt cache 命中率可观测：两条流式路径响应完成时输出 cached_tokens
+  与命中率 debug 日志（此前 record_on_span 为无调用方死代码）
+- 系统提示新增 task_planning 段落：长任务先建 todo 并持续重写，
+  计划背诵规避 lost-in-the-middle（Manus 机制）
+- evals/ 行为回归评估 harness：零依赖 runner + 确定性断言，
+  通过率与编辑失败痕迹双指标，首基线 5/5
+- MCP user-guide 推荐服务器清单（Context7/Playwright/Chrome DevTools/
+  GitHub）与工具过载治理建议
+
+### Changed
+- task_output 截断升级为头尾保留 + 显式标注（省略数/总数/取全文路径），
+  尾部错误信息不再丢失，展示预算不增加
+- ratatui 0.29 → 0.30 + ansi-to-tui 8：Backend 关联错误类型适配
+  （BackendResultExt 统一映射），消除双 ratatui 版本共存
+- rmcp 2.1 → 2.2（覆盖 MCP 2025-11-25 规范能力）
+- release-dist 启用 thin LTO + codegen-units=1（运行时提速 10-20%）
+
+### Fixed
+- i18n 分层违规修复：下沉为叶子 crate kimix-i18n，配置语言解析改为
+  启动时注入（set_config_resolver），消除 kimix-shell 对 TUI 的反向依赖
+- kimix-crash-handler macOS 编译错误（libc::SIG_SETBLOCK 不存在于 macOS）
+- 3 个归档前失败测试：工具名断言与实现契约一致化、estimate_tokens
+  新契约断言更新
+
+### Removed
+- nucleo 从 helix git fork（rev 锁定）切换到 crates.io 0.5 正式版
+
 ## [0.1.10] - 2026-07-24
 
 ### Security
