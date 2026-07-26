@@ -1,0 +1,43 @@
+{
+  "passed": 5,
+  "total": 5,
+  "pass_rate": 1.0,
+  "edit_failures": 0,
+  "results": [
+    {
+      "name": "add-function",
+      "passed": true,
+      "failures": [],
+      "edit_failures": 0,
+      "elapsed_sec": 6.1
+    },
+    {
+      "name": "fix-failing-test",
+      "passed": true,
+      "failures": [],
+      "edit_failures": 0,
+      "elapsed_sec": 6.7
+    },
+    {
+      "name": "fix-typo",
+      "passed": true,
+      "failures": [],
+      "edit_failures": 0,
+      "elapsed_sec": 5.5
+    },
+    {
+      "name": "read-only-question",
+      "passed": true,
+      "failures": [],
+      "edit_failures": 0,
+      "elapsed_sec": 4.0
+    },
+    {
+      "name": "search-replace-anchor",
+      "passed": true,
+      "failures": [],
+      "edit_failures": 0,
+      "elapsed_sec": 5.1
+    }
+  ]
+}
