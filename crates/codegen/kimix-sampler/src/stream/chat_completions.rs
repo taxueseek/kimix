@@ -309,6 +309,22 @@ pub fn stream_chat_completions<'a>(
         let metrics =
             InferenceLatencyStats::from_timestamps(stream_start, &chunk_timestamps, stream_end);
 
+        // KV-cache 可观测性：每次响应记录缓存命中率，回归时盯这个数
+        //（prompt_tokens 含 cached 部分，命中率为 cached/prompt）。
+        if let Some(ref u) = usage {
+            tracing::debug!(
+                target: "kimix_sampler::prompt_cache",
+                prompt_tokens = u.prompt_tokens,
+                cached_prompt_tokens = u.cached_prompt_tokens,
+                cache_hit_percent = if u.prompt_tokens > 0 {
+                    u.cached_prompt_tokens as f64 / u.prompt_tokens as f64 * 100.0
+                } else {
+                    0.0
+                },
+                "prompt cache usage"
+            );
+        }
+
         let response = ConversationResponse {
             items,
             stop_reason: finish_reason,
