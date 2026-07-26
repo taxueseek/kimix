@@ -8,7 +8,7 @@ authors = ["Kimix Contributors"]
 
 [dependencies]
 html-escape = { workspace = true }
-rmcp = { version = "2.1", features = [
+rmcp = { version = "2.2", features = [
     "auth",
     "client",
     "transport-async-rw",
