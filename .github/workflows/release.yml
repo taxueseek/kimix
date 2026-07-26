@@ -78,7 +78,7 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Build kimix (release-dist)
-        run: cargo build --profile release-dist -p kimix-bin --locked --target ${{ matrix.target }}
+        run: cargo build --profile release-dist -p kimix-bin --locked --jobs 2 --target ${{ matrix.target }}
 
       - name: Package archive (tar.gz)
         if: runner.os != 'Windows'
