@@ -11,7 +11,7 @@ use std::{
 
 use ignore::{DirEntry, WalkBuilder, WalkState, overrides::OverrideBuilder};
 use nucleo::{
-    Match, Matcher, Nucleo, Snapshot, Utf32String,
+    Matcher, Nucleo, Snapshot, Utf32String,
     pattern::{CaseMatching, MultiPattern, Normalization, Pattern},
 };
 
@@ -238,7 +238,9 @@ impl FuzzyFileMatcher {
         if self.query.is_empty() {
             self.top_entries.len()
         } else {
-            self.nucleo.snapshot().item_count() as _
+            // crates.io 版语义：matched_item_count 为命中数
+            //（item_count 是注入总数，不符合此处语义）
+            self.nucleo.snapshot().matched_item_count() as _
         }
     }
 
@@ -276,66 +278,79 @@ impl FuzzyFileMatcher {
         let mut items = Vec::with_capacity(k);
         let pattern = self.nucleo.pattern.column_pattern(0);
         let snapshot = self.nucleo.snapshot();
-        let mut iter = snapshot.matches().iter().peekable();
 
-        while items.len() < k
-            && let Some(m) = iter.next()
-            // for empty queries, return everything; otherwise, apply heuristic min-score limit
-            && (self.query.is_empty() ||  m.score >= min_score)
-        {
-            fn extract_match(
-                m: &Match,
-                snapshot: &Snapshot<MatchEntry>,
-                pattern: &Pattern,
-                matcher: &mut Matcher,
-                dirs_only: bool,
-            ) -> Option<FuzzyMatchResult> {
-                let item = unsafe { snapshot.get_item_unchecked(m.idx) };
+        // nucleo crates.io 0.5 的 Snapshot 不暴露匹配分数（helix fork 的
+        // `Snapshot::matches()` 是私有字段的访问器）。此处用同一 Pattern /
+        // Matcher 配置重算分数：算法与配置一致，分数与 worker 内部排序相同。
+        // 遇到低于 min_score 即提前终止，实际重算次数 ≈ k + 少量同分 ties。
+        //
+        // 取下一个有效匹配：跳过被 dirs 过滤的项；None 表示没有更多匹配。
+        let mut next_scored = |n: &mut u32,
+                               snapshot: &Snapshot<MatchEntry>,
+                               pattern: &Pattern,
+                               matcher: &mut Matcher,
+                               dirs_only: bool|
+         -> Option<FuzzyMatchResult> {
+            loop {
+                let item = snapshot.get_matched_item(*n)?;
+                *n += 1;
                 // dirs_only=true means only directories; dirs_only=false means both files and directories
                 if dirs_only && !item.data.is_dir {
-                    return None;
+                    continue;
                 }
                 let path = item.matcher_columns[0].clone();
+                let score = if pattern.atoms.is_empty() {
+                    0
+                } else {
+                    pattern.score(path.slice(..), matcher).unwrap_or(0)
+                };
                 let mut indices = Vec::new();
                 if !pattern.atoms.is_empty() {
                     pattern.indices(path.slice(..), matcher, &mut indices);
                 }
-                Some(FuzzyMatchResult {
+                return Some(FuzzyMatchResult {
                     path,
-                    score: m.score,
+                    score,
                     indices,
                     is_dir: item.data.is_dir,
-                })
+                });
+            }
+        };
+
+        let mut n: u32 = 0;
+        // 分组边界探测多取的首个匹配，留给下一轮作为分组起点
+        let mut pending: Option<FuzzyMatchResult> = None;
+
+        while items.len() < k {
+            let Some(m) = pending
+                .take()
+                .or_else(|| next_scored(&mut n, snapshot, pattern, &mut self.matcher, self.dirs))
+            else {
+                break;
+            };
+            // for empty queries, return everything; otherwise, apply heuristic min-score limit
+            // 匹配按分数降序排列，低于阈值后即可整体终止
+            if !(self.query.is_empty() || m.score >= min_score) {
+                break;
             }
 
             if !pattern.atoms.is_empty() {
-                let start = items.len();
-                items.extend(extract_match(
-                    m,
-                    snapshot,
-                    pattern,
-                    &mut self.matcher,
-                    self.dirs,
-                ));
-                while iter.peek().is_some_and(|p| p.score == m.score) {
-                    let m = iter.next().unwrap();
-                    items.extend(extract_match(
-                        m,
-                        snapshot,
-                        pattern,
-                        &mut self.matcher,
-                        self.dirs,
-                    ));
+                // 同分 ties 归为一组，组内按 (路径长度, 路径) 排序
+                let mut group = vec![m];
+                while let Some(next) =
+                    next_scored(&mut n, snapshot, pattern, &mut self.matcher, self.dirs)
+                {
+                    if next.score == group[0].score {
+                        group.push(next);
+                    } else {
+                        pending = Some(next);
+                        break;
+                    }
                 }
-                sort_by_key_hrtb(&mut items[start..], |m| (m.path.len(), &m.path));
+                sort_by_key_hrtb(&mut group, |m| (m.path.len(), &m.path));
+                items.extend(group);
             } else {
-                items.extend(extract_match(
-                    m,
-                    snapshot,
-                    pattern,
-                    &mut self.matcher,
-                    self.dirs,
-                ));
+                items.push(m);
             }
         }
 
