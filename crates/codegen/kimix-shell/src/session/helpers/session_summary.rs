@@ -76,9 +76,9 @@ pub async fn generate_session_summary(
     let clean_message = title_source_text(&user_message);
     
     // Detect language: use current i18n language
-    let lang = kimix_tui::i18n::current();
+    let lang = kimix_i18n::current();
     let (system_prompt, lang_instruction) = match lang {
-        kimix_tui::i18n::Lang::Zh => (
+        kimix_i18n::Lang::Zh => (
             r#"你是一个会话标题生成器。用户几乎总是在问与软件工程相关的问题。
 我们描述会话标题如下：
 
@@ -90,7 +90,7 @@ pub async fn generate_session_summary(
 请使用 session_title 工具生成 session_title，不要生成其他内容。"#,
             "请使用中文生成标题。",
         ),
-        kimix_tui::i18n::Lang::En => (
+        kimix_i18n::Lang::En => (
             r#"You are tasked with generating the session title. The user is asking almost always software engineering related questions on their codebase.
 We describe the session title below
 # Session Title

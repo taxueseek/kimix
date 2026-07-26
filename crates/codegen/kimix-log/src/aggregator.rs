@@ -97,7 +97,7 @@ impl LogAggregator {
         entries
             .iter()
             .map(|(msg, count)| {
-                if *count == 1 {
+                if **count == 1 {
                     msg.to_string()
                 } else {
                     format!("{} x{}", msg, count)

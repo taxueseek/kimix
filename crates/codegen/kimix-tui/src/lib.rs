@@ -14,7 +14,9 @@ pub mod export_cmd;
 pub mod git_info;
 pub mod headless;
 pub mod hyperlink_route;
-pub mod i18n;
+// i18n 实现已下沉到叶子 crate `kimix-i18n`（供 kimix-shell 等下层 crate
+// 共用，避免下层反向依赖 TUI）。此处再导出保持 `crate::i18n::*` 路径不变。
+pub use kimix_i18n as i18n;
 pub mod import_kimi_cmd;
 pub mod inline_media_ffmpeg;
 pub mod input;

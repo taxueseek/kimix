@@ -11,6 +11,9 @@ dunce = { workspace = true }
 kimix-tty-utils = { workspace = true }
 kimix-version = { workspace = true }
 
+# i18n 核心（叶子 crate，与 kimix-shell 等下层共用）
+kimix-i18n = { path = "../kimix-i18n" }
+
 # Shared prompt-queue wire types
 kimix-prompt-queue = { workspace = true }
 

@@ -322,6 +322,16 @@ pub async fn run(
         );
     }
     kimix_tty_utils::redirect_native_stderr();
+    // 向 i18n 叶子 crate 注册配置语言解析器（i18n 不直接依赖配置层）。
+    // 须在首次 i18n::current() 之前完成注册。
+    kimix_i18n::set_config_resolver(|| {
+        let root = kimix_shell::config::load_effective_config().ok()?;
+        let lang = root.get("ui")?.get("language")?.as_str()?;
+        if lang.trim().eq_ignore_ascii_case("auto") {
+            return None;
+        }
+        kimix_i18n::Lang::parse(lang)
+    });
     let screen_mode_override = screen_mode_relaunch::take_screen_mode_env_override();
     let cancel = CancellationToken::new();
     let startup_start = std::time::Instant::now();

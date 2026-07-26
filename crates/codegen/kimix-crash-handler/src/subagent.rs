@@ -55,8 +55,8 @@ mod imp {
     /// process-global, so this affects all threads. However, the handlers
     /// check `is_subagent_thread()` to only suspend subagent threads.
     pub unsafe fn install_subagent_crash_handler() {
-        use libc::{SIGBUS, SIGSEGV, sigaction, sigfillset, sigemptyset, sigprocmask,
-                   SIG_SETBLOCK, sigset_t, select, timeval, pthread_sigmask, SIG_BLOCK};
+        use libc::{SIGBUS, SIGSEGV, sigaction, sigfillset, sigemptyset,
+                   sigset_t, select, timeval, pthread_sigmask, SIG_BLOCK};
         
         mark_as_subagent();
 

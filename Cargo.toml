@@ -52,6 +52,7 @@ members = [
     "crates/codegen/kimix-workspace-types",
     "crates/codegen/kimix-hooks-plugins-types",
     "crates/codegen/kimix-hunk-tracker",
+    "crates/codegen/kimix-i18n",
     "crates/codegen/kimix-log",
     "crates/codegen/kimix-prompt-queue",
     "crates/codegen/kimix-ratatui-inline",
