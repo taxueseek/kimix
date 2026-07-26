@@ -22,10 +22,19 @@ use serde_json::Value;
 /// Adapt a fully-serialized chat/completions request body to the Kimi
 /// dialect, in place. Applied by [`crate::SamplingClient`] to both the
 /// streaming and non-streaming chat/completions paths.
-pub(crate) fn adapt_chat_completions_body(body: &mut Value) {
+///
+/// When `session_id` is provided, stamps `prompt_cache_key` on the request
+/// body so OpenAI-compatible prefix caches stick to the session. The key is
+/// the first 64 chars of the session id (matching the API's max length).
+pub(crate) fn adapt_chat_completions_body(body: &mut Value, session_id: Option<&str>) {
     adapt_thinking(body);
     adapt_messages(body);
     adapt_tool_schemas(body);
+    if let Some(sid) = session_id {
+        // Truncate to 64 chars (API limit for prompt_cache_key).
+        let key = &sid[..sid.len().min(64)];
+        body["prompt_cache_key"] = Value::String(key.to_string());
+    }
 }
 
 /// Map the OpenAI-style `reasoning_effort` knob onto Kimi's `thinking`
@@ -284,7 +293,7 @@ mod tests {
         // Level rides along as thinking.effort (live wire: 200 with
         // {"type": "enabled", "effort": "low"}).
         let mut body = json!({ "model": "kimi-for-coding", "reasoning_effort": "high" });
-        adapt_chat_completions_body(&mut body);
+        adapt_chat_completions_body(&mut body, None);
         assert_eq!(body.get("reasoning_effort"), None);
         assert_eq!(
             body["thinking"],
@@ -294,7 +303,7 @@ mod tests {
         // Canonical `xhigh` is spelled `max` on the Kimi wire (the K3
         // valid_efforts vocabulary is low/high/max).
         let mut body = json!({ "model": "k3", "reasoning_effort": "xhigh" });
-        adapt_chat_completions_body(&mut body);
+        adapt_chat_completions_body(&mut body, None);
         assert_eq!(
             body["thinking"],
             json!({ "type": "enabled", "effort": "max" })
@@ -303,12 +312,12 @@ mod tests {
         // kimi.py:218: "off" (our ReasoningEffort::None) → disabled, and no
         // effort key (a disabled+effort combination would be contradictory).
         let mut body = json!({ "reasoning_effort": "none" });
-        adapt_chat_completions_body(&mut body);
+        adapt_chat_completions_body(&mut body, None);
         assert_eq!(body["thinking"], json!({ "type": "disabled" }));
 
         // llm.py:482: unset → leave as-is (no `thinking` at all).
         let mut body = json!({ "model": "kimi-for-coding" });
-        adapt_chat_completions_body(&mut body);
+        adapt_chat_completions_body(&mut body, None);
         assert_eq!(body.get("thinking"), None);
     }
 
@@ -326,7 +335,7 @@ mod tests {
                 },
             ]
         });
-        adapt_chat_completions_body(&mut body);
+        adapt_chat_completions_body(&mut body, None);
         let assistant = &body["messages"][1];
         assert_eq!(assistant.get("content"), None, "empty content dropped");
         assert_eq!(assistant.get("model_id"), None, "kimix extension dropped");
@@ -345,7 +354,7 @@ mod tests {
                                  "function": { "name": "f", "arguments": "{}" } }]
             }]
         });
-        adapt_chat_completions_body(&mut body);
+        adapt_chat_completions_body(&mut body, None);
         assert_eq!(body["messages"][0]["content"], json!("let me check"));
     }
 
@@ -356,7 +365,7 @@ mod tests {
         let mut body = json!({
             "messages": [{ "role": "assistant", "content": "" }]
         });
-        adapt_chat_completions_body(&mut body);
+        adapt_chat_completions_body(&mut body, None);
         assert_eq!(body["messages"][0]["content"], json!(""));
     }
 
@@ -370,7 +379,7 @@ mod tests {
                                  "function": { "name": "f", "arguments": "{}" } }]
             }]
         });
-        adapt_chat_completions_body(&mut body);
+        adapt_chat_completions_body(&mut body, None);
         assert_eq!(body["messages"][0].get("content"), None);
     }
 
@@ -384,7 +393,7 @@ mod tests {
                                  "function": { "name": "f", "arguments": "{}" } }]
             }]
         });
-        adapt_chat_completions_body(&mut body);
+        adapt_chat_completions_body(&mut body, None);
         assert!(body["messages"][0].get("content").is_some());
     }
 
@@ -413,7 +422,7 @@ mod tests {
                 }
             }]
         });
-        adapt_chat_completions_body(&mut body);
+        adapt_chat_completions_body(&mut body, None);
         let props = &body["tools"][0]["function"]["parameters"]["properties"];
         assert_eq!(props["mode"]["type"], json!("string"));
         assert_eq!(props["count"]["type"], json!("integer"));
@@ -448,7 +457,7 @@ mod tests {
                 }
             }]
         });
-        adapt_chat_completions_body(&mut body);
+        adapt_chat_completions_body(&mut body, None);
         let props = &body["tools"][0]["function"]["parameters"]["properties"];
         assert_eq!(props["obj"]["type"], json!("object"));
         assert_eq!(props["arr"]["type"], json!("array"));

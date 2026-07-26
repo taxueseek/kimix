@@ -5905,6 +5905,8 @@ dependencies = [
  "chrono",
  "filetime",
  "kimix-config",
+ "once_cell",
+ "regex",
  "serde",
  "serde_json",
  "strum 0.27.2",

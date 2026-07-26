@@ -537,8 +537,9 @@ impl SessionActor {
         self.refresh_token_if_expired().await;
         let mut full_config = self.reconstruct_full_config().await;
         full_config.force_http1 = force_http1;
-        let sampling_client =
+        let mut sampling_client =
             kimix_sampler::SamplingClient::new(full_config).map_err(|e| self.to_acp_error(e))?;
+        sampling_client.set_prompt_cache_key(self.session_info.id.to_string());
         Ok(sampling_client)
     }
     /// Push a fresh `SamplerConfig` into the per-session sampler actor

@@ -245,6 +245,9 @@ pub struct SamplingClient {
     bearer_resolver: Option<crate::config::SharedBearerResolver>,
     /// Per-request header injection (OTel traceparent).
     header_injector: Option<crate::config::SharedHeaderInjector>,
+    /// Prompt-cache key injected as `prompt_cache_key` on every request body.
+    /// Set from the session id so prefix caches stick to the session.
+    prompt_cache_key: Option<String>,
 }
 
 impl std::fmt::Debug for SamplingClient {
@@ -459,12 +462,19 @@ impl SamplingClient {
             attribution_callback: config.attribution_callback,
             bearer_resolver: config.bearer_resolver,
             header_injector: config.header_injector,
+            prompt_cache_key: None,
         })
     }
 
     /// The configured API backend for this client.
     pub fn api_backend(&self) -> ApiBackend {
         self.defaults.api_backend.clone()
+    }
+
+    /// Set the prompt-cache key injected into every request body.
+    /// Callers set this to the session id so prefix caches stick to the session.
+    pub fn set_prompt_cache_key(&mut self, key: String) {
+        self.prompt_cache_key = Some(key);
     }
 
     /// POST with default headers. Overrides auth from resolver if wired.
@@ -766,7 +776,10 @@ impl SamplingClient {
             tracing::error!("Failed to serialize chat/completions request: {}", e);
             SamplingError::Serialization(e)
         })?;
-        crate::kimi_compat::adapt_chat_completions_body(&mut request_body);
+        crate::kimi_compat::adapt_chat_completions_body(
+            &mut request_body,
+            self.prompt_cache_key.as_deref(),
+        );
 
         let http_request = self
             .post(self.endpoint("chat/completions"))
@@ -820,7 +833,10 @@ impl SamplingClient {
             tracing::error!("Failed to serialize chat/completions request: {}", e);
             SamplingError::Serialization(e)
         })?;
-        crate::kimi_compat::adapt_chat_completions_body(&mut request_body);
+        crate::kimi_compat::adapt_chat_completions_body(
+            &mut request_body,
+            self.prompt_cache_key.as_deref(),
+        );
 
         let http_request = self
             .post(self.endpoint("chat/completions"))
@@ -1030,6 +1046,11 @@ impl SamplingClient {
         // it in post-serialize. This is the last surviving piece of the
         // old raw_output machinery.
         kimix_sampling_types::patch_reasoning_text_types(&mut request_body);
+        // Inject prompt-cache key so prefix caches stick to the session.
+        if let Some(ref key) = self.prompt_cache_key {
+            request_body["prompt_cache_key"] =
+                serde_json::Value::String(key[..key.len().min(64)].to_string());
+        }
         let http_request = self.post(self.endpoint("responses")).json(&request_body);
 
         let response = http_request.send().await.map_err(|e| {

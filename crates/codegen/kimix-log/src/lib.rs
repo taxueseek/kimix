@@ -10,6 +10,7 @@ pub mod debug_log;
 pub mod hooks_log;
 pub mod instrumentation;
 pub mod memory_log;
+pub mod redact;
 pub mod sampling_log;
 pub mod session_ctx;
 pub mod unified_log;
