@@ -10,6 +10,7 @@ use ratatui::{
 };
 
 use crate::Terminal;
+pub(crate) use crate::terminal::BackendResultExt;
 
 /// Trait for terminal operations needed by emit_to_scrollback and other functions.
 pub trait TerminalLike {
@@ -36,11 +37,11 @@ pub trait TerminalLike {
 }
 
 // Implementation for our Terminal with any Backend that implements Write
-impl<B: Backend + Write> TerminalLike for Terminal<B> {
+impl<B: Backend<Error: Send + Sync + 'static> + Write> TerminalLike for Terminal<B> {
     type Writer = B;
 
     fn size(&self) -> io::Result<Size> {
-        self.backend().size()
+        self.backend().size().io()
     }
 
     fn viewport_area(&self) -> Rect {
