@@ -12,6 +12,7 @@
 //! spawn-and-retry-once wrapper live in
 //! [`goal_planner`](crate::session::goal_planner); they are a separate concern
 //! (model selection / fail-open) from prompt rendering and are not moved here.
+use std::sync::LazyLock;
 use kimix_tools::types::tool::ToolKind;
 
 /// Resolved client-facing tool names for a role's prompt placeholders.
@@ -288,8 +289,10 @@ pub(crate) mod tests {
     /// (`{KIND_LENS}`, `{SCRATCH}`, `{PLAN_FILE}`, …) when called on a template
     /// rendered with only `tool_names` applied.
     pub(crate) fn assert_no_tool_placeholders(rendered: &str) {
-        let re = regex::Regex::new(r"\{[A-Z_]+_TOOL\}|\{TOOLSET_TOOLS\}").unwrap();
-        if let Some(m) = re.find(rendered) {
+        static TOOL_PLACEHOLDER_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
+            regex::Regex::new(r"\{[A-Z_]+_TOOL\}|\{TOOLSET_TOOLS\}").unwrap()
+        });
+        if let Some(m) = TOOL_PLACEHOLDER_RE.find(rendered) {
             panic!(
                 "unresolved tool placeholder {:?} in rendered prompt",
                 m.as_str(),

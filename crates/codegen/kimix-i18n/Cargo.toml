@@ -1,0 +1,12 @@
+[package]
+name = "kimix-i18n"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "界面多语言（i18n）核心：语言探测、当前语言状态与翻译表。叶子 crate（仅依赖 std），供 kimix-tui 渲染层与 kimix-shell 等下层 crate 共用，避免下层反向依赖 TUI。"
+authors = ["Kimix Contributors"]
+
+[dependencies]
+
+[lints]
+workspace = true

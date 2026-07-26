@@ -142,6 +142,7 @@ kimix-hooks-plugins-types = { path = "../kimix-hooks-plugins-types" }
 kimix-file-utils = { path = "../kimix-file-utils" }
 kimix-auth = { workspace = true, features = ["middleware"] }
 kimix-log = { workspace = true }
+kimix-i18n = { path = "../kimix-i18n" }
 kimix-http = { workspace = true }
 kimix-models = { workspace = true }
 flate2 = { workspace = true }

@@ -12,6 +12,7 @@
 //! 对存量英文文案采用 gettext 风格：渲染处调用 [`tr`]，中文查表，
 //! 英文原样透传。新文案直接走 [`Strings`] 字段。
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::OnceLock;
 
 /// 界面语言。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,14 +71,19 @@ impl Lang {
     }
 }
 
-/// 从配置文件读取 `[ui].language`（失败静默返回 None）。
+/// 配置语言解析器：由能访问配置层的上层 crate（kimix-tui）在启动时注册。
+/// i18n 是叶子 crate，不直接依赖 kimix-shell 的配置模块，以此保持
+/// shell → i18n 的单向依赖，避免下层反向依赖 TUI。
+static CONFIG_RESOLVER: OnceLock<fn() -> Option<Lang>> = OnceLock::new();
+
+/// 注册配置文件语言解析器（重复注册静默忽略，以首次为准）。
+pub fn set_config_resolver(f: fn() -> Option<Lang>) {
+    let _ = CONFIG_RESOLVER.set(f);
+}
+
+/// 从配置文件读取 `[ui].language`（未注册解析器或读取失败时静默返回 None）。
 fn config_language() -> Option<Lang> {
-    let root = kimix_shell::config::load_effective_config().ok()?;
-    let lang = root.get("ui")?.get("language")?.as_str()?;
-    if lang.trim().eq_ignore_ascii_case("auto") {
-        return None;
-    }
-    Lang::parse(lang)
+    CONFIG_RESOLVER.get().and_then(|f| f())
 }
 
 /// 当前界面语言（惰性初始化：环境变量 > 配置文件 > 系统探测）。
@@ -100,7 +106,7 @@ pub fn set_current(lang: Lang) {
 }
 
 /// 测试辅助：重置惰性初始化状态。
-#[cfg(any(test, feature = "test-support"))]
+#[cfg(test)]
 pub fn reset_for_test() {
     CURRENT.store(0, Ordering::Release);
     LOADED.store(0, Ordering::Release);
