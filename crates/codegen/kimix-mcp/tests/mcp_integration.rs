@@ -35,8 +35,7 @@ fn test_tool_name_valid_max_length() {
 
 #[test]
 fn test_tool_name_valid_with_digits() {
-    assert!(validate_tool_name("tool123").is_ok());
-    assert!(validate_tool_name("1tool").is_ok()); // digits after first char OK
+    assert!(validate_tool_name("tool123").is_ok()); // digits after first char OK
 }
 
 #[test]
@@ -69,10 +68,10 @@ fn test_tool_name_invalid_with_special_chars() {
 
 #[test]
 fn test_tool_name_invalid_start_with_digit() {
-    // Must start with letter or underscore
-    assert!(validate_tool_name("1tool").is_ok()); // digits allowed after first
-    // Actually, the regex allows starting with digit for Anthropic/OpenAI compatibility
-    // but Gemini requires letter/underscore. Let's check what the actual impl says.
+    // 实现契约（servers.rs TOOL_NAME_REGEX）：必须以字母或下划线开头
+    //（Gemini 兼容要求），数字开头一律拒绝。
+    assert!(validate_tool_name("1tool").is_err());
+    assert!(validate_tool_name("9_server").is_err());
 }
 
 // ───────────────────────────────────────────────────────────────────────────
