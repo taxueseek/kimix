@@ -308,6 +308,33 @@ A partial list of MCP servers you can configure with the `url` or `command` form
 
 See the [MCP Server Registry](https://github.com/modelcontextprotocol/servers) for the full list of community servers and the [MCP specification](https://modelcontextprotocol.io) for protocol details.
 
+### Recommended Servers (vetted, actively maintained)
+
+These four cover the highest-value gaps for a terminal agent and are all
+officially maintained (stars as of 2026-07):
+
+| Server | Why | Package / Endpoint |
+|--------|-----|--------------------|
+| **Context7** (Upstash, ~60k★) | Pulls up-to-date library docs into context — fixes training-data lag, the single biggest quality boost for coding | `npx -y @upstash/context7-mcp` |
+| **Playwright MCP** (Microsoft, ~36k★) | Browser automation; lets the agent verify the web pages it writes | `npx -y @playwright/mcp@latest` |
+| **Chrome DevTools MCP** (Google, ~47k★) | Performance traces, network inspection, debugging — complements Playwright | `npx -y chrome-devtools-mcp@latest` |
+| **GitHub MCP** (GitHub, ~32k★) | Issues / PRs / CI without leaving the terminal; hosted version needs no local process | `https://api.githubcopilot.com/mcp/` (HTTP) |
+
+Example — adding Context7:
+
+```bash
+kimix mcp add context7 -- npx -y @upstash/context7-mcp
+```
+
+> **Curate, don't collect.** Tool count hurts tool-selection accuracy:
+> research shows LLM agents pick the wrong tool more often as the registry
+> grows (selection accuracy drops measurably once dozens of similar tools
+> compete). Kimix's built-in tools already cover filesystem, git, and shell
+> tasks — prefer servers that add *new capabilities* (live docs, browser,
+> issue trackers) over ones that duplicate built-ins. Disable servers you
+> are not actively using (`enabled = false`) rather than leaving every
+> server's tools mounted.
+
 ---
 
 ## Troubleshooting
