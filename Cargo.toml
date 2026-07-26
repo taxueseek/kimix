@@ -306,9 +306,15 @@ panic = "abort"
 # opt-level=2 balances compilation speed and runtime performance.
 # strip="symbols" + debug=0 reduce binary size and link time.
 # Linker flags (RELRO, NX stack) are set per-target in .cargo/config.toml.
+#
+# thin LTO + codegen-units=1：分发构建接受更长编译时间换运行时性能与体积
+#（参考 delta 实测：运行时提速 10-20%，二进制缩小 ~7%）。日常 `--release`
+# 不受影响，仅 release-dist（发版管线）启用。
 [profile.release-dist]
 inherits = "release"
 opt-level = 2
+lto = "thin"
+codegen-units = 1
 strip = "symbols"
 debug = 0
 split-debuginfo = "off"
