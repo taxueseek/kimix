@@ -38,8 +38,7 @@ impl UsageStats {
     }
 
     fn recalculate_cost(&mut self) {
-        self.estimated_cost_usd =
-            self.total_input_tokens as f64 * 0.14 / 1_000_000.0
+        self.estimated_cost_usd = self.total_input_tokens as f64 * 0.14 / 1_000_000.0
             + self.total_output_tokens as f64 * 0.28 / 1_000_000.0;
     }
 

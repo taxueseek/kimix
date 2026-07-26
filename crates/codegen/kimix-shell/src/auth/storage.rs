@@ -107,14 +107,8 @@ pub fn read_auth_json(auth_file: &Path) -> std::io::Result<AuthStore> {
 /// so the caller can decide whether to skip the write (to avoid clobbering
 /// sibling scopes).
 ///
-/// Kept for the test-only `persist_and_swap` and as a strict reader.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "used from tests only; remove expect when wired in production"
-    )
-)]
+/// Used by production auth flows (`xai_oauth`, `manager`) and the test-only
+/// `persist_and_swap` as a strict reader.
 pub(crate) fn read_auth_json_or_empty(auth_file: &Path) -> std::io::Result<AuthStore> {
     match read_auth_json(auth_file) {
         Ok(map) => Ok(map),

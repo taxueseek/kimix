@@ -15,6 +15,7 @@ pub mod handle;
 pub mod permission;
 pub mod project_config;
 pub mod session;
+pub mod session_lock;
 pub mod status_config;
 pub use status_config::StatusConfig;
 pub mod trust;

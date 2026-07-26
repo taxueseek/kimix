@@ -3,7 +3,6 @@ use crate::sampling::{
     Client as OaiCompatClient, ConversationItem, ConversationRequest, ConversationToolChoice,
     ToolSpec,
 };
-use crate::session::helpers::chat::floor_char_boundary;
 
 /// Upper bound on the user text that feeds title generation; titles only need
 /// the opening, and this keeps the request well under the model prompt limit.
@@ -47,7 +46,7 @@ fn title_source_text(user_message: &str) -> String {
     };
     let mut display = kimix_tools::implementations::skills::skill::extract_skill_display_text(base)
         .unwrap_or_else(|| base.to_string());
-    display.truncate(floor_char_boundary(&display, TITLE_SOURCE_MAX_BYTES));
+    display.truncate(display.floor_char_boundary(TITLE_SOURCE_MAX_BYTES));
     display
 }
 
@@ -75,8 +74,23 @@ pub async fn generate_session_summary(
     model: &str,
 ) -> String {
     let clean_message = title_source_text(&user_message);
-    let request = ConversationRequest::from_items(vec![
-        ConversationItem::system(
+    
+    // Detect language: use current i18n language
+    let lang = kimix_tui::i18n::current();
+    let (system_prompt, lang_instruction) = match lang {
+        kimix_tui::i18n::Lang::Zh => (
+            r#"你是一个会话标题生成器。用户几乎总是在问与软件工程相关的问题。
+我们描述会话标题如下：
+
+# 会话标题
+一个简短、独特、5-10 个词的描述性标题。信息密集，没有废话。
+
+你将收到下面用 <user_query></user_query> 封装的用户查询。
+
+请使用 session_title 工具生成 session_title，不要生成其他内容。"#,
+            "请使用中文生成标题。",
+        ),
+        kimix_tui::i18n::Lang::En => (
             r#"You are tasked with generating the session title. The user is asking almost always software engineering related questions on their codebase.
 We describe the session title below
 # Session Title
@@ -85,7 +99,17 @@ A short and distinctive 5-10 word descriptive title for the session. Super info 
 You will be given the user query below encapsulated in <user_query></user_query>.
 
 Just generate the session_title and nothing else"#,
+            "",
         ),
+    };
+    
+    let request = ConversationRequest::from_items(vec![
+        ConversationItem::system(system_prompt),
+        if !lang_instruction.is_empty() {
+            ConversationItem::system(lang_instruction)
+        } else {
+            ConversationItem::system("")
+        },
         ConversationItem::user(format!(
             r#"<user_query>
 {}

@@ -9,7 +9,9 @@ mod task;
 mod types;
 
 pub use ext::Extensions;
-pub use interjection_buffer::{FormattedInterjection, InterjectionBuffer, PendingInterjection, drain_formatted};
+pub use interjection_buffer::{
+    FormattedInterjection, InterjectionBuffer, PendingInterjection, drain_formatted,
+};
 pub use interjection_events::EventQueue;
 pub use interjection_format::{LARGE_PROMPT_THRESHOLD, format_interjection, user_query};
 pub use schema_utils::parse_arguments_from_schema_lossy;

@@ -485,11 +485,14 @@ mod tests {
             // Pre-releases must round-trip whole — truncating to "0.1.220"
             // would make an alpha install masquerade as the release and
             // mask alpha → stable updates.
-            ("kimix-0.1.220-alpha.4-linux-x86_64", Some("0.1.220-alpha.4")),
+            (
+                "kimix-0.1.220-alpha.4-linux-x86_64",
+                Some("0.1.220-alpha.4"),
+            ),
             ("kimix-0.1.220-alpha.4", Some("0.1.220-alpha.4")), // no platform suffix
             ("kimix-garbage-darwin-arm64", None),               // unparseable version
             ("kimix-0.2.46", Some("0.2.46")),                   // no platform suffix
-            ("other-0.2.46-darwin-arm64", None),               // wrong prefix
+            ("other-0.2.46-darwin-arm64", None),                // wrong prefix
             ("kimix-latest", None),                             // symlink alias, not a version
             ("kimix", None),                                    // bare name
             ("", None),

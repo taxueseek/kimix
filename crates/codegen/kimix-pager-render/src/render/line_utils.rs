@@ -47,17 +47,6 @@ pub fn is_unsafe_display_char(c: char) -> bool {
         )
 }
 
-/// Polyfill for nightly-only [`str::floor_char_boundary`].
-/// Snaps a byte index down to the nearest char boundary.
-pub fn floor_char_boundary(s: &str, index: usize) -> usize {
-    let index = index.min(s.len());
-    let mut i = index;
-    while i > 0 && !s.is_char_boundary(i) {
-        i -= 1;
-    }
-    i
-}
-
 /// Byte offset at which cumulative display width exceeds `max_width`.
 /// Returns `s.len()` when the entire string fits.
 pub fn byte_offset_at_width(s: &str, max_width: usize) -> usize {

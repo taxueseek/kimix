@@ -30,14 +30,8 @@ pub struct PathGuard {
 
 impl PathGuard {
     /// Default deny patterns covering common sensitive paths.
-    pub const DEFAULT_DENY_PATTERNS: &'static [&'static str] = &[
-        ".ssh/",
-        ".aws/",
-        "credentials",
-        "*.pem",
-        "*.key",
-        ".env",
-    ];
+    pub const DEFAULT_DENY_PATTERNS: &'static [&'static str] =
+        &[".ssh/", ".aws/", "credentials", "*.pem", "*.key", ".env"];
 
     /// Build a guard with default deny patterns.
     pub fn new(workspace_root: PathBuf) -> Self {
@@ -73,19 +67,18 @@ impl PathGuard {
             if !pattern.contains('*') {
                 continue;
             }
-            match globset::GlobBuilder::new(pattern)
+            // Invalid globs are dropped; they simply never match.
+            if let Ok(glob) = globset::GlobBuilder::new(pattern)
                 .literal_separator(false)
                 .build()
             {
-                Ok(glob) => {
-                    builder.add(glob);
-                    index.push(i);
-                }
-                // Invalid globs are dropped; they simply never match.
-                Err(_) => {}
+                builder.add(glob);
+                index.push(i);
             }
         }
-        let set = builder.build().unwrap_or_else(|_| globset::GlobSet::empty());
+        let set = builder
+            .build()
+            .unwrap_or_else(|_| globset::GlobSet::empty());
         (set, index)
     }
 
@@ -133,8 +126,7 @@ impl PathGuard {
             // dunce avoids Windows \\?\ verbatim paths that break starts_with.
             let canonical_root = dunce::canonicalize(&self.workspace_root)
                 .unwrap_or_else(|_| self.workspace_root.clone());
-            let canonical_path =
-                dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+            let canonical_path = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
 
             if !canonical_path.starts_with(&canonical_root) {
                 return Err(format!(
@@ -263,9 +255,7 @@ pub fn walk_json_strings(value: &mut serde_json::Value, f: &mut impl FnMut(&mut 
     match value {
         serde_json::Value::String(s) => f(s),
         serde_json::Value::Array(arr) => arr.iter_mut().for_each(|v| walk_json_strings(v, f)),
-        serde_json::Value::Object(map) => {
-            map.values_mut().for_each(|v| walk_json_strings(v, f))
-        }
+        serde_json::Value::Object(map) => map.values_mut().for_each(|v| walk_json_strings(v, f)),
         _ => {}
     }
 }
@@ -284,10 +274,13 @@ fn redact_urls_in(text: &str) -> String {
     URL_REGEX
         .replace_all(text, |caps: &regex::Captures<'_>| {
             let raw = &caps[0];
-            url::Url::parse(raw).map_or_else(|_| raw.to_owned(), |mut url| {
-                redact_url(&mut url);
-                url.to_string()
-            })
+            url::Url::parse(raw).map_or_else(
+                |_| raw.to_owned(),
+                |mut url| {
+                    redact_url(&mut url);
+                    url.to_string()
+                },
+            )
         })
         .into_owned()
 }
@@ -424,7 +417,11 @@ mod tests {
     fn test_deny_credentials_substring() {
         let guard = make_guard(Path::new("/tmp"));
         assert!(guard.check(Path::new("/tmp/credentials")).is_err());
-        assert!(guard.check(Path::new("/home/user/.aws/credentials")).is_err());
+        assert!(
+            guard
+                .check(Path::new("/home/user/.aws/credentials"))
+                .is_err()
+        );
     }
 
     #[test]
@@ -511,12 +508,7 @@ mod tests {
 
     #[test]
     fn test_sanitize_jwt() {
-        let jwt = format!(
-            "{}.{}.{}",
-            "eyJ0ZXN0",
-            "eyJwYXlsb2Fk",
-            "c2lnbmF0dXJlMTIz"
-        );
+        let jwt = format!("{}.{}.{}", "eyJ0ZXN0", "eyJwYXlsb2Fk", "c2lnbmF0dXJlMTIz");
         let input = format!("token: {jwt}");
         let sanitized = sanitize_response(&input, &[]);
         assert!(!sanitized.contains(&jwt));
@@ -535,7 +527,8 @@ mod tests {
 
     #[test]
     fn test_sanitize_private_key() {
-        let input = "key: -----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----";
+        let input =
+            "key: -----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----";
         let sanitized = sanitize_response(input, &[]);
         assert!(!sanitized.contains("BEGIN RSA PRIVATE KEY"));
         assert!(sanitized.contains("REDACTED"));
@@ -600,9 +593,9 @@ mod tests {
         // Synthetic three-segment JWT-shaped string (not a real token).
         let jwt = format!(
             "{}.{}.{}",
-            "eyJ0ZXN0".to_string(), // base64url-ish header stand-in
-            "eyJwYXlsb2Fk".to_string(),
-            "c2lnbmF0dXJl".to_string()
+            "eyJ0ZXN0", // base64url-ish header stand-in
+            "eyJwYXlsb2Fk",
+            "c2lnbmF0dXJl"
         );
         let input = format!(r#"{{"access_token": "{jwt}"}}"#);
         let result = redact_secrets(&input);
@@ -641,7 +634,9 @@ mod tests {
 
     #[test]
     fn test_redact_url_sensitive_params() {
-        let mut url = url::Url::parse("https://api.example.com/callback?code=secret123&state=xyz&page=1").unwrap();
+        let mut url =
+            url::Url::parse("https://api.example.com/callback?code=secret123&state=xyz&page=1")
+                .unwrap();
         redact_url(&mut url);
         let url_str = url.to_string();
         assert!(url_str.contains("code=redacted"));

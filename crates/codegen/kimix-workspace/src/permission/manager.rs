@@ -1523,12 +1523,24 @@ fn spawn_permission_manager_with_pin(
                                 PromptOutcome::AllowOnce => (Decision::Allow, "allow_once"),
                                 PromptOutcome::AllowAlways => {
                                     state.allowed_bash_commands.insert(cmd.clone());
-                                    persist_state(&cwd, &state, client_id_ref, session_id_str.as_deref()).await;
+                                    persist_state(
+                                        &cwd,
+                                        &state,
+                                        client_id_ref,
+                                        session_id_str.as_deref(),
+                                    )
+                                    .await;
                                     (Decision::Allow, "allow_always")
                                 }
                                 PromptOutcome::AllowAlwaysBashCommand(prefix) => {
                                     state.allowed_bash_commands.insert(prefix.clone());
-                                    persist_state(&cwd, &state, client_id_ref, session_id_str.as_deref()).await;
+                                    persist_state(
+                                        &cwd,
+                                        &state,
+                                        client_id_ref,
+                                        session_id_str.as_deref(),
+                                    )
+                                    .await;
                                     (Decision::Allow, "allow_always_bash")
                                 }
                                 PromptOutcome::AllowAlwaysDomain(_)
@@ -1544,7 +1556,13 @@ fn spawn_permission_manager_with_pin(
                                 ),
                                 PromptOutcome::RejectAlwaysBashCommand(prefix) => {
                                     state.disallowed_bash_commands.insert(prefix.clone());
-                                    persist_state(&cwd, &state, client_id_ref, session_id_str.as_deref()).await;
+                                    persist_state(
+                                        &cwd,
+                                        &state,
+                                        client_id_ref,
+                                        session_id_str.as_deref(),
+                                    )
+                                    .await;
                                     (
                                         Decision::Reject(format!(
                                             "User rejected the execution and excluded {prefix} from this session"
@@ -1591,7 +1609,13 @@ fn spawn_permission_manager_with_pin(
                                     if let AccessKind::MCPTool { name, .. } = &access {
                                         state.allowed_mcp_tools.insert(name.clone());
                                     }
-                                    persist_state(&cwd, &state, client_id_ref, session_id_str.as_deref()).await;
+                                    persist_state(
+                                        &cwd,
+                                        &state,
+                                        client_id_ref,
+                                        session_id_str.as_deref(),
+                                    )
+                                    .await;
                                     (Decision::Allow, "allow_always")
                                 }
                                 PromptOutcome::AllowAlwaysBashCommand(_) => {
@@ -1601,7 +1625,13 @@ fn spawn_permission_manager_with_pin(
                                 PromptOutcome::AllowAlwaysDomain(domain) => {
                                     if let AccessKind::WebFetch(_) = &access {
                                         state.allowed_web_fetch_domains.insert(domain.clone());
-                                        persist_state(&cwd, &state, client_id_ref, session_id_str.as_deref()).await;
+                                        persist_state(
+                                            &cwd,
+                                            &state,
+                                            client_id_ref,
+                                            session_id_str.as_deref(),
+                                        )
+                                        .await;
                                     }
                                     (Decision::Allow, "allow_always_domain")
                                 }
@@ -1624,7 +1654,13 @@ fn spawn_permission_manager_with_pin(
                                             );
                                         }
                                         state.allowed_mcp_tools.insert(access_name.clone());
-                                        persist_state(&cwd, &state, client_id_ref, session_id_str.as_deref()).await;
+                                        persist_state(
+                                            &cwd,
+                                            &state,
+                                            client_id_ref,
+                                            session_id_str.as_deref(),
+                                        )
+                                        .await;
                                     }
                                     (Decision::Allow, "allow_always_mcp_tool")
                                 }
@@ -1654,7 +1690,13 @@ fn spawn_permission_manager_with_pin(
                                                     count = state.allowed_mcp_servers.len(),
                                                     "added MCP server to session allowlist"
                                                 );
-                                                persist_state(&cwd, &state, client_id_ref, session_id_str.as_deref()).await;
+                                                persist_state(
+                                                    &cwd,
+                                                    &state,
+                                                    client_id_ref,
+                                                    session_id_str.as_deref(),
+                                                )
+                                                .await;
                                             }
                                             _ => {
                                                 // Mismatch, empty prefix, or no `__` separator
@@ -1669,7 +1711,13 @@ fn spawn_permission_manager_with_pin(
                                                     "AllowAlwaysMcpServer prefix mismatch; downgrading to tool-scope"
                                                 );
                                                 state.allowed_mcp_tools.insert(access_name.clone());
-                                                persist_state(&cwd, &state, client_id_ref, session_id_str.as_deref()).await;
+                                                persist_state(
+                                                    &cwd,
+                                                    &state,
+                                                    client_id_ref,
+                                                    session_id_str.as_deref(),
+                                                )
+                                                .await;
                                             }
                                         }
                                     }
@@ -2098,7 +2146,7 @@ mod tests {
                     allowed_bash_commands: HashSet::from(["cat .env".to_string()]),
                     ..Default::default()
                 };
-                persist_state(&cwd, &state, None).await;
+                persist_state(&cwd, &state, None, None).await;
                 let (persisted_mgr, _e3) = test_manager_with_config(&cwd, config(), false);
                 let d = persisted_mgr
                     .request(AccessKind::Bash("cat .env".into()), tc(), None, None, None)
@@ -2322,7 +2370,7 @@ mod tests {
                     allow_bash_execute: true,
                     ..Default::default()
                 };
-                persist_state(&cwd, &state, None).await;
+                persist_state(&cwd, &state, None, None).await;
 
                 let bash = || {
                     acp::ToolCallUpdate::new(
@@ -3459,7 +3507,7 @@ mod tests {
                         allowed_bash_commands: HashSet::from([grant.to_string()]),
                         ..Default::default()
                     };
-                    persist_state(&cwd, &state, None).await;
+                    persist_state(&cwd, &state, None, None).await;
                 }
                 let client = RecordingClient::default();
                 let prompts = client.prompts.clone();
@@ -3548,7 +3596,7 @@ mod tests {
                     allowed_bash_commands: HashSet::from(["cat".to_string()]),
                     ..Default::default()
                 };
-                persist_state(&cwd, &state, None).await;
+                persist_state(&cwd, &state, None, None).await;
                 // Read `ask` rule (no Bash rule) — the prompt is forced by the
                 // command's shell-file read, which this gate must not silence.
                 let config = PermissionConfig::new(vec![PermissionRule {
@@ -4997,7 +5045,7 @@ mod tests {
                 seeded
                     .allowed_mcp_tools
                     .insert("test_server__do_thing".to_string());
-                persist_state(&cwd, &seeded, None).await;
+                persist_state(&cwd, &seeded, None, None).await;
 
                 let client = RecordingClient::default();
                 let prompts = client.prompts.clone();
@@ -5047,7 +5095,7 @@ mod tests {
                 let cwd = AbsPathBuf::new(tmp.path().to_path_buf()).unwrap();
                 let mut seeded = PermissionState::default();
                 seeded.allowed_mcp_servers.insert("test_server".to_string());
-                persist_state(&cwd, &seeded, None).await;
+                persist_state(&cwd, &seeded, None, None).await;
 
                 let client = RecordingClient::default();
                 let prompts = client.prompts.clone();
@@ -5095,7 +5143,7 @@ mod tests {
                 seeded
                     .allowed_web_fetch_domains
                     .insert("example.com".to_string());
-                persist_state(&cwd, &seeded, None).await;
+                persist_state(&cwd, &seeded, None, None).await;
 
                 let client = RecordingClient::default();
                 let prompts = client.prompts.clone();
@@ -5141,7 +5189,7 @@ mod tests {
                 const SCRIPT: &str = "my-tool build && my-tool test";
                 let mut seeded = PermissionState::default();
                 seeded.allowed_bash_commands.insert(SCRIPT.to_string());
-                persist_state(&cwd, &seeded, None).await;
+                persist_state(&cwd, &seeded, None, None).await;
 
                 let client = RecordingClient::default();
                 let prompts = client.prompts.clone();
@@ -5190,7 +5238,7 @@ mod tests {
                 seeded
                     .allowed_bash_commands
                     .insert("my-custom-build".to_string());
-                persist_state(&cwd, &seeded, None).await;
+                persist_state(&cwd, &seeded, None, None).await;
 
                 let client = RecordingClient::default();
                 let prompts = client.prompts.clone();
@@ -5236,7 +5284,7 @@ mod tests {
                     allow_bash_execute: true,
                     ..Default::default()
                 };
-                persist_state(&cwd, &seeded, None).await;
+                persist_state(&cwd, &seeded, None, None).await;
 
                 let client = RecordingClient::default();
                 let prompts = client.prompts.clone();
@@ -5285,7 +5333,7 @@ mod tests {
                     disallowed_bash_commands: HashSet::from(["rm".to_string()]),
                     ..Default::default()
                 };
-                persist_state(&cwd, &state, None).await;
+                persist_state(&cwd, &state, None, None).await;
 
                 let (mgr, _e) = test_manager(&cwd, false, None);
                 let rejected = mgr
@@ -5321,7 +5369,7 @@ mod tests {
                 seeded
                     .disallowed_bash_commands
                     .insert("my-custom-build".to_string());
-                persist_state(&cwd, &seeded, None).await;
+                persist_state(&cwd, &seeded, None, None).await;
 
                 let client = RecordingClient::default();
                 let prompts = client.prompts.clone();
@@ -5370,7 +5418,7 @@ mod tests {
                     allow_bash_execute: true,
                     ..Default::default()
                 };
-                persist_state(&cwd, &seeded, None).await;
+                persist_state(&cwd, &seeded, None, None).await;
 
                 let client = RecordingClient::default();
                 let prompts = client.prompts.clone();

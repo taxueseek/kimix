@@ -13,8 +13,8 @@ use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 
 use futures::future::join_all;
-use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::Direction;
+use petgraph::graph::{DiGraph, NodeIndex};
 use tracing::{debug, info, warn};
 
 /// 任务 ID。
@@ -64,7 +64,12 @@ impl Task {
     }
 
     /// 指定 ID 与依赖构造任务（测试与确定性场景用）。
-    pub fn with_id(id: TaskId, kind: TaskKind, instruction: impl Into<String>, deps: Vec<TaskId>) -> Self {
+    pub fn with_id(
+        id: TaskId,
+        kind: TaskKind,
+        instruction: impl Into<String>,
+        deps: Vec<TaskId>,
+    ) -> Self {
         Self {
             id,
             kind,
@@ -171,7 +176,9 @@ impl TaskGraph {
             .collect();
 
         // 稳定层内顺序：按 TaskId 排序，避免 HashMap 迭代顺序导致 flaky 测试。
-        queue.make_contiguous().sort_by_key(|idx| self.graph[*idx].id);
+        queue
+            .make_contiguous()
+            .sort_by_key(|idx| self.graph[*idx].id);
 
         let mut layers: Vec<Vec<TaskId>> = Vec::new();
         let mut processed = 0usize;
@@ -380,11 +387,7 @@ mod tests {
         let explore = task(TaskKind::Explore, "scan");
         let plan_a = task_with_deps(TaskKind::Plan, "plan-a", vec![explore.id]);
         let plan_b = task_with_deps(TaskKind::Plan, "plan-b", vec![explore.id]);
-        let exec = task_with_deps(
-            TaskKind::Execute,
-            "merge",
-            vec![plan_a.id, plan_b.id],
-        );
+        let exec = task_with_deps(TaskKind::Execute, "merge", vec![plan_a.id, plan_b.id]);
 
         let explore_id = explore.id;
         let plan_a_id = plan_a.id;

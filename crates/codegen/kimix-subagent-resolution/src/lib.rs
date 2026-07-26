@@ -30,7 +30,7 @@ pub mod overrides;
 pub mod resume;
 pub mod types;
 
-pub use config::{default_roles, PersonaIOField, SubagentPersona, SubagentRole};
+pub use config::{PersonaIOField, SubagentPersona, SubagentRole, default_roles};
 pub use overrides::resolve_effective_overrides;
 pub use resume::{ResumeValidationError, validate_resume_identity};
 pub use types::{ContextSource, EffectiveRuntimeConfig, ResolutionError, ResumeSourceData};

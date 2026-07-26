@@ -192,7 +192,8 @@ pub fn format_agents_md_section(configs: &[AgentConfigFile]) -> Option<String> {
 /// pointing to the full file path for on-demand reading.
 const MAX_AGENTS_MD_CONTENT_CHARS: usize = 4000;
 /// Marker appended when content is truncated, guiding the agent to read the full file.
-const AGENTS_MD_TRUNCATION_MARKER: &str = "\n[Content truncated — read full file via Read tool if needed]";
+const AGENTS_MD_TRUNCATION_MARKER: &str =
+    "\n[Content truncated — read full file via Read tool if needed]";
 
 /// Verbatim leading bytes [`render_agents_md`] emits for every reminder block.
 /// Used by `Kimix-shell` to structurally detect legacy untagged AGENTS.md
@@ -228,7 +229,10 @@ fn render_agents_md(configs: &[AgentConfigFile]) -> Option<String> {
         // Truncate oversized content to limit context overhead.
         // The agent can always `read_file` the full content on demand.
         let truncated = if content.len() > MAX_AGENTS_MD_CONTENT_CHARS {
-            let mut truncated_content = content.chars().take(MAX_AGENTS_MD_CONTENT_CHARS).collect::<String>();
+            let mut truncated_content = content
+                .chars()
+                .take(MAX_AGENTS_MD_CONTENT_CHARS)
+                .collect::<String>();
             truncated_content.push_str(AGENTS_MD_TRUNCATION_MARKER);
             truncated_content
         } else {

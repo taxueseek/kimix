@@ -317,7 +317,10 @@ async fn e2e_crash_recovers_drops_client_then_restart_succeeds() {
             assert_eq!(pushes[0].reason, McpServerStatusReason::RestartSucceeded);
             assert_eq!(pushes[0].status, McpServerStatus::Ready);
             assert!(
-                !shutdown.lock().expect("lock poisoned").is_shutting_down("svr"),
+                !shutdown
+                    .lock()
+                    .expect("lock poisoned")
+                    .is_shutting_down("svr"),
                 "a crash is NOT an intentional teardown",
             );
 
@@ -522,7 +525,10 @@ async fn e2e_config_removed_keeps_replacement_client_marks_shutdown_no_restart()
                 "ConfigRemoved must not evict the registered client",
             );
             assert!(
-                shutdown.lock().expect("lock poisoned").is_shutting_down("svr"),
+                shutdown
+                    .lock()
+                    .expect("lock poisoned")
+                    .is_shutting_down("svr"),
                 "ConfigRemoved marks intentional teardown",
             );
             assert!(
@@ -578,7 +584,12 @@ async fn e2e_intentional_shutdown_suppresses_restart_on_transport_closed() {
             tokio::task::yield_now().await;
             tokio::time::advance(PAST_WINDOW).await;
             settle().await;
-            assert!(shutdown.lock().expect("lock poisoned").is_shutting_down("svr"));
+            assert!(
+                shutdown
+                    .lock()
+                    .expect("lock poisoned")
+                    .is_shutting_down("svr")
+            );
 
             // Window 2: the kill_on_drop death rattle arrives.
             send_transport_closed(&tx, &mcp_state, "svr").await;
@@ -860,7 +871,10 @@ async fn e2e_flapping_server_restarts_on_each_crash_cycle() {
                     "cycle {cycle}: crash must drop the client",
                 );
                 assert!(
-                    !shutdown.lock().expect("lock poisoned").is_shutting_down("flappy"),
+                    !shutdown
+                        .lock()
+                        .expect("lock poisoned")
+                        .is_shutting_down("flappy"),
                     "cycle {cycle}: a crash is never an intentional teardown",
                 );
 
@@ -1024,7 +1038,10 @@ async fn e2e_auto_restart_disabled_drops_client_but_schedules_nothing() {
                 "TransportClosed drops the client even with auto-restart disabled",
             );
             assert!(
-                !shutdown.lock().expect("lock poisoned").is_shutting_down("svr"),
+                !shutdown
+                    .lock()
+                    .expect("lock poisoned")
+                    .is_shutting_down("svr"),
                 "a crash is not an intentional teardown, even with restarts off",
             );
 
@@ -1197,7 +1214,10 @@ async fn e2e_http_transport_closed_recovers_in_place_not_evicted() {
                 "HTTP recovery must not trigger a stdio respawn",
             );
             assert!(
-                !shutdown.lock().expect("lock poisoned").is_shutting_down("http-mcp-server"),
+                !shutdown
+                    .lock()
+                    .expect("lock poisoned")
+                    .is_shutting_down("http-mcp-server"),
                 "a transport drop is not an intentional teardown",
             );
 

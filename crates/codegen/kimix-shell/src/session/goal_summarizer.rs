@@ -445,7 +445,10 @@ mod tests {
             }
             other => panic!("expected Summarized, got {other:?}"),
         }
-        assert_eq!(log.lock().expect("lock poisoned").as_slice(), ["fired", "completed"]);
+        assert_eq!(
+            log.lock().expect("lock poisoned").as_slice(),
+            ["fired", "completed"]
+        );
     }
 
     #[tokio::test]
@@ -518,7 +521,12 @@ mod tests {
                 ..
             }
         ));
-        assert!(log.lock().expect("lock poisoned").iter().any(|t| t == "fail_open:aborted"));
+        assert!(
+            log.lock()
+                .expect("lock poisoned")
+                .iter()
+                .any(|t| t == "fail_open:aborted")
+        );
     }
 
     #[tokio::test]
@@ -542,7 +550,12 @@ mod tests {
             }
         ));
         // Pins the `"runtime"` wire const emitted on `GoalSummarizerFailOpen`.
-        assert!(log.lock().expect("lock poisoned").iter().any(|t| t == "fail_open:runtime"));
+        assert!(
+            log.lock()
+                .expect("lock poisoned")
+                .iter()
+                .any(|t| t == "fail_open:runtime")
+        );
     }
 
     #[tokio::test]
@@ -596,7 +609,12 @@ mod tests {
 
         let _ = run_goal_summarizer(spawner, inputs(&plan, &tn), &emit).await;
 
-        let prompt = captured.last_prompt.lock().expect("lock poisoned").clone().unwrap();
+        let prompt = captured
+            .last_prompt
+            .lock()
+            .expect("lock poisoned")
+            .clone()
+            .unwrap();
         assert!(prompt.contains("OBJECTIVE:\ndo X"));
     }
 

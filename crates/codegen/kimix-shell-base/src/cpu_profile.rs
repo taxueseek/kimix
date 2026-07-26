@@ -733,7 +733,10 @@ mod tests {
 
     impl ProfilerEngine for FakeProfilerEngine {
         fn stop(self: Box<Self>) -> Result<(), ControlError> {
-            self.stop_calls.lock().expect("lock poisoned").push(self.svg_path.clone());
+            self.stop_calls
+                .lock()
+                .expect("lock poisoned")
+                .push(self.svg_path.clone());
             if let Some(err) = self.stop_error {
                 return Err(err);
             }

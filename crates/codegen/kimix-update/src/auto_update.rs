@@ -1342,7 +1342,10 @@ async fn regenerate_completions(binary: &Path, kimix_home: &Path) {
     let completions: &[(&str, PathBuf)] = &[
         ("bash", kimix_home.join("completions/bash/kimix.bash")),
         ("zsh", kimix_home.join("completions/zsh/_kimix")),
-        ("fish", user_home.join(".config/fish/completions/kimix.fish")),
+        (
+            "fish",
+            user_home.join(".config/fish/completions/kimix.fish"),
+        ),
     ];
 
     for (shell, dest) in completions {

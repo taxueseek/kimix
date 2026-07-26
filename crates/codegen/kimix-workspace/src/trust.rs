@@ -1333,7 +1333,11 @@ mod tests {
         // Worktree creation needs a valid HEAD; build an empty commit (bare repo
         // has no index, so use a treebuilder for the empty tree).
         let sig = git2::Signature::now("t", "t@t").unwrap();
-        let tree_oid = repo.treebuilder(None).unwrap().write().expect("rwlock write poisoned");
+        let tree_oid = repo
+            .treebuilder(None)
+            .unwrap()
+            .write()
+            .expect("rwlock write poisoned");
         let tree = repo.find_tree(tree_oid).unwrap();
         repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[])
             .unwrap();

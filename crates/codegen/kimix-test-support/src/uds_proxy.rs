@@ -75,7 +75,11 @@ impl FaultHandle {
     }
 
     fn connection_scope(&self) -> CancellationToken {
-        self.state.sever_now.lock().expect("lock poisoned").child_token()
+        self.state
+            .sever_now
+            .lock()
+            .expect("lock poisoned")
+            .child_token()
     }
 
     /// Frames fully forwarded so far in the given direction. Relaxed:

@@ -800,7 +800,10 @@ mod tests {
 
     impl ProfilerEngine for BlockingProfilerEngine {
         fn stop(self: Box<Self>) -> Result<(), ControlError> {
-            self.stop_calls.lock().expect("lock poisoned").push(self.svg_path.clone());
+            self.stop_calls
+                .lock()
+                .expect("lock poisoned")
+                .push(self.svg_path.clone());
             if let Some(started_tx) = self.started_tx.lock().expect("lock poisoned").take() {
                 let _ = started_tx.send(());
             }

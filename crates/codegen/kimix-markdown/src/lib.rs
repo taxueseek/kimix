@@ -28,10 +28,10 @@
 mod buffers;
 pub mod checkpoint;
 mod colors;
-mod markdown_core;
 mod hyperlinks;
 mod latex;
 mod latex_delimiters;
+mod markdown_core;
 mod mermaid;
 mod open_code_highlighter;
 mod output;

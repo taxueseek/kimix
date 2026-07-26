@@ -104,7 +104,8 @@ async fn run_scenario(env: &[(&str, &str)]) -> String {
     let home = tempfile::TempDir::new().expect("create temp home");
     seed_fixtures(home.path(), workdir.path());
 
-    let client = KimixStdioClient::spawn_with_home_and_env(&server, workdir.path(), home, env).await;
+    let client =
+        KimixStdioClient::spawn_with_home_and_env(&server, workdir.path(), home, env).await;
     client.initialize_with_timeout().await;
     let session_id = client.create_session_with_timeout(workdir.path()).await;
     let _ = client.prompt_with_timeout(&session_id, "hello").await;

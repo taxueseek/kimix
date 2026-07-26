@@ -431,7 +431,7 @@ fn seed_channel_with_acks(
 fn events_log(tmp: &tempfile::TempDir) -> String {
     std::fs::read_to_string(tmp.path().join("events.jsonl")).unwrap_or_default()
 }
-fn lines_with_type<'a>(log: &'a str, ty: &str) -> Vec<serde_json::Value> {
+fn lines_with_type(log: &str, ty: &str) -> Vec<serde_json::Value> {
     log.lines()
         .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
         .filter(|v| v.get("type").and_then(|t| t.as_str()) == Some(ty))

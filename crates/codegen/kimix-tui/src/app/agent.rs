@@ -245,8 +245,7 @@ impl BgTaskState {
         if new_stdout.len() <= BG_TASK_MAX_STDOUT {
             self.stdout = new_stdout;
         } else {
-            let end =
-                crate::render::line_utils::floor_char_boundary(&new_stdout, BG_TASK_MAX_STDOUT);
+            let end = new_stdout.floor_char_boundary(BG_TASK_MAX_STDOUT);
             self.stdout = new_stdout[..end].to_string();
             self.truncated = true;
         }

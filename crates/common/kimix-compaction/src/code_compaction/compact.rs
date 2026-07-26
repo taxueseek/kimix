@@ -572,7 +572,10 @@ mod tests {
                     FullReplaceAttemptOutcome::Degenerate { .. } => "degenerate",
                     FullReplaceAttemptOutcome::Failure { .. } => "failure",
                 };
-                self.attempts.lock().expect("lock poisoned").push(tag.to_string());
+                self.attempts
+                    .lock()
+                    .expect("lock poisoned")
+                    .push(tag.to_string());
             }
             fn on_success(&self, _attempts: u32, _summary_chars: usize, _elapsed: Duration) {
                 *self.successes.lock().expect("lock poisoned") += 1;

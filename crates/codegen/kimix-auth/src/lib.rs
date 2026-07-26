@@ -5,9 +5,9 @@
 pub mod auth_provider;
 #[cfg(feature = "middleware")]
 pub mod retry_middleware;
-pub mod visibility;
 #[cfg(test)]
 mod tests;
+pub mod visibility;
 
 pub use auth_provider::{AuthCredentialProvider, CredentialSnapshot, StaticAuthCredentialProvider};
 #[cfg(feature = "middleware")]

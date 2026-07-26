@@ -20,10 +20,7 @@ pub enum QueueEvent {
         timestamp: String,
     },
     /// A prompt was removed from the queue (drained or cancelled).
-    Dequeue {
-        id: String,
-        timestamp: String,
-    },
+    Dequeue { id: String, timestamp: String },
     /// A queued prompt's text was edited in-place.
     Edit {
         id: String,
@@ -38,9 +35,7 @@ pub enum QueueEvent {
         timestamp: String,
     },
     /// All queued prompts were cleared.
-    Clear {
-        timestamp: String,
-    },
+    Clear { timestamp: String },
 }
 
 /// Snapshot of the full queue state for fast recovery.

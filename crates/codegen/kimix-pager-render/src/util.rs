@@ -180,7 +180,10 @@ pub fn parse_schedule_interval_secs(human: &str) -> Option<u64> {
     let (num_str, unit) = if let Some(sp) = rest.find(char::is_whitespace) {
         (&rest[..sp], &rest[sp + 1..])
     } else if rest.len() >= 2 {
-        let (d, u) = rest.split_at(rest.len() - 1);
+        // Split before the last char (not the last byte) so a multibyte
+        // suffix can't panic the parse.
+        let cut = rest.char_indices().last().map(|(i, _)| i).unwrap_or(0);
+        let (d, u) = rest.split_at(cut);
         (d, u)
     } else {
         return None;

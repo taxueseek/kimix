@@ -101,9 +101,13 @@ fn init_tracing_simple(app_entrypoint: &'static str) {
         ),
         Err(_) => EnvFilter::new(default_filter),
     };
+    // Honor NO_COLOR and non-TTY stderr (CI, pipes, log redirection) so
+    // diagnostics never leak raw ANSI escapes into files or downstream tools.
+    let ansi = std::io::IsTerminal::is_terminal(&std::io::stderr())
+        && std::env::var_os("NO_COLOR").is_none();
     let fmt_layer = fmt::layer()
         .with_target(false)
-        .with_ansi(true)
+        .with_ansi(ansi)
         .with_writer(std::io::stderr);
     let registry = tracing_subscriber::registry()
         .with(fmt_layer.with_filter(env_filter))

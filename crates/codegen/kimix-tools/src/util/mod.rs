@@ -31,6 +31,6 @@ pub use spawn::{
     ProcessGroup, ProcessScope, detach_command, global_process_scope, new_process_group,
 };
 pub use truncate::{
-    DEFAULT_SOFT_WRAP_WIDTH, ceil_char_boundary, estimate_tokens, floor_char_boundary,
-    soft_wrap_line, soft_wrap_lines, truncate_line, truncate_str, truncate_str_with_marker,
+    DEFAULT_SOFT_WRAP_WIDTH, estimate_tokens, soft_wrap_line, soft_wrap_lines, truncate_line,
+    truncate_str, truncate_str_with_marker,
 };

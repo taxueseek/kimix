@@ -1799,8 +1799,8 @@ fn explain_requirement_failure(
     proposed: &[ProposedTool<'_>],
 ) -> RequirementError {
     let fq_tool_id = format!("{}:{}", entry.namespace, entry.id);
-    let is_primary_ns = entry.namespace == "Kimix" || entry.namespace == "Kimix";
-    // Match on the unqualified tool id so Kimix/Kimix renames don't break
+    let is_primary_ns = entry.namespace == "Kimix";
+    // Match on the unqualified tool id so namespace renames don't break
     // requirement diagnostics. Namespace is re-checked via `is_primary_ns`.
     match entry.id.as_str() {
         "run_terminal_cmd"

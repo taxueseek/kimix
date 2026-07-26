@@ -1,9 +1,7 @@
 //! [`WorkspaceHandle`] -- public handle to a workspace instance.
 use kimix_hunk_tracker::{HunkTrackerActor, HunkTrackerHandle, TrackingMode};
 use kimix_tool_protocol::turn_hook::TurnHookOutcome;
-use prometheus::{
-    HistogramVec, IntCounterVec, register_histogram_vec, register_int_counter_vec,
-};
+use prometheus::{HistogramVec, IntCounterVec, register_histogram_vec, register_int_counter_vec};
 use std::path::PathBuf;
 use std::sync::Arc;
 /// Tripwire, expected 0 in production. `path="swap"`: a toolset swap found
@@ -1477,7 +1475,10 @@ pub(crate) mod tests {
             tools: vec![
                 tc("Kimix:read_file", Some(ToolKind::Read)),
                 tc("Kimix:run_terminal_cmd", Some(ToolKind::Execute)),
-                tc("Kimix:get_task_output", Some(ToolKind::BackgroundTaskAction)),
+                tc(
+                    "Kimix:get_task_output",
+                    Some(ToolKind::BackgroundTaskAction),
+                ),
                 tc("Kimix:kill_task", Some(ToolKind::KillTaskAction)),
             ],
             behavior_preset: None,

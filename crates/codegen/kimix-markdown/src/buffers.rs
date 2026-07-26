@@ -250,32 +250,6 @@ pub fn unicode_display_width(s: &str) -> usize {
     s.width()
 }
 
-/// Polyfill for `str::floor_char_boundary` (stable in Rust 1.91+).
-///
-/// Snaps `index` down to the nearest UTF-8 char boundary in `s`.  Indices
-/// past the end of `s` are clamped to `s.len()`.  Replace with the std
-/// method once the workspace toolchain is bumped to 1.91+.
-pub(crate) fn floor_char_boundary(s: &str, index: usize) -> usize {
-    let mut i = index.min(s.len());
-    while i > 0 && !s.is_char_boundary(i) {
-        i -= 1;
-    }
-    i
-}
-
-/// Polyfill for `str::ceil_char_boundary` (stable in Rust 1.91+).
-///
-/// Snaps `index` up to the nearest UTF-8 char boundary in `s`.  Indices
-/// past the end of `s` are clamped to `s.len()`.  Replace with the std
-/// method once the workspace toolchain is bumped to 1.91+.
-pub(crate) fn ceil_char_boundary(s: &str, index: usize) -> usize {
-    let mut i = index.min(s.len());
-    while i < s.len() && !s.is_char_boundary(i) {
-        i += 1;
-    }
-    i
-}
-
 /// Event kind for the render loop.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]

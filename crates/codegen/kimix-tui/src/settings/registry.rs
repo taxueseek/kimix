@@ -106,13 +106,14 @@ pub fn dynamic_enum_choices(
     source: DynamicEnumSource,
     snapshot: &PagerLocalSnapshot,
 ) -> Vec<OwnedEnumChoice> {
+    use crate::i18n::tr;
     match source {
         DynamicEnumSource::ActiveModelCatalog => {
             let mut out = Vec::with_capacity(snapshot.available_models.len() + 1);
             out.push(OwnedEnumChoice {
                 canonical: String::new(),
-                display: "(no override)".to_string(),
-                description: "Inherit the default model (no per-user override).".to_string(),
+                display: tr("(no override)").to_string(),
+                description: tr("Inherit the default model (no per-user override).").to_string(),
             });
             for (name, _id) in &snapshot.available_models {
                 out.push(OwnedEnumChoice {

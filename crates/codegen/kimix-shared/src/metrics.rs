@@ -96,14 +96,17 @@ pub struct AgentRequest {
     pub timestamp: u64,
 }
 
+/// A boxed event subscriber callback.
+type Subscriber<T> = Box<dyn Fn(&T) + Send + Sync>;
+
 /// Metrics event bus for publishing events.
 pub struct MetricsBus {
     /// Subscribers for model call events.
-    model_call_subscribers: Vec<Box<dyn Fn(&ModelCall) + Send + Sync>>,
+    model_call_subscribers: Vec<Subscriber<ModelCall>>,
     /// Subscribers for tool call events.
-    tool_call_subscribers: Vec<Box<dyn Fn(&ToolCall) + Send + Sync>>,
+    tool_call_subscribers: Vec<Subscriber<ToolCall>>,
     /// Subscribers for agent request events.
-    agent_request_subscribers: Vec<Box<dyn Fn(&AgentRequest) + Send + Sync>>,
+    agent_request_subscribers: Vec<Subscriber<AgentRequest>>,
     /// Event history for aggregation.
     history: Arc<Mutex<EventHistory>>,
 }
@@ -143,7 +146,10 @@ impl MetricsBus {
     }
 
     /// Subscribe to agent request events.
-    pub fn subscribe_agent_request(&mut self, handler: impl Fn(&AgentRequest) + Send + Sync + 'static) {
+    pub fn subscribe_agent_request(
+        &mut self,
+        handler: impl Fn(&AgentRequest) + Send + Sync + 'static,
+    ) {
         self.agent_request_subscribers.push(Box::new(handler));
     }
 
@@ -206,8 +212,16 @@ impl MetricsBus {
         let history = self.history.lock().ok()?;
 
         let model_calls = history.model_calls.get(session_id)?;
-        let tool_calls = history.tool_calls.get(session_id).cloned().unwrap_or_default();
-        let agent_requests = history.agent_requests.get(session_id).cloned().unwrap_or_default();
+        let tool_calls = history
+            .tool_calls
+            .get(session_id)
+            .cloned()
+            .unwrap_or_default();
+        let agent_requests = history
+            .agent_requests
+            .get(session_id)
+            .cloned()
+            .unwrap_or_default();
 
         // Calculate aggregated metrics
         let total_model_calls = model_calls.len();
@@ -248,10 +262,7 @@ impl MetricsBus {
 
     /// Get total event count.
     pub fn total_events(&self) -> usize {
-        self.history
-            .lock()
-            .map(|h| h.total_events)
-            .unwrap_or(0)
+        self.history.lock().map(|h| h.total_events).unwrap_or(0)
     }
 
     /// Clear history for a session.

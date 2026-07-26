@@ -14,7 +14,7 @@ use ratatui::text::{Line, Span};
 
 use crate::buffers::{
     CodeBlockMeta, Highlight, LinkTarget, MarkdownBuffers, Replace, StyledCell, TableHyperlink,
-    TableReplace, TableState, Transform, floor_char_boundary, unicode_display_width,
+    TableReplace, TableState, Transform, unicode_display_width,
 };
 use crate::checkpoint::CheckpointKind;
 use crate::latex;
@@ -1911,7 +1911,7 @@ impl<'a, 'b, 'syn, 'oc> MarkdownParser<'a, 'b, 'syn, 'oc> {
                             .map(|vl| wrapped_cells[i].get(vl).map(|s| s.len()).unwrap_or(0))
                             .sum();
                         // Wrapped-line byte lengths may not land on a char boundary.
-                        let prev_len = floor_char_boundary(&full_text, prev_len);
+                        let prev_len = full_text.floor_char_boundary(prev_len);
                         // Account for spaces consumed by textwrap between lines
                         let line_start = full_text[prev_len..]
                             .find(cell_line_text)

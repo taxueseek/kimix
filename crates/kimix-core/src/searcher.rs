@@ -64,7 +64,9 @@ impl MMRReranker {
                 }
             }
 
-            let rem_idx = remaining.remove(best_idx);
+            // `remaining` is an unordered candidate pool: swap_remove is O(1)
+            // versus remove's O(m) memmove.
+            let rem_idx = remaining.swap_remove(best_idx);
             selected.push(results[rem_idx].clone());
         }
 
@@ -194,6 +196,10 @@ impl Searcher {
         // 3. Score candidates with upper-bound pruning (DAAT)
         let mut results: Vec<SearchResult> =
             Vec::with_capacity(candidate_docs.len().min(top_k * 2));
+        // Running minimum of `results` scores: the vec only grows, so the min
+        // only decreases and can be maintained in O(1) on push instead of an
+        // O(n) fold per pruning check.
+        let mut threshold = f64::INFINITY;
 
         for &doc_id in &candidate_docs {
             let mut score = 0.0;
@@ -206,19 +212,15 @@ impl Searcher {
                 scored_potential += ub;
 
                 // Pruning: if remaining potential can't reach top-K threshold, terminate
-                if results.len() >= top_k {
-                    // Find the current K-th best score (min-heap top)
-                    let threshold = results
-                        .iter()
-                        .map(|r| r.score)
-                        .fold(f64::INFINITY, f64::min);
-                    if score + (total_potential - scored_potential) < threshold {
-                        break;
-                    }
+                if results.len() >= top_k
+                    && score + (total_potential - scored_potential) < threshold
+                {
+                    break;
                 }
             }
 
             if score > 0.0 {
+                threshold = threshold.min(score);
                 results.push(SearchResult { doc_id, score });
             }
         }

@@ -916,7 +916,12 @@ mod tests {
                 ..
             }
         ));
-        assert!(log.lock().expect("lock poisoned").iter().any(|t| t == "failed:transport"));
+        assert!(
+            log.lock()
+                .expect("lock poisoned")
+                .iter()
+                .any(|t| t == "failed:transport")
+        );
     }
 
     #[tokio::test]
@@ -943,7 +948,12 @@ mod tests {
                 ..
             }
         ));
-        assert!(log.lock().expect("lock poisoned").iter().any(|t| t == "failed:aborted"));
+        assert!(
+            log.lock()
+                .expect("lock poisoned")
+                .iter()
+                .any(|t| t == "failed:aborted")
+        );
     }
 
     /// A strategist edit to plan.md is reverted byte-for-byte — the WHOLE

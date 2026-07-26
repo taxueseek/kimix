@@ -459,7 +459,10 @@ mod longcat_compat_tests {
         .expect("thinking without signature should deserialize");
         match event {
             MessageStreamEvent::ContentBlockStart { content_block, .. } => match content_block {
-                ContentBlock::Thinking { thinking, signature } => {
+                ContentBlock::Thinking {
+                    thinking,
+                    signature,
+                } => {
                     assert_eq!(thinking, "");
                     assert_eq!(signature, "");
                 }

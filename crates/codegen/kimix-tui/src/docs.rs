@@ -24,9 +24,10 @@ pub struct DocEntry {
 
 impl From<&Doc> for DocEntry {
     fn from(d: &Doc) -> Self {
+        use crate::i18n::tr;
         Self {
-            title: d.title.into(),
-            description: d.description.into(),
+            title: tr(d.title).to_string(),
+            description: tr(d.description).to_string(),
             content: d.content,
         }
     }

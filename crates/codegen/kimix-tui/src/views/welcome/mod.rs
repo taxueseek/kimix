@@ -1995,8 +1995,6 @@ fn render_startup_warnings(
 }
 
 fn mask_auth_token_for_display(input: &str) -> String {
-    use crate::render::line_utils::floor_char_boundary;
-
     if input.is_empty() {
         return "Paste your token here...".to_string();
     }
@@ -2004,7 +2002,7 @@ fn mask_auth_token_for_display(input: &str) -> String {
     if len <= 8 {
         return input.to_string();
     }
-    let boundary = floor_char_boundary(input, len - 4);
+    let boundary = input.floor_char_boundary(len - 4);
     let visible = &input[boundary..];
     let masked_count = input[..boundary].chars().count();
     format!("{}{}", "\u{2022}".repeat(masked_count), visible)

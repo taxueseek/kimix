@@ -36,16 +36,18 @@ pub fn recover_queue(session_dir: &Path) -> RecoveryResult {
     // Step 2: Replay incremental events from queue.jsonl
     let replayed = match replay_events(&events_path, &mut entries, snapshot_ts.clone()) {
         Some(ts) => ts,
-        None => return RecoveryResult {
-            entries,
-            recovered: snapshot_ts.is_some(),
-        },
+        None => {
+            return RecoveryResult {
+                entries,
+                recovered: snapshot_ts.is_some(),
+            };
+        }
     };
 
     // Step 3: If we replayed events, rewrite snapshot to include them
     // (amortizes cost of future recoveries)
     if replayed {
-        let _ = persist_snapshot_internal(session_dir, &entries);
+        persist_snapshot_internal(session_dir, &entries);
     }
 
     RecoveryResult {
@@ -83,10 +85,10 @@ fn replay_events(
         };
 
         // Skip events older than the snapshot (they're already incorporated)
-        if let Some(ref ts) = after_ts {
-            if event_timestamp(&event) <= *ts {
-                continue;
-            }
+        if let Some(ref ts) = after_ts
+            && event_timestamp(&event) <= *ts
+        {
+            continue;
         }
 
         apply_event(entries, &event);
@@ -151,7 +153,7 @@ fn apply_event(entries: &mut Vec<SnapshotEntry>, event: &QueueEvent) {
                 }
             }
             // Append any remaining entries not in the reorder list
-            reordered.extend(entries.drain(..));
+            reordered.append(entries);
             *entries = reordered;
         }
         QueueEvent::Clear { .. } => {

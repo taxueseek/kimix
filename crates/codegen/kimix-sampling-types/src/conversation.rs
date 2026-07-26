@@ -320,7 +320,7 @@ impl BackendToolCallItem {
                     .as_deref()
                     .map(|c| {
                         if c.len() > 100 {
-                            format!("{}...", &c[..100])
+                            format!("{}...", &c[..c.floor_char_boundary(100)])
                         } else {
                             c.to_string()
                         }

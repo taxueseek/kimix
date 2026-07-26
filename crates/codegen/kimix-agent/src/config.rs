@@ -617,19 +617,16 @@ where
 )]
 #[strum(serialize_all = "kebab-case")]
 pub enum BuiltinAgentName {
-    /// Accept both historical `kimix` and current `kimix` wire names.
-    #[strum(serialize = "kimix", serialize = "kimix")]
+    /// Legacy pre-rebrand wire names are resolved via [`canonical_agent_type`].
+    #[strum(serialize = "kimix")]
     Kimix,
-    #[strum(serialize = "kimix-concise", serialize = "kimix-concise")]
+    #[strum(serialize = "kimix-concise")]
     KimixConcise,
-    #[strum(serialize = "kimix-plan", serialize = "kimix-plan")]
+    #[strum(serialize = "kimix-plan")]
     KimixPlan,
-    #[strum(
-        serialize = "kimix-plan-no-subagents",
-        serialize = "kimix-plan-no-subagents"
-    )]
+    #[strum(serialize = "kimix-plan-no-subagents")]
     KimixPlanNoSubagents,
-    #[strum(serialize = "kimix-ask-user", serialize = "kimix-ask-user")]
+    #[strum(serialize = "kimix-ask-user")]
     KimixAskUser,
     Codex,
     Opencode,
@@ -637,7 +634,7 @@ pub enum BuiltinAgentName {
     Explore,
     Plan,
     BrowserUse,
-    #[strum(serialize = "kimix-orchestrator", serialize = "kimix-orchestrator")]
+    #[strum(serialize = "kimix-orchestrator")]
     KimixOrchestrator,
 }
 /// Agent-type prefix written by pre-rebrand builds into session files and
@@ -1701,7 +1698,13 @@ mod tests {
                     .as_str()
             )
         );
-        assert!(ids.contains(ToolConfig::from(&kimix::KillTerminalCommandTool).id.as_str()));
+        assert!(
+            ids.contains(
+                ToolConfig::from(&kimix::KillTerminalCommandTool)
+                    .id
+                    .as_str()
+            )
+        );
         assert!(!ids.contains(ToolConfig::from(&kimix::TaskOutputTool).id.as_str()));
         assert!(!ids.contains(ToolConfig::from(&kimix::KillTaskTool).id.as_str()));
         assert!(!ids.contains(ToolConfig::from(&kimix::TaskTool).id.as_str()));
@@ -2265,10 +2268,7 @@ description: Test default tool config
             "promptBody" : "You are a coding assistant." }
         );
         let def = AgentDefinition::from_json(&json).unwrap();
-        let task_tool_id = format!(
-            "{}:task",
-            kimix_tools::types::tool::ToolNamespace::Kimix
-        );
+        let task_tool_id = format!("{}:task", kimix_tools::types::tool::ToolNamespace::Kimix);
         assert!(
             def.tool_config.tools.iter().any(|tc| tc.id == task_tool_id),
             "from_json() without toolConfig should include TaskTool in default toolset, \
@@ -2435,7 +2435,10 @@ description: Test default tool config
         }
         // Canonical as_ref uses the first serialize string (kimix*).
         assert_eq!(BuiltinAgentName::Kimix.as_ref(), "kimix");
-        assert_eq!(BuiltinAgentName::KimixOrchestrator.as_ref(), "kimix-orchestrator");
+        assert_eq!(
+            BuiltinAgentName::KimixOrchestrator.as_ref(),
+            "kimix-orchestrator"
+        );
     }
     #[test]
     fn test_builtin_agent_name_unknown_returns_err() {

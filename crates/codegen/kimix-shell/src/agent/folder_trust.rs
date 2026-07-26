@@ -1192,7 +1192,11 @@ mod tests {
         let tmp = repo_tmp();
         let kimix = tmp.path().join(".kimix");
         std::fs::create_dir_all(&kimix).unwrap();
-        std::fs::write(kimix.join("lsp.json"), r#"{"projlsp": {"command": "true"}}"#).unwrap();
+        std::fs::write(
+            kimix.join("lsp.json"),
+            r#"{"projlsp": {"command": "true"}}"#,
+        )
+        .unwrap();
 
         let sourced = load_servers_with_plugins_sourced(tmp.path(), &[], &[], &[], &[]);
         let (_, source) = sourced.get("projlsp").expect("project server present");
@@ -1211,7 +1215,11 @@ mod tests {
         let tmp = repo_tmp();
         let kimix = tmp.path().join(".kimix");
         std::fs::create_dir_all(&kimix).unwrap();
-        std::fs::write(kimix.join("lsp.json"), r#"{"projlsp": {"command": "true"}}"#).unwrap();
+        std::fs::write(
+            kimix.join("lsp.json"),
+            r#"{"projlsp": {"command": "true"}}"#,
+        )
+        .unwrap();
 
         let sourced = load_servers_with_plugins_sourced(tmp.path(), &[], &[], &[], &[]);
         assert!(

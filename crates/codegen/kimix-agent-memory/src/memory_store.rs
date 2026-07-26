@@ -4,7 +4,7 @@
 //! to a local SQLite database. The in-memory `MemorySession` remains the primary
 //! working state; the store is write-through on mutation and read-once on load.
 
-use rusqlite::{params, Connection, Result as SqlResult};
+use rusqlite::{Connection, Result as SqlResult, params};
 use std::path::Path;
 
 use crate::memory_session::{Checkpoint, MemorySession, Turn};
@@ -153,11 +153,14 @@ impl SessionStore {
 
     /// Load a full session from the store. Returns `None` if not found.
     pub fn load_session(&self, session_id: &str) -> SqlResult<Option<MemorySession>> {
-        let meta: Option<(String, usize)> = self.conn.query_row(
-            "SELECT created_at, next_turn_number FROM sessions WHERE session_id = ?1",
-            params![session_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        ).ok();
+        let meta: Option<(String, usize)> = self
+            .conn
+            .query_row(
+                "SELECT created_at, next_turn_number FROM sessions WHERE session_id = ?1",
+                params![session_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .ok();
 
         let (_created_at, next_turn) = match meta {
             Some(m) => m,
@@ -214,11 +217,9 @@ impl SessionStore {
                         id: row.get(0)?,
                         role: row.get(1)?,
                         content: row.get(2)?,
-                        timestamp: chrono::DateTime::parse_from_rfc3339(
-                            &row.get::<_, String>(3)?,
-                        )
-                        .map(|dt| dt.with_timezone(&chrono::Utc))
-                        .unwrap_or_else(|_| chrono::Utc::now()),
+                        timestamp: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(3)?)
+                            .map(|dt| dt.with_timezone(&chrono::Utc))
+                            .unwrap_or_else(|_| chrono::Utc::now()),
                         parent_turn_id: row.get(4)?,
                         turn_number: row.get(5)?,
                         ephemeral: row.get::<_, i32>(6)? != 0,
@@ -242,11 +243,9 @@ impl SessionStore {
                     id: row.get(0)?,
                     turn_id: row.get(1)?,
                     label: row.get(2)?,
-                    timestamp: chrono::DateTime::parse_from_rfc3339(
-                        &row.get::<_, String>(3)?,
-                    )
-                    .map(|dt| dt.with_timezone(&chrono::Utc))
-                    .unwrap_or_else(|_| chrono::Utc::now()),
+                    timestamp: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(3)?)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or_else(|_| chrono::Utc::now()),
                     file_snapshot_hash: row.get(4)?,
                 })
             })?
@@ -277,8 +276,10 @@ impl SessionStore {
 
     /// Delete a session and all its turns/checkpoints.
     pub fn delete_session(&self, session_id: &str) -> SqlResult<()> {
-        self.conn
-            .execute("DELETE FROM sessions WHERE session_id = ?1", params![session_id])?;
+        self.conn.execute(
+            "DELETE FROM sessions WHERE session_id = ?1",
+            params![session_id],
+        )?;
         Ok(())
     }
 }
@@ -286,7 +287,7 @@ impl SessionStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::session::{Checkpoint, Turn};
+    use crate::memory_session::{Checkpoint, Turn};
 
     fn make_turn(id: &str, role: &str, content: &str, num: usize) -> Turn {
         Turn {

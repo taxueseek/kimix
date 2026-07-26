@@ -61,7 +61,12 @@ fn auth_complete_retries_stashed_prompt_from_dashboard() {
         });
     app.active_view = ActiveView::AgentDashboard;
 
-    dispatch(Action::Login { method_id: Some(acp::AuthMethodId::new("kimi-code")) }, &mut app);
+    dispatch(
+        Action::Login {
+            method_id: Some(acp::AuthMethodId::new("kimi-code")),
+        },
+        &mut app,
+    );
     let seq = authenticating_seq(&app);
     let effects = dispatch(
         Action::TaskComplete(TaskResult::AuthComplete {

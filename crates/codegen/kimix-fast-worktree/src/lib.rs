@@ -20,11 +20,11 @@ mod git;
 pub(crate) mod mount_info;
 #[cfg(target_os = "linux")]
 mod overlay;
+pub mod snapshot;
 pub mod sync;
 #[cfg(target_os = "linux")]
 pub(crate) mod util;
 mod worktree;
-pub mod snapshot;
 
 #[cfg(target_os = "linux")]
 pub use api::cleanup_orphaned_btrfs_snapshots;

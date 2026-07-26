@@ -313,6 +313,14 @@ pub async fn run(
         tokio::sync::oneshot::Receiver<Option<kimix_update::auto_update::UpdateAvailable>>,
     >,
 ) -> anyhow::Result<bool> {
+    // The interactive TUI cannot work without a terminal on stdin (piped
+    // input, `</dev/null`, cron). Say so upfront instead of failing deep in
+    // crossterm with an opaque ioctl error.
+    if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+        anyhow::bail!(
+            "stdin is not a terminal. Use `kimix -p \"prompt\"` for non-interactive mode."
+        );
+    }
     kimix_tty_utils::redirect_native_stderr();
     let screen_mode_override = screen_mode_relaunch::take_screen_mode_env_override();
     let cancel = CancellationToken::new();
@@ -893,6 +901,17 @@ fn init_terminal(
     writer_sync: crate::render::draw::WriterSync,
     cursor_blink: Option<bool>,
 ) -> io::Result<(PagerTerminal, ScreenMode)> {
+    // Fail fast with an actionable message on terminals that cannot render a
+    // TUI at all (Emacs M-x shell, some CI runners); otherwise raw mode
+    // "succeeds" but every frame is invisible and the app looks hung.
+    if std::env::var("TERM").as_deref() == Ok("dumb") {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "TERM=dumb terminals cannot render the Kimix TUI. \
+             Run `kimix -p \"prompt\"` for headless mode, or set TERM to a \
+             capable type (e.g. xterm-256color).",
+        ));
+    }
     kimix_crash_handler::enable_terminal_escape_restore();
     terminal::enable_raw_mode()?;
     #[cfg(windows)]

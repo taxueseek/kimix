@@ -501,7 +501,11 @@ fn uuid_v7() -> String {
     x = (x ^ (x >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
     x = (x ^ (x >> 27)).wrapping_mul(0x94d049bb133111eb);
     x = x ^ (x >> 31);
-    format!("{:016x}-{:04x}", ts.wrapping_add(counter), (x & 0xFFFF) as u16)
+    format!(
+        "{:016x}-{:04x}",
+        ts.wrapping_add(counter),
+        (x & 0xFFFF) as u16
+    )
 }
 
 #[cfg(test)]
@@ -645,7 +649,11 @@ mod tests {
             panic!(
                 "branch has {} turns (expected 2). Main turns: {:?}. Fork point id: {}",
                 branch.len(),
-                session.turns.iter().map(|t| (&t.role, &t.id)).collect::<Vec<_>>(),
+                session
+                    .turns
+                    .iter()
+                    .map(|t| (&t.role, &t.id))
+                    .collect::<Vec<_>>(),
                 fork_point,
             );
         }
@@ -674,7 +682,11 @@ mod tests {
         assert!(session.get_turn_by_id(&t2_id).is_some());
 
         let lineage = session.turn_lineage(&t2_id);
-        assert_eq!(lineage.len(), 3, "lineage should trace back through parent chain");
+        assert_eq!(
+            lineage.len(),
+            3,
+            "lineage should trace back through parent chain"
+        );
     }
 
     // ── Checkpoint tests ──

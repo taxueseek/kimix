@@ -78,10 +78,7 @@ impl TemplateRegistry {
                 continue;
             }
 
-            let file_name = file_path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
+            let file_name = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
             // Parse: <name>.<lang>.jinja2
             let stem = file_name.strip_suffix(".jinja2").unwrap_or(file_name);

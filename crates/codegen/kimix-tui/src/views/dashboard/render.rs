@@ -11,8 +11,8 @@ use super::state::{
     DashboardState, Filter, Focusable, Grouping, LocationPickerState, RowState, SectionKey,
 };
 use crate::app::agent::AgentId;
-use crate::i18n;
 use crate::app::agent_view::AgentView;
+use crate::i18n;
 use crate::render::line_utils::{truncate_line, truncate_str};
 use crate::theme::Theme;
 use crate::util::format_time_ago;

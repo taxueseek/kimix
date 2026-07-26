@@ -674,6 +674,7 @@ mod tests {
             usage_pct: 4,
             auto_compact_threshold_percent: 85,
             usage_categories: vec![],
+            cache_hit_rate: 0.0,
         }
     }
 
@@ -1025,6 +1026,7 @@ mod tests {
             usage_pct: 20,
             auto_compact_threshold_percent: 65,
             usage_categories: vec![],
+            cache_hit_rate: 0.0,
         };
         let block = ContextInfoBlock::new(snap, "kimix");
         let theme = test_theme();

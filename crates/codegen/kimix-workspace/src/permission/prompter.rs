@@ -962,6 +962,7 @@ fn map_selected_outcome(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
     use tokio::sync::mpsc;
 
     fn prompter(client_type: ClientType) -> AcpPrompter {

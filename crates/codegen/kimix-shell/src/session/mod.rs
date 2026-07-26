@@ -91,9 +91,7 @@ pub enum PromptOrigin {
     PlanResume,
     /// A normal turn that originated inside a sub-agent session.
     /// Carries the sub-agent ID extracted from the `sub-{id}-` prompt_id prefix.
-    SubagentTurn {
-        subagent_id: String,
-    },
+    SubagentTurn { subagent_id: String },
 }
 impl PromptOrigin {
     /// Parse a prompt_id string into a `PromptOrigin`.
@@ -137,7 +135,9 @@ impl PromptOrigin {
     /// real user turns always render.
     pub fn hide_user_echo_from_scrollback(&self) -> bool {
         match self {
-            Self::User | Self::SchedulerFired | Self::PlanResume | Self::SubagentTurn { .. } => false,
+            Self::User | Self::SchedulerFired | Self::PlanResume | Self::SubagentTurn { .. } => {
+                false
+            }
             Self::TaskCompleted { .. }
             | Self::SubagentCompleted { .. }
             | Self::NotificationDrain

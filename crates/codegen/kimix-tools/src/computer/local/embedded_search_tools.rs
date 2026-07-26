@@ -493,13 +493,14 @@ mod tests {
     #[test]
     fn resolve_tool_precedence() {
         // Real temp files so the is_file() checks pass.
-        let dir = std::env::temp_dir().join(format!("kimix-resolve-{}-{:?}", std::process::id(), {
-            use std::time::{SystemTime, UNIX_EPOCH};
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        }));
+        let dir =
+            std::env::temp_dir().join(format!("kimix-resolve-{}-{:?}", std::process::id(), {
+                use std::time::{SystemTime, UNIX_EPOCH};
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            }));
         std::fs::create_dir_all(&dir).unwrap();
         let envp = dir.join("env");
         let bundled = dir.join("bundled");

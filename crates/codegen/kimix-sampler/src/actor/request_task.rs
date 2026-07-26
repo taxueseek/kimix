@@ -847,7 +847,11 @@ mod tests {
         let raw = stream::iter(items).boxed();
         let (mut teed, cell) = tee_errors(raw);
         while teed.next().await.is_some() {}
-        let captured = cell.lock().expect("lock poisoned").take().expect("error captured");
+        let captured = cell
+            .lock()
+            .expect("lock poisoned")
+            .take()
+            .expect("error captured");
         match captured {
             SamplingError::EventStreamError(msg) => assert_eq!(msg, "first"),
             other => panic!("expected EventStreamError, got {other:?}"),

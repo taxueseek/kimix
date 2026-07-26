@@ -489,9 +489,7 @@ fn truncate_to_tokens(text: &str, max_tokens: usize) -> String {
 
     for c in text.chars() {
         accumulated_chars += 1;
-        if is_cjk(c) {
-            token_budget_used += 1;
-        } else if accumulated_chars % 4 == 0 {
+        if is_cjk(c) || accumulated_chars.is_multiple_of(4) {
             token_budget_used += 1;
         }
         if token_budget_used > max_tokens {

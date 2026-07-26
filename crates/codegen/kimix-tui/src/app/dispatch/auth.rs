@@ -1,5 +1,4 @@
 //! Login, logout, account switching, and auth-code submission dispatchers.
-use agent_client_protocol as acp;
 use super::ctx::{restore_auth_return_view, show_welcome};
 use super::queue::maybe_drain_queue;
 use super::router::dispatch;
@@ -10,6 +9,7 @@ use crate::app::agent_view::AgentView;
 use crate::app::app_view::{ActiveView, AppView, AuthMode, AuthState, PlatformLogin};
 use crate::scrollback::block::RenderBlock;
 use crate::scrollback::blocks::SessionEvent;
+use agent_client_protocol as acp;
 
 // ---------------------------------------------------------------------------
 // Auth dispatch

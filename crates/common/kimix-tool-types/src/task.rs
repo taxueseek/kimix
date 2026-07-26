@@ -1073,12 +1073,14 @@ mod tests {
     #[test]
     fn is_terminal_not_found_and_multi() {
         assert!(!TaskOutputOutput::TaskNotFound("x".into()).is_terminal());
-        assert!(TaskOutputOutput::MultiResult(MultiTaskOutputResult {
-            mode: "wait_all".into(),
-            results: vec![],
-            summary: String::new(),
-        })
-        .is_terminal());
+        assert!(
+            TaskOutputOutput::MultiResult(MultiTaskOutputResult {
+                mode: "wait_all".into(),
+                results: vec![],
+                summary: String::new(),
+            })
+            .is_terminal()
+        );
     }
 
     fn literal_naming() -> TaskToolNaming<'static> {

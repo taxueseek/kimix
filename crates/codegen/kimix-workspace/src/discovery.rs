@@ -425,7 +425,11 @@ mod tests {
     #[test]
     fn discover_plugins_finds_manifest_plugin() {
         let tmp = tempfile::tempdir().unwrap();
-        let plugins_dir = tmp.path().join(".kimix").join("plugins").join("test-plugin");
+        let plugins_dir = tmp
+            .path()
+            .join(".kimix")
+            .join("plugins")
+            .join("test-plugin");
         fs::create_dir_all(&plugins_dir).unwrap();
         fs::write(
             plugins_dir.join("plugin.json"),

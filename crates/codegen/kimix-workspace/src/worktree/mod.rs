@@ -2935,7 +2935,10 @@ mod tests {
     impl WorktreeNotificationSender for MarkerProbeNotifier {
         async fn send_worktree_status(&self, _progress: WorktreeStatus) {
             let in_progress = is_worktree_in_progress(&self.session_id).await;
-            self.seen_in_progress.lock().expect("lock poisoned").push(in_progress);
+            self.seen_in_progress
+                .lock()
+                .expect("lock poisoned")
+                .push(in_progress);
         }
     }
 
@@ -2979,7 +2982,11 @@ mod tests {
 
         create_worktree_async(req, notifier.clone(), BackgroundCopyContext::new()).await;
 
-        let observed = notifier.seen_in_progress.lock().expect("lock poisoned").clone();
+        let observed = notifier
+            .seen_in_progress
+            .lock()
+            .expect("lock poisoned")
+            .clone();
         assert!(
             observed.iter().any(|&in_progress| in_progress),
             "marker must be set during creation; observed: {observed:?}"

@@ -257,7 +257,10 @@ impl IndexBuilder {
 
                 // Check if the file is supported
                 if registry.is_supported(path) {
-                    files.lock().expect("lock poisoned").push(path.to_path_buf());
+                    files
+                        .lock()
+                        .expect("lock poisoned")
+                        .push(path.to_path_buf());
                 }
 
                 WalkState::Continue

@@ -192,7 +192,10 @@ async fn agent_session_writes_named_session_file() {
             &server,
             workdir.path(),
             home,
-            &[("KIMIX_DEBUG_LOG", "1"), ("KIMIX_SHARE_DIR", &kimix_home_str)],
+            &[
+                ("KIMIX_DEBUG_LOG", "1"),
+                ("KIMIX_SHARE_DIR", &kimix_home_str),
+            ],
         )
         .await;
         client.initialize_with_timeout().await;

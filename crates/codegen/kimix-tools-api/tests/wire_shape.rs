@@ -47,8 +47,9 @@ fn tool_config_entry_round_trips() {
 #[test]
 fn minimal_entry_deserializes_from_id_only() {
     // Consumers must accept sparse payloads: optional fields absent, map empty.
-    let back: ToolConfigEntry = serde_json::from_value(serde_json::json!({"id": "Kimix:read_file"}))
-        .expect("deserialize minimal");
+    let back: ToolConfigEntry =
+        serde_json::from_value(serde_json::json!({"id": "Kimix:read_file"}))
+            .expect("deserialize minimal");
     assert_eq!(back.id, "Kimix:read_file");
     assert_eq!(back.params_json, None);
     assert_eq!(back.name_override, None);

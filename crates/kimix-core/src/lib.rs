@@ -39,21 +39,19 @@ pub mod tokenizer;
 pub mod vector;
 
 // Re-export main types
-pub use agent_scheduler::{
-    Outcome, Scheduler, SchedulerError, Task, TaskGraph, TaskId, TaskKind,
-};
+pub use agent_scheduler::{Outcome, Scheduler, SchedulerError, Task, TaskGraph, TaskId, TaskKind};
 pub use fork_agent::{
-    check_fork_safety, fork, try_fork, ForkError, SessionRole, SessionStatus,
-    FORK_BOILERPLATE_TAG, MAX_FORK_DEPTH,
+    FORK_BOILERPLATE_TAG, ForkError, MAX_FORK_DEPTH, SessionRole, SessionStatus, check_fork_safety,
+    fork, try_fork,
 };
 pub use hybrid::HybridSearcher;
 pub use index::InvertedIndex;
 pub use plan_mode::{
-    approve_plan, default_plans_dir, enter_plan, exit_plan, generate_plan_path, AgentSession,
-    AllowedPrompt, PermissionMode, PlanContext, PlanError,
+    AgentSession, AllowedPrompt, PermissionMode, PlanContext, PlanError, approve_plan,
+    default_plans_dir, enter_plan, exit_plan, generate_plan_path,
 };
 pub use recall::{RecallConfig, RecallEngine, RecallResult, RecallTier};
-pub use safety::{sanitize_response, PathGuard};
+pub use safety::{PathGuard, sanitize_response};
 pub use scorer::BM25Scorer;
 pub use searcher::{MMRReranker, SearchResult, Searcher};
 pub use subagent::{AgentRole, CapabilityMode, SubagentConfig, SubagentResult};

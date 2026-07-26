@@ -1260,7 +1260,11 @@ impl AgentView {
             .and_then(|c| (c.total > 0).then_some(c.total))
             .or(model_window);
         // Get cache hit rate from context state
-        let cache_hit_rate = self.context_state.as_ref().map(|c| c.cache_hit_rate).filter(|&r| r > 0.0);
+        let cache_hit_rate = self
+            .context_state
+            .as_ref()
+            .map(|c| c.cache_hit_rate)
+            .filter(|&r| r > 0.0);
         if let Some(ctx_line) = context_bar::context_bar_line_for_session(
             ctx_used,
             ctx_total,

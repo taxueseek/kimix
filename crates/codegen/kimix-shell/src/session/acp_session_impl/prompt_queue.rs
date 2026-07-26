@@ -136,7 +136,15 @@ impl SessionActor {
             .unwrap_or_else(|| "synthetic".to_string());
         let log_owner = client_identifier.clone().unwrap_or_default();
         // Extract queue event data BEFORE queue_meta is moved into InputItem.
-        let queue_event_meta = queue_meta.as_ref().map(|m| (m.id.clone(), m.kind.clone(), m.text.clone(), m.owner.clone(), m.version));
+        let queue_event_meta = queue_meta.as_ref().map(|m| {
+            (
+                m.id.clone(),
+                m.kind.clone(),
+                m.text.clone(),
+                m.owner.clone(),
+                m.version,
+            )
+        });
 
         let mut item = InputItem {
             prompt_id,
@@ -225,14 +233,16 @@ impl SessionActor {
         // Persist queue mutation BEFORE broadcast so crash after write but
         // before broadcast is self-healing (client reconciles on reconnect).
         if let Some((id, kind, text, owner, version)) = queue_event_meta {
-            self.queue_writer.emit(kimix_file_utils::events::QueueEvent::Enqueue {
-                id,
-                kind,
-                text,
-                owner,
-                version,
-                timestamp: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-            });
+            self.queue_writer
+                .emit(kimix_file_utils::events::QueueEvent::Enqueue {
+                    id,
+                    kind,
+                    text,
+                    owner,
+                    version,
+                    timestamp: chrono::Utc::now()
+                        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                });
         }
         // Broadcast the new authoritative queue to all subscribers
         // (fire-and-forget, never persisted).
@@ -422,10 +432,11 @@ impl SessionActor {
         }
         // Persist queue mutation BEFORE broadcast so crash after write but
         // before broadcast is self-healing (client reconciles on reconnect).
-        self.queue_writer.emit(kimix_file_utils::events::QueueEvent::Dequeue {
-            id: id.to_string(),
-            timestamp: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-        });
+        self.queue_writer
+            .emit(kimix_file_utils::events::QueueEvent::Dequeue {
+                id: id.to_string(),
+                timestamp: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            });
         // Always re-broadcast the authoritative queue so the client reconciles.
         self.broadcast_queue_changed(&state);
     }
@@ -590,10 +601,11 @@ impl SessionActor {
             .iter()
             .filter_map(|item| item.queue_meta.as_ref().map(|m| m.id.clone()))
             .collect();
-        self.queue_writer.emit(kimix_file_utils::events::QueueEvent::Reorder {
-            ordered_ids: ordered,
-            timestamp: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-        });
+        self.queue_writer
+            .emit(kimix_file_utils::events::QueueEvent::Reorder {
+                ordered_ids: ordered,
+                timestamp: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            });
 
         self.broadcast_queue_changed(&state);
     }
@@ -627,9 +639,10 @@ impl SessionActor {
             }
         }
         state.pending_inputs = kept;
-        self.queue_writer.emit(kimix_file_utils::events::QueueEvent::Clear {
-            timestamp: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-        });
+        self.queue_writer
+            .emit(kimix_file_utils::events::QueueEvent::Clear {
+                timestamp: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            });
         self.broadcast_queue_changed(&state);
     }
 
@@ -686,13 +699,15 @@ impl SessionActor {
         Self::apply_queued_prompt_edit(item, new_text, editor);
         // Persist queue mutation BEFORE broadcast.
         if let Some(ref meta) = item.queue_meta {
-            self.queue_writer.emit(kimix_file_utils::events::QueueEvent::Edit {
-                id: id.to_string(),
-                new_text: meta.text.clone(),
-                new_version: meta.version,
-                editor: editor.map(str::to_string),
-                timestamp: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-            });
+            self.queue_writer
+                .emit(kimix_file_utils::events::QueueEvent::Edit {
+                    id: id.to_string(),
+                    new_text: meta.text.clone(),
+                    new_version: meta.version,
+                    editor: editor.map(str::to_string),
+                    timestamp: chrono::Utc::now()
+                        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                });
         }
         self.broadcast_queue_changed(&state);
     }

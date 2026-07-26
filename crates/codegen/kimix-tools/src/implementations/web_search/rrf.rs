@@ -127,7 +127,9 @@ fn is_fact_heavy(q: &str) -> bool {
         "%",
     ];
     let lower = q.to_ascii_lowercase();
-    MARKERS.iter().any(|m| lower.contains(&m.to_ascii_lowercase()))
+    MARKERS
+        .iter()
+        .any(|m| lower.contains(&m.to_ascii_lowercase()))
         || q.chars().any(|c| c.is_ascii_digit())
 }
 
@@ -171,8 +173,14 @@ mod tests {
 
     #[test]
     fn rrf_promotes_consensus() {
-        let a = vec![hit("https://a.example/1", "A1"), hit("https://b.example/2", "B2")];
-        let b = vec![hit("https://b.example/2", "B2"), hit("https://c.example/3", "C3")];
+        let a = vec![
+            hit("https://a.example/1", "A1"),
+            hit("https://b.example/2", "B2"),
+        ];
+        let b = vec![
+            hit("https://b.example/2", "B2"),
+            hit("https://c.example/3", "C3"),
+        ];
         let fused = rrf_fuse(&[a, b], 5);
         assert_eq!(fused[0].url, "https://b.example/2");
     }

@@ -54,7 +54,10 @@ impl Tokenizer {
     const CACHE_CAP: std::num::NonZeroUsize = std::num::NonZeroUsize::new(512).unwrap();
 
     pub fn new(n: usize) -> Self {
-        Self { n, cache: std::cell::RefCell::new(LruCache::new(Self::CACHE_CAP)) }
+        Self {
+            n,
+            cache: std::cell::RefCell::new(LruCache::new(Self::CACHE_CAP)),
+        }
     }
 
     /// Normalize text: NFKC + lowercase.
@@ -71,7 +74,9 @@ impl Tokenizer {
             }
         }
         let result = self.tokenize_impl(text);
-        self.cache.borrow_mut().put(text.to_string(), result.clone());
+        self.cache
+            .borrow_mut()
+            .put(text.to_string(), result.clone());
         result
     }
 

@@ -215,7 +215,10 @@ fn refresh_oidc_token(
         .map_err(|e| e.to_string())?;
     let resp = client
         .post(&token_url)
-        .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(
+            reqwest::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        )
         .body(format!(
             "grant_type=refresh_token&refresh_token={}&client_id={}",
             urlencoding_form(refresh_token),
@@ -226,7 +229,10 @@ fn refresh_oidc_token(
     let status = resp.status();
     let body = resp.text().map_err(|e| e.to_string())?;
     if !status.is_success() {
-        return Err(format!("HTTP {status}: {}", body.chars().take(200).collect::<String>()));
+        return Err(format!(
+            "HTTP {status}: {}",
+            body.chars().take(200).collect::<String>()
+        ));
     }
     let parsed: OidcTokenResponse =
         serde_json::from_str(&body).map_err(|e| format!("token JSON: {e}"))?;
@@ -238,7 +244,9 @@ fn refresh_oidc_token(
         expires_at,
         oidc_issuer: Some(issuer.to_string()),
         oidc_client_id: Some(client_id.to_string()),
-        refresh_token: parsed.refresh_token.or_else(|| Some(refresh_token.to_string())),
+        refresh_token: parsed
+            .refresh_token
+            .or_else(|| Some(refresh_token.to_string())),
         refreshed: true,
     })
 }
@@ -413,12 +421,12 @@ mod tests {
             h.get(X_GROK_CLIENT_VERSION_HEADER)
                 .is_some_and(|v| !v.is_empty() && v != "none")
         );
-        h.insert(
-            X_XAI_TOKEN_AUTH_HEADER.to_string(),
-            "custom".to_string(),
-        );
+        h.insert(X_XAI_TOKEN_AUTH_HEADER.to_string(), "custom".to_string());
         inject_grok_session_headers(&mut h);
-        assert_eq!(h.get(X_XAI_TOKEN_AUTH_HEADER).map(String::as_str), Some("custom"));
+        assert_eq!(
+            h.get(X_XAI_TOKEN_AUTH_HEADER).map(String::as_str),
+            Some("custom")
+        );
     }
 
     #[test]

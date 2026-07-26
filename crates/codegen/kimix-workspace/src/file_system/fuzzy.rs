@@ -415,7 +415,8 @@ impl FuzzyFileMatcherDaemon {
                             });
                         }
                         generation += 1;
-                        *results.lock().expect("lock poisoned") = FuzzyMatcherDaemonResults::default();
+                        *results.lock().expect("lock poisoned") =
+                            FuzzyMatcherDaemonResults::default();
                         done = false;
                     }
                     Ok(FuzzyMatcherDaemonMessage::SetQuery { query, dirs }) => {

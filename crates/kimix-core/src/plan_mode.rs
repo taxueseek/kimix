@@ -84,9 +84,7 @@ impl AgentSession {
 
     /// 当前会话的计划存储目录。
     fn plans_dir(&self) -> PathBuf {
-        self.plans_dir
-            .clone()
-            .unwrap_or_else(default_plans_dir)
+        self.plans_dir.clone().unwrap_or_else(default_plans_dir)
     }
 }
 
@@ -344,10 +342,7 @@ mod tests {
                 "glob".to_string()
             ]
         );
-        assert_eq!(
-            ctx.plan_file,
-            dir.path().join("sess-test-1.md")
-        );
+        assert_eq!(ctx.plan_file, dir.path().join("sess-test-1.md"));
 
         let prompts = vec![
             AllowedPrompt {

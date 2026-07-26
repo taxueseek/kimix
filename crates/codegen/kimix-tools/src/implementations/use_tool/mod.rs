@@ -445,7 +445,11 @@ mod tests {
         .await;
 
         assert!(result.is_ok());
-        let captured = captured_args.lock().expect("lock poisoned").clone().unwrap();
+        let captured = captured_args
+            .lock()
+            .expect("lock poisoned")
+            .clone()
+            .unwrap();
         assert!(
             captured.is_object(),
             "string-encoded input should be parsed to object"
@@ -471,7 +475,11 @@ mod tests {
         .await;
 
         assert!(result.is_ok());
-        let captured = captured_args.lock().expect("lock poisoned").clone().unwrap();
+        let captured = captured_args
+            .lock()
+            .expect("lock poisoned")
+            .clone()
+            .unwrap();
         assert_eq!(captured, expected);
     }
 
@@ -491,7 +499,11 @@ mod tests {
         .await;
 
         assert!(result.is_ok());
-        let captured = captured_args.lock().expect("lock poisoned").clone().unwrap();
+        let captured = captured_args
+            .lock()
+            .expect("lock poisoned")
+            .clone()
+            .unwrap();
         assert_eq!(captured, serde_json::Value::String("not json".into()));
     }
 
@@ -511,7 +523,11 @@ mod tests {
         .await;
 
         assert!(result.is_ok());
-        let captured = captured_args.lock().expect("lock poisoned").clone().unwrap();
+        let captured = captured_args
+            .lock()
+            .expect("lock poisoned")
+            .clone()
+            .unwrap();
         assert_eq!(captured, serde_json::json!({"local": true}));
     }
 

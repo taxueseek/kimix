@@ -62,8 +62,14 @@ fn spawn_planner_coordinator_capturing(
         while let Some(ev) = rx.recv().await {
             if let SubagentEvent::Spawn(req) = ev {
                 count_task.fetch_add(1, SeqOrd::SeqCst);
-                fork_log.lock().expect("lock poisoned").push(req.fork_context);
-                surface_log.lock().expect("lock poisoned").push(req.surface_completion);
+                fork_log
+                    .lock()
+                    .expect("lock poisoned")
+                    .push(req.fork_context);
+                surface_log
+                    .lock()
+                    .expect("lock poisoned")
+                    .push(req.surface_completion);
                 model_log
                     .lock()
                     .unwrap()
@@ -246,7 +252,11 @@ async fn planner_spawn_sets_harness_only_fork_context() {
 
             assert_eq!(spawn_count.load(SeqOrd::SeqCst), 1);
             let forks = capture.fork_context.lock().expect("lock poisoned").clone();
-            let surfaces = capture.surface_completion.lock().expect("lock poisoned").clone();
+            let surfaces = capture
+                .surface_completion
+                .lock()
+                .expect("lock poisoned")
+                .clone();
             assert_eq!(forks, vec![true], "planner must request chat-prefix fork");
             assert_eq!(
                 surfaces,

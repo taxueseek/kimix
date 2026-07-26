@@ -136,13 +136,15 @@ impl SnapshotService {
 
     /// Rollback to a specific snapshot.
     pub fn rollback(&self, snapshot_id: &str) -> Result<Vec<String>, SnapshotError> {
-        let patch_path = self.root.join("patches").join(format!("{}.patch", snapshot_id));
+        let patch_path = self
+            .root
+            .join("patches")
+            .join(format!("{}.patch", snapshot_id));
         if !patch_path.exists() {
             return Err(SnapshotError::NotFound(snapshot_id.to_string()));
         }
 
-        let patch = std::fs::read_to_string(&patch_path)
-            .map_err(|e| SnapshotError::Io(e))?;
+        let patch = std::fs::read_to_string(&patch_path).map_err(SnapshotError::Io)?;
 
         // Apply patch (simplified - in production would use git apply or similar)
         let applied_files = self.apply_patch(&patch)?;
@@ -157,8 +159,7 @@ impl SnapshotService {
             return Ok(Vec::new());
         }
 
-        let content = std::fs::read_to_string(&snapshots_file)
-            .map_err(|e| SnapshotError::Io(e))?;
+        let content = std::fs::read_to_string(&snapshots_file).map_err(SnapshotError::Io)?;
 
         let snapshots = content
             .lines()
@@ -176,13 +177,15 @@ impl SnapshotService {
 
     /// Get diffs for a specific snapshot.
     pub fn diffs(&self, snapshot_id: &str) -> Result<Vec<FileDiff>, SnapshotError> {
-        let patch_path = self.root.join("patches").join(format!("{}.patch", snapshot_id));
+        let patch_path = self
+            .root
+            .join("patches")
+            .join(format!("{}.patch", snapshot_id));
         if !patch_path.exists() {
             return Err(SnapshotError::NotFound(snapshot_id.to_string()));
         }
 
-        let patch = std::fs::read_to_string(&patch_path)
-            .map_err(|e| SnapshotError::Io(e))?;
+        let patch = std::fs::read_to_string(&patch_path).map_err(SnapshotError::Io)?;
 
         let diffs = self.parse_patch(&patch)?;
         Ok(diffs)
@@ -191,26 +194,26 @@ impl SnapshotService {
     /// Append a snapshot to the metadata file.
     fn append_snapshot(&self, snapshot: &Snapshot) -> Result<(), SnapshotError> {
         let snapshots_file = self.root.join("snapshots.jsonl");
-        let json = serde_json::to_string(snapshot)
-            .map_err(|e| SnapshotError::Serialize(e))?;
-        std::fs::create_dir_all(&self.root)
-            .map_err(|e| SnapshotError::Io(e))?;
+        let json = serde_json::to_string(snapshot).map_err(SnapshotError::Serialize)?;
+        std::fs::create_dir_all(&self.root).map_err(SnapshotError::Io)?;
         std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&snapshots_file)
-            .map_err(|e| SnapshotError::Io(e))
+            .map_err(SnapshotError::Io)
             .and_then(|mut file| {
                 use std::io::Write;
-                writeln!(file, "{}", json).map_err(|e| SnapshotError::Io(e))
+                writeln!(file, "{}", json).map_err(SnapshotError::Io)
             })
     }
 
     /// Generate a patch file for the snapshot.
     fn generate_patch(&self, snapshot: &Snapshot, files: &[String]) -> Result<(), SnapshotError> {
-        let patch_path = self.root.join("patches").join(format!("{}.patch", snapshot.id));
-        std::fs::create_dir_all(patch_path.parent().unwrap())
-            .map_err(|e| SnapshotError::Io(e))?;
+        let patch_path = self
+            .root
+            .join("patches")
+            .join(format!("{}.patch", snapshot.id));
+        std::fs::create_dir_all(patch_path.parent().unwrap()).map_err(SnapshotError::Io)?;
 
         // Simplified patch generation - in production would use git diff
         let patch_content = format!(
@@ -220,8 +223,7 @@ impl SnapshotService {
             snapshot.created_at
         );
 
-        std::fs::write(&patch_path, patch_content)
-            .map_err(|e| SnapshotError::Io(e))
+        std::fs::write(&patch_path, patch_content).map_err(SnapshotError::Io)
     }
 
     /// Apply a patch file (simplified implementation).
@@ -297,7 +299,10 @@ impl SnapshotService {
                 if total_size <= MAX_STORAGE_BYTES {
                     break;
                 }
-                let patch_path = self.root.join("patches").join(format!("{}.patch", snapshot.id));
+                let patch_path = self
+                    .root
+                    .join("patches")
+                    .join(format!("{}.patch", snapshot.id));
                 let _ = std::fs::remove_file(patch_path);
                 total_size = total_size.saturating_sub(snapshot.files.len() * 1024);
                 to_remove.push(snapshot.id.clone());
@@ -372,7 +377,10 @@ mod tests {
         service.init().unwrap();
 
         let snapshot = service
-            .track(&["file1.rs".to_string(), "file2.rs".to_string()], "test snapshot")
+            .track(
+                &["file1.rs".to_string(), "file2.rs".to_string()],
+                "test snapshot",
+            )
             .unwrap();
 
         assert!(!snapshot.id.is_empty());
@@ -391,9 +399,7 @@ mod tests {
         let service = SnapshotService::new(&temp_dir, "test-workspace");
         service.init().unwrap();
 
-        let snapshot = service
-            .track(&["file1.rs".to_string()], "test")
-            .unwrap();
+        let snapshot = service.track(&["file1.rs".to_string()], "test").unwrap();
 
         let found = service.get(&snapshot.id).unwrap();
         assert!(found.is_some());
@@ -411,9 +417,7 @@ mod tests {
         let service = SnapshotService::new(&temp_dir, "test-workspace");
         service.init().unwrap();
 
-        let snapshot = service
-            .track(&["file1.rs".to_string()], "test")
-            .unwrap();
+        let snapshot = service.track(&["file1.rs".to_string()], "test").unwrap();
 
         let diffs = service.diffs(&snapshot.id).unwrap();
         assert_eq!(diffs.len(), 1);

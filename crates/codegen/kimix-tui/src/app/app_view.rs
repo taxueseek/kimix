@@ -375,9 +375,7 @@ pub fn pending_menu_items(
                 "Login with {label}",
                 &[("label", login_label.unwrap_or("kimi.com"))],
             ),
-            method_id: acp::AuthMethodId::new(
-                kimix_shell::agent::auth_method::KIMI_CODE_METHOD_ID,
-            ),
+            method_id: acp::AuthMethodId::new(kimix_shell::agent::auth_method::KIMI_CODE_METHOD_ID),
         });
     }
     items.push(PendingMenuItem::Quit);
@@ -2829,11 +2827,9 @@ fn handle_menu_nav(
 /// Rows come from [`pending_menu_items`]: interactive methods + Quit.
 fn dispatch_pending_menu_action(items: &[PendingMenuItem], index: usize) -> InputOutcome {
     match items.get(index) {
-        Some(PendingMenuItem::Login { method_id, .. }) => {
-            InputOutcome::Action(Action::Login {
-                method_id: Some(method_id.clone()),
-            })
-        }
+        Some(PendingMenuItem::Login { method_id, .. }) => InputOutcome::Action(Action::Login {
+            method_id: Some(method_id.clone()),
+        }),
         Some(PendingMenuItem::ApiKey { target, .. }) => {
             InputOutcome::Action(Action::BeginPlatformKeyEntry(*target))
         }
