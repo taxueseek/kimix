@@ -47,6 +47,12 @@ Kimix 是一个通用的终端 AI 代理工具，基于 [xai-org/grok-build](htt
 **单文件分发** — 一个二进制走天下。macOS / Linux / Windows 全平台支持。
 内置自更新器，`kimix update` 一键升级。
 
+
+<img width="639" height="813" alt="PixPin_2026-07-27_22-03-08" src="https://github.com/user-attachments/assets/6d95a7de-2697-44d3-81ce-cfaebce7a333" />
+
+<img width="508" height="219" alt="PixPin_2026-07-27_22-14-26" src="https://github.com/user-attachments/assets/2965ade5-f0d5-464f-8cbe-6e1352293d6a" />
+
+
 ### 快速开始
 
 ```sh
