@@ -356,7 +356,7 @@ impl VideoViewerState {
             return false;
         }
 
-        let frame_duration = std::time::Duration::from_secs_f64(1.0 / self.fps);
+        let frame_duration = std::time::Duration::from_secs_f64(1.0 / self.fps.max(1.0));
         if self.last_frame_time.elapsed() < frame_duration {
             return false;
         }

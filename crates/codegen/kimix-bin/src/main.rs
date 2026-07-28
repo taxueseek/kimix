@@ -1183,6 +1183,17 @@ fn main() {
         kimix_tui::memory_trace::install_allocator_stats_provider(jemalloc_allocator_stats);
         kimix_tui::memory_trace::install_allocator_dump_provider(jemalloc_stats_dump);
     }
+    // 定期 purge jemalloc retained pages，避免长时间运行后 RSS 虚高
+    #[cfg(all(feature = "jemalloc", unix))]
+    {
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+            loop {
+                interval.tick().await;
+                purge_jemalloc_retained_pages();
+            }
+        });
+    }
     if let Some(code) = kimix_tui::app::mermaid_worker::maybe_run_render_subprocess() {
         std::process::exit(code);
     }

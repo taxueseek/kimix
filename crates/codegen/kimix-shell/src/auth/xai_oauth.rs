@@ -11,9 +11,22 @@
 //! runs the same protocol but owns the credential store.
 
 use chrono::{Duration, Utc};
+use once_cell::sync::OnceCell;
 use serde::Deserialize;
 
 use super::model::{AuthMode, KimiAuth};
+
+/// OAuth 流程共享的 HTTP Client（避免重复加载 TLS 根证书，每次 ~95ms）
+static OAUTH_HTTP_CLIENT: OnceCell<reqwest::Client> = OnceCell::new();
+
+fn oauth_http_client() -> &'static reqwest::Client {
+    OAUTH_HTTP_CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .expect("failed to build OAuth HTTP client")
+    })
+}
 
 /// Scope key in `~/.kimix/auth.json` for the native xAI OIDC session.
 pub const XAI_OIDC_SCOPE: &str = "oidc/xai";
@@ -98,7 +111,7 @@ pub async fn request_device_authorization() -> anyhow::Result<XaiDeviceAuthoriza
         urlencoding_form(XAI_OIDC_CLIENT_ID),
         urlencoding_form("openid profile email offline_access")
     );
-    let client = reqwest::Client::new();
+    let client = oauth_http_client();
     let resp = client
         .post(&url)
         .header("Content-Type", "application/x-www-form-urlencoded")
@@ -133,7 +146,7 @@ pub async fn request_device_authorization() -> anyhow::Result<XaiDeviceAuthoriza
 /// Poll until the user completes device login, or error.
 pub async fn poll_device_token(device_code: &str, interval_secs: i64) -> anyhow::Result<KimiAuth> {
     let url = format!("{XAI_OIDC_ISSUER}/oauth2/token");
-    let client = reqwest::Client::new();
+    let client = oauth_http_client();
     let body = format!(
         "grant_type={}&device_code={}&client_id={}",
         urlencoding_form(DEVICE_GRANT),
@@ -200,7 +213,7 @@ pub async fn refresh_xai_token(refresh_token: &str) -> anyhow::Result<KimiAuth> 
         urlencoding_form(refresh_token),
         urlencoding_form(XAI_OIDC_CLIENT_ID),
     );
-    let client = reqwest::Client::new();
+    let client = oauth_http_client();
     let resp = client
         .post(&url)
         .header("Content-Type", "application/x-www-form-urlencoded")
