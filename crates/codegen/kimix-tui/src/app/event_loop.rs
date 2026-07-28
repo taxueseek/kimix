@@ -1043,7 +1043,7 @@ pub(crate) async fn run(
         // enough to keep the thread parked when idle. A `poll()` timeout here
         // does NOT wake the main loop -- only a successful `send` does -- so the
         // idle event loop still parks (no reintroduced metronome tick).
-        const POLL_TIMEOUT: Duration = Duration::from_millis(100);
+        const POLL_TIMEOUT: Duration = Duration::from_millis(16);
         let mut consecutive_event_errors: u32 = 0;
         loop {
             // Shutdown observed within one poll cycle in every state (idle or

@@ -1257,7 +1257,7 @@ pub fn tab_complete_path(partial: &str) -> Option<String> {
     let expanded = if let Some(rest) = partial.strip_prefix('~') {
         let home = dirs::home_dir()?;
         if rest.is_empty() || rest == "/" {
-            home.to_string_lossy().to_string() + "/"
+            home.to_string_lossy().into_owned()
         } else {
             home.join(rest.strip_prefix('/').unwrap_or(rest))
                 .to_string_lossy()

@@ -145,7 +145,10 @@ impl HunkTrackerHandle {
         let _ = self
             .cmd_tx
             .send(HunkTrackerCommand::GetAllHunks { reply: reply_tx });
-        reply_rx.await.unwrap_or_default()
+        reply_rx.await.unwrap_or_else(|_| {
+            tracing::warn!("hunk tracker actor dropped reply; returning default");
+            Default::default()
+        })
     }
 
     /// Get hunks for a specific path.
@@ -155,7 +158,10 @@ impl HunkTrackerHandle {
             path,
             reply: reply_tx,
         });
-        reply_rx.await.unwrap_or_default()
+        reply_rx.await.unwrap_or_else(|_| {
+            tracing::warn!("hunk tracker actor dropped reply; returning default");
+            Default::default()
+        })
     }
 
     /// Get hunks + file content for a specific path (for diff rendering).
@@ -165,7 +171,10 @@ impl HunkTrackerHandle {
             path,
             reply: reply_tx,
         });
-        reply_rx.await.unwrap_or_default()
+        reply_rx.await.unwrap_or_else(|_| {
+            tracing::warn!("hunk tracker actor dropped reply; returning default");
+            Default::default()
+        })
     }
 
     /// Get hunks by source.
@@ -175,7 +184,10 @@ impl HunkTrackerHandle {
             source,
             reply: reply_tx,
         });
-        reply_rx.await.unwrap_or_default()
+        reply_rx.await.unwrap_or_else(|_| {
+            tracing::warn!("hunk tracker actor dropped reply; returning default");
+            Default::default()
+        })
     }
 
     /// Get a specific hunk by ID.
@@ -202,7 +214,10 @@ impl HunkTrackerHandle {
         let _ = self
             .cmd_tx
             .send(HunkTrackerCommand::GetAllTrackedPaths { reply: reply_tx });
-        reply_rx.await.unwrap_or_default()
+        reply_rx.await.unwrap_or_else(|_| {
+            tracing::warn!("hunk tracker actor dropped reply; returning default");
+            Default::default()
+        })
     }
 
     /// Get staged file paths (absolute) — files with HEAD→index changes in
@@ -214,7 +229,10 @@ impl HunkTrackerHandle {
         let _ = self
             .cmd_tx
             .send(HunkTrackerCommand::GetStagedFiles { reply: reply_tx });
-        reply_rx.await.unwrap_or_default()
+        reply_rx.await.unwrap_or_else(|_| {
+            tracing::warn!("hunk tracker actor dropped reply; returning default");
+            Default::default()
+        })
     }
 
     /// Get baseline, current content, agent flag, and staged flag for every
@@ -224,7 +242,10 @@ impl HunkTrackerHandle {
         let _ = self
             .cmd_tx
             .send(HunkTrackerCommand::GetAllFileContents { reply: reply_tx });
-        reply_rx.await.unwrap_or_default()
+        reply_rx.await.unwrap_or_else(|_| {
+            tracing::warn!("hunk tracker actor dropped reply; returning default");
+            Default::default()
+        })
     }
 
     /// Check if path is an agent file.
@@ -243,7 +264,10 @@ impl HunkTrackerHandle {
         let _ = self
             .cmd_tx
             .send(HunkTrackerCommand::GetSessionSummary { reply: reply_tx });
-        reply_rx.await.unwrap_or_default()
+        reply_rx.await.unwrap_or_else(|_| {
+            tracing::warn!("hunk tracker actor dropped reply; returning default");
+            Default::default()
+        })
     }
 
     /// Get pending hunks for a specific turn.
@@ -253,7 +277,10 @@ impl HunkTrackerHandle {
             prompt_index,
             reply: reply_tx,
         });
-        reply_rx.await.unwrap_or_default()
+        reply_rx.await.unwrap_or_else(|_| {
+            tracing::warn!("hunk tracker actor dropped reply; returning default");
+            Default::default()
+        })
     }
 
     /// Reset session stats (e.g., after commit).

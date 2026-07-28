@@ -72,7 +72,7 @@ fn build_http_client() -> Result<reqwest::Client, reqwest::Error> {
     let pool_max_idle: usize = std::env::var("KIMIX_POOL_MAX_IDLE")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(2);
+        .unwrap_or(10);
     let pool_idle_timeout_secs: u64 = std::env::var("KIMIX_POOL_IDLE_TIMEOUT_SECS")
         .ok()
         .and_then(|v| v.parse().ok())
