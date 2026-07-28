@@ -1,15 +1,14 @@
+<p align="center">
+  <img src="./assets/readme/hero.svg" width="100%" alt="Kimix — 通用终端 AI 代理：左侧为中英双语项目名与一句话介绍，右侧终端窗口展示一次真实的中文任务执行记录">
+</p>
+
 <div align="center">
-
-<h1>Kimix (<code>kimix</code>) </h1>
-
-**通用终端 AI 代理工具** — 让你的终端拥有 AI 超能力。
-
-kimix 采用 Grok 4.5、kimi K3 ，两个非常优秀的模型来构建的，在真实实用环境上还使用了 Deepseek、Mimo 、LongCat-2.0 等开源模型进行了广泛的测试。已经实现了通过 kimix 来更新迭代 kimix。 
-
-**A general-purpose terminal AI agent** — give your terminal superpowers.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.97.0-orange)](rust-toolchain.toml)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-lightgrey)](#快速开始)
+
+**[中文](#中文) · [English](#english)**
 
 </div>
 
@@ -26,6 +25,9 @@ Kimix 是一个通用的终端 AI 代理工具，基于 [xai-org/grok-build](htt
 管理长时运行任务。既可以交互使用，也可以在脚本 / CI 中无头运行，
 还支持通过 ACP 协议嵌入编辑器。
 
+kimix 采用 Grok 4.5、Kimi K3 两个优秀模型构建，并在真实环境中使用 DeepSeek、Mimo、LongCat-2.0
+等开源模型做了广泛测试——已经实现通过 kimix 来更新迭代 kimix 自身。
+
 适用场景：
 - 💻 编程辅助：理解代码库、重构、修 bug、写测试
 - 📊 数据分析：读取文件、运行脚本、生成报告
@@ -34,25 +36,22 @@ Kimix 是一个通用的终端 AI 代理工具，基于 [xai-org/grok-build](htt
 
 ### 为什么选 Kimix？
 
-**高缓存命中设计** — 基于 KV-cache 感知的提示工程，稳定前缀 + 工具定义确定性排序，
-大幅降低首 token 延迟。每次对话从热缓存恢复，响应速度远超同类工具。
+<p align="center">
+  <img src="./assets/readme/features-zh.svg" width="100%" alt="六个特性：高缓存命中、极致终端体验、通用场景、零遥测、单文件分发、三平台接入">
+</p>
 
-**极致终端体验** — 12 套主题、6 种独立动画系统、完整中英双语运行时切换、
-流畅的鼠标交互与快捷键体系。每个像素都经过打磨。
-
-**通用场景，不止编程** — 面向所有需要在终端中完成的 AI 任务，
-不限定语言、框架或工作类型。
-
-**零遥测，零追踪** — 唯一的出站连接是你自己配置的推理 / 认证 API
-和 GitHub Releases。不采集数据，不上传统计，不埋点。
-
-**单文件分发** — 一个二进制走天下。macOS / Linux / Windows 全平台支持。
-内置自更新器，`kimix update` 一键升级。
-
-
-<img width="639" height="813" alt="PixPin_2026-07-27_22-03-08" src="https://github.com/user-attachments/assets/6d95a7de-2697-44d3-81ce-cfaebce7a333" />
-
-<img width="508" height="219" alt="PixPin_2026-07-27_22-14-26" src="https://github.com/user-attachments/assets/2965ade5-f0d5-464f-8cbe-6e1352293d6a" />
+<table align="center">
+  <tr>
+    <td width="46%" align="center">
+      <img src="./assets/readme/screenshot-home.png" width="100%" alt="kimix 启动欢迎界面：模型状态、快捷键与命令面板">
+      <br><sub>启动即见模型状态与命令面板</sub>
+    </td>
+    <td width="54%" align="center" valign="top">
+      <img src="./assets/readme/screenshot-trace.png" width="100%" alt="真实任务执行记录：读取文件、联网扫描知乎热榜、思考计时，最后给出选题结论">
+      <br><sub>真实任务 trace：工具调用与思考过程全程可见</sub>
+    </td>
+  </tr>
+</table>
 
 
 ### 快速开始
@@ -155,6 +154,10 @@ edits files, executes shell commands, searches the web, and manages
 long-running tasks. Use it interactively, headlessly for scripting/CI,
 or embedded in editors via the Agent Client Protocol (ACP).
 
+kimix itself is built with Grok 4.5 and Kimi K3, and battle-tested against
+open models such as DeepSeek, Mimo, and LongCat-2.0 — kimix is already
+used to iterate on kimix.
+
 Use cases:
 - 💻 Coding assistance: understand codebases, refactor, fix bugs, write tests
 - 📊 Data analysis: read files, run scripts, generate reports
@@ -163,23 +166,22 @@ Use cases:
 
 ### Why Kimix?
 
-**High Cache-Hit Architecture** — KV-cache-aware prompt engineering with stable
-system prompt prefixes and deterministic tool definition ordering. First-token
-latency is dramatically lower than peers. Every conversation resumes from a warm cache.
+<p align="center">
+  <img src="./assets/readme/features-en.svg" width="100%" alt="Six features: high cache hit, polished TUI, beyond coding, zero telemetry, single binary, three providers">
+</p>
 
-**Beautiful Terminal UI** — 12 themes, 6 independent animation systems, full
-Chinese-English bilingual support with instant runtime switching. Smooth mouse
-interaction and comprehensive keyboard shortcuts. Every pixel is polished.
-
-**General-Purpose, Beyond Coding** — Built for any task you'd delegate to an AI
-in the terminal. No language, framework, or workflow restrictions.
-
-**Zero Telemetry** — The only outbound connections are the inference/auth APIs
-you configure and GitHub Releases for updates. No data collection, no analytics,
-no tracking.
-
-**Single Binary** — One binary, all platforms. macOS / Linux / Windows.
-Built-in self-updater: `kimix update`.
+<table align="center">
+  <tr>
+    <td width="46%" align="center">
+      <img src="./assets/readme/screenshot-home.png" width="100%" alt="kimix welcome screen: model status, shortcuts, and command palette">
+      <br><sub>Model status and command palette at launch</sub>
+    </td>
+    <td width="54%" align="center" valign="top">
+      <img src="./assets/readme/screenshot-trace.png" width="100%" alt="Real task trace: file reads, web scans, thinking timers, and a final conclusion">
+      <br><sub>Real task trace — every tool call and thinking step is visible</sub>
+    </td>
+  </tr>
+</table>
 
 ### Quick Start
 

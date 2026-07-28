@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="420" viewBox="0 0 1200 420"
+     role="img" aria-labelledby="title desc">
+  <title id="title">Kimix — 通用终端 AI 代理</title>
+  <desc id="desc">Kimix 项目标题卡：左侧为中英双语名称与一句话介绍，右侧终端窗口展示一次真实的中文任务执行记录。</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0D1017"/>
+      <stop offset="1" stop-color="#0A0D13"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.86" cy="0.12" r="0.55">
+      <stop offset="0" stop-color="#A78BFA" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#A78BFA" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="420" rx="26" fill="url(#bg)"/>
+  <rect width="1200" height="420" rx="26" fill="url(#glow)"/>
+
+  <!-- ===== title block ===== -->
+  <g id="title-block">
+    <text x="64" y="98" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace"
+          font-size="20" font-weight="700" fill="#A78BFA">&#8250;</text>
+    <text x="90" y="98" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace"
+          font-size="17" letter-spacing="4" fill="#78828F">TERMINAL AI AGENT</text>
+
+    <text x="62" y="186" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="84" font-weight="700" fill="#EDF1F7">Kimix</text>
+    <rect x="296" y="132" width="14" height="62" rx="2" fill="#A78BFA"/>
+
+    <text x="64" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="25" fill="#D9E0EB">通用终端 AI 代理，让终端拥有 AI 超能力</text>
+    <text x="64" y="276" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="19" fill="#8B94A7">A general-purpose AI agent for your terminal</text>
+
+    <text x="64" y="330" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace"
+          font-size="17" fill="#78828F">Apache-2.0<tspan fill="#3D4655">  ·  </tspan>Rust 1.97<tspan fill="#3D4655">  ·  </tspan>Zero telemetry</text>
+  </g>
+
+  <!-- ===== proof: real session trace in a terminal window ===== -->
+  <g id="proof-terminal">
+    <rect x="640" y="56" width="496" height="312" rx="14"
+          fill="#10141D" stroke="#242C3B" stroke-width="1.5"/>
+
+    <circle cx="668" cy="78" r="6" fill="#FF5F57"/>
+    <circle cx="690" cy="78" r="6" fill="#FEBC2E"/>
+    <circle cx="712" cy="78" r="6" fill="#28C840"/>
+    <text x="740" y="83" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace"
+          font-size="15" fill="#5F6B7A">kimix — zsh</text>
+    <line x1="640" y1="98" x2="1136" y2="98" stroke="#242C3B" stroke-width="1.5"/>
+
+    <text x="668" y="136" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace"
+          font-size="18" font-weight="700" fill="#A78BFA">&#8250;</text>
+    <text x="692" y="136" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="17" fill="#E6EAF2">基于知乎技能，研究下什么选题最适合今天</text>
+
+    <polygon points="668,156 674,162 668,168 662,162" fill="#5F6B7A"/>
+    <text x="686" y="167" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace"
+          font-size="15" fill="#78828F">Read 1 file, Read 1 skill</text>
+
+    <polygon points="668,182 674,188 668,194 662,188" fill="#34D399"/>
+    <text x="686" y="193" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="15"><tspan fill="#34D399">运行&#160;&#160;</tspan><tspan fill="#C9D1E0">扫描知乎热榜，查看今日热门选题</tspan></text>
+
+    <polygon points="668,206 674,212 668,218 662,212" fill="#F472B6"/>
+    <text x="686" y="217" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace"
+          font-size="15" fill="#78828F"><tspan fill="#F472B6">思考</tspan> for 1.6s</text>
+
+    <polygon points="668,230 674,236 668,242 662,236" fill="#34D399"/>
+    <text x="686" y="241" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="15"><tspan fill="#34D399">运行&#160;&#160;</tspan><tspan fill="#C9D1E0">获取知乎热榜详细数据</tspan></text>
+
+    <polygon points="668,254 674,260 668,266 662,260" fill="#F472B6"/>
+    <text x="686" y="265" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace"
+          font-size="15" fill="#78828F"><tspan fill="#F472B6">思考</tspan> for 0.9s</text>
+
+    <text x="668" y="312" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="16" fill="#D5DCE8">今天知乎热榜扫描了 30 个问题，筛选出 29 个有效选题。</text>
+
+    <text x="668" y="348" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace"
+          font-size="18" font-weight="700" fill="#A78BFA">&#8250;</text>
+    <rect x="692" y="334" width="9" height="18" rx="1.5" fill="#A78BFA"/>
+  </g>
+</svg>
