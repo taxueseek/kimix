@@ -743,7 +743,10 @@ mod tests {
     #[test]
     fn classify_model_unknown_falls_back_to_heuristic() {
         assert_eq!(classify_model(""), EncodingProfile::HEURISTIC);
-        assert_eq!(classify_model("my-custom-model"), EncodingProfile::HEURISTIC);
+        assert_eq!(
+            classify_model("my-custom-model"),
+            EncodingProfile::HEURISTIC
+        );
         assert_eq!(
             classify_model("some-provider/some-model"),
             EncodingProfile::HEURISTIC

@@ -32,7 +32,7 @@
 //! }
 //! ```
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -104,19 +104,19 @@ impl SessionFileLock {
             // Read existing lock
             let contents = fs::read_to_string(&self.lock_path)?;
             let other_session = contents.trim().to_string();
-            
+
             // If locked by same session, it's a re-entrant lock
             if other_session == self.session_id {
                 return Ok(());
             }
-            
+
             return Err(LockError::LockedByOther { other_session });
         }
 
         // Create lock file with our session ID
         let mut file = File::create(&self.lock_path)?;
         writeln!(file, "{}", self.session_id)?;
-        
+
         self.held = true;
         Ok(())
     }
@@ -271,11 +271,11 @@ mod tests {
     fn test_session_lock_basic() {
         let temp = TempDir::new().unwrap();
         let mut lock = SessionFileLock::new(temp.path(), "session-1");
-        
+
         assert!(lock.try_lock().is_ok());
         assert!(lock.is_locked());
         assert_eq!(lock.lock_holder(), Some("session-1".to_string()));
-        
+
         lock.unlock().unwrap();
         assert!(!lock.is_locked());
     }
@@ -283,12 +283,12 @@ mod tests {
     #[test]
     fn test_session_lock_conflict() {
         let temp = TempDir::new().unwrap();
-        
+
         let mut lock1 = SessionFileLock::new(temp.path(), "session-1");
         let mut lock2 = SessionFileLock::new(temp.path(), "session-2");
-        
+
         lock1.try_lock().unwrap();
-        
+
         match lock2.try_lock() {
             Err(LockError::LockedByOther { other_session }) => {
                 assert_eq!(other_session, "session-1");
@@ -300,10 +300,10 @@ mod tests {
     #[test]
     fn test_session_lock_reentrant() {
         let temp = TempDir::new().unwrap();
-        
+
         let mut lock1 = SessionFileLock::new(temp.path(), "session-1");
         let mut lock2 = SessionFileLock::new(temp.path(), "session-1");
-        
+
         lock1.try_lock().unwrap();
         assert!(lock2.try_lock().is_ok()); // Same session, should succeed
     }
@@ -312,7 +312,7 @@ mod tests {
     fn test_session_lock_drop() {
         let temp = TempDir::new().unwrap();
         let lock_path = temp.path().join("session_session-1.lock");
-        
+
         {
             let mut lock = SessionFileLock::new(temp.path(), "session-1");
             lock.try_lock().unwrap();

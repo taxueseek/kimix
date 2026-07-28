@@ -11,13 +11,13 @@
 //! runs the same protocol but owns the credential store.
 
 use chrono::{Duration, Utc};
-use once_cell::sync::OnceCell;
 use serde::Deserialize;
+use std::sync::OnceLock;
 
 use super::model::{AuthMode, KimiAuth};
 
 /// OAuth 流程共享的 HTTP Client（避免重复加载 TLS 根证书，每次 ~95ms）
-static OAUTH_HTTP_CLIENT: OnceCell<reqwest::Client> = OnceCell::new();
+static OAUTH_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
 fn oauth_http_client() -> &'static reqwest::Client {
     OAUTH_HTTP_CLIENT.get_or_init(|| {

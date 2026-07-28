@@ -39,8 +39,13 @@ pub struct JsonlStorageAdapter {
     file_cache: Arc<Mutex<HashMap<PathBuf, (tokio::fs::File, u64)>>>,
 }
 
-/// 获取或创建缓存的文件句柄
-/// 首次打开返回 last_len=0，强制检查 torn tail（文件可能被外部写入）
+/// 获取或创建缓存的文件句柄。
+///
+/// 首次打开返回 `last_len=0`，强制检查 torn tail（文件可能被外部写入）。
+/// 缓存命中时直接返回 `cached_len`，由 `append_jsonl_line` 中的
+/// `len != last_len` 检查检测外部修改（截断或追加都会改变 metadata.len()）。
+/// 该检查在 `append_jsonl_line` 中执行而非此处，避免重复 metadata 调用
+/// 导致 `len == last_len` 恒真、torn check 被错误跳过。
 async fn get_or_open_cached(
     cache: &Arc<Mutex<HashMap<PathBuf, (tokio::fs::File, u64)>>>,
     path: &PathBuf,

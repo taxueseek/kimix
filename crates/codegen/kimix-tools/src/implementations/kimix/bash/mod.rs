@@ -391,7 +391,7 @@ fn annotations(bash: &BashOutput) -> String {
         let shown = format_bytes(bash.output.len());
         let total = format_bytes(bash.total_bytes);
         s.push_str(&format!(
-            " [truncated: showing first/last {} of {} - full output at: {}]",
+            " [truncated: showing last {} of {} - full output at: {}]",
             shown, total, bash.output_file
         ));
     }

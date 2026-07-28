@@ -106,7 +106,11 @@ impl std::str::FromStr for KimixUrl {
 ///
 /// If the path is within a known workspace directory, appends a
 /// `kimix_resource:` line to the output.
-pub fn append_resource_hint(output: &str, workspace_root: &std::path::Path, file_path: &std::path::Path) -> String {
+pub fn append_resource_hint(
+    output: &str,
+    workspace_root: &std::path::Path,
+    file_path: &std::path::Path,
+) -> String {
     if let Ok(relative) = file_path.strip_prefix(workspace_root) {
         let url = KimixUrl::workspace(relative.to_string_lossy());
         format!("{}\n{}", output, url.to_resource_hint())
@@ -149,7 +153,10 @@ mod tests {
     #[test]
     fn test_resource_hint() {
         let url = KimixUrl::workspace("report.md");
-        assert_eq!(url.to_resource_hint(), "kimix_resource: kimix://workspace/report.md");
+        assert_eq!(
+            url.to_resource_hint(),
+            "kimix_resource: kimix://workspace/report.md"
+        );
     }
 
     #[test]

@@ -90,8 +90,11 @@ impl FuzzyFileMatcher {
     ) {
         // first, wait for previous walker to finish if it's up
         self.cancel.store(true, Ordering::Relaxed);
-        if let Some(walk_handle) = self.walk_handle.take() {
-            walk_handle.join().unwrap();
+        if let Some(walk_handle) = self.walk_handle.take()
+            && walk_handle.join().is_err()
+        {
+            tracing::warn!("fuzzy walker thread panicked, restarting with fresh state");
+            return;
         }
 
         // disconnect all injectors and clear snapshots and streams
@@ -285,11 +288,11 @@ impl FuzzyFileMatcher {
         // 遇到低于 min_score 即提前终止，实际重算次数 ≈ k + 少量同分 ties。
         //
         // 取下一个有效匹配：跳过被 dirs 过滤的项；None 表示没有更多匹配。
-        let mut next_scored = |n: &mut u32,
-                               snapshot: &Snapshot<MatchEntry>,
-                               pattern: &Pattern,
-                               matcher: &mut Matcher,
-                               dirs_only: bool|
+        let next_scored = |n: &mut u32,
+                           snapshot: &Snapshot<MatchEntry>,
+                           pattern: &Pattern,
+                           matcher: &mut Matcher,
+                           dirs_only: bool|
          -> Option<FuzzyMatchResult> {
             loop {
                 let item = snapshot.get_matched_item(*n)?;

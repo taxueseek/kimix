@@ -343,6 +343,38 @@ pub(crate) async fn run_read_file(
             )));
         }
     }
+
+    // Safety check: validate file metadata before reading (prevents OOM on huge
+    // files and hangs on FIFO/device files). Only applies to local filesystems;
+    // remote (ACP) paths fall through to fs.read_file which handles errors.
+    // Skipped in legacy mode to preserve exact historical error messages.
+    if !is_legacy && let Ok(metadata) = tokio::fs::metadata(&path).await {
+        if metadata.is_dir() {
+            let display_dcwd = display_cwd_or_cwd(&cwd, display_cwd.as_deref());
+            return Ok(ReadFileOutput::IsADirectory(format!(
+                "Error: {} is a directory, not a file.",
+                display_dcwd.join(&input.path).display()
+            )));
+        }
+        if !metadata.is_file() {
+            let display_dcwd = display_cwd_or_cwd(&cwd, display_cwd.as_deref());
+            return Ok(ReadFileOutput::FileReadError(format!(
+                "Error: {} is not a regular file (device files, pipes, and sockets are not readable).",
+                display_dcwd.join(&input.path).display()
+            )));
+        }
+        const MAX_READ_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100 MB
+        if metadata.len() > MAX_READ_FILE_SIZE {
+            let display_dcwd = display_cwd_or_cwd(&cwd, display_cwd.as_deref());
+            return Ok(ReadFileOutput::FileTooLarge(format!(
+                "Error: {} is {} bytes (max {} MB). Use search/grep tools or offset+limit on smaller ranges.",
+                display_dcwd.join(&input.path).display(),
+                metadata.len(),
+                MAX_READ_FILE_SIZE / 1024 / 1024
+            )));
+        }
+    }
+
     let file_bytes = match fs.read_file(&path).await {
         Ok(bytes) => bytes,
         Err(e) => {
