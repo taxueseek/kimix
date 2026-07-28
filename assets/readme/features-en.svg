@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="356" viewBox="0 0 1200 356"
+     role="img" aria-labelledby="title desc">
+  <title id="title">Why Kimix</title>
+  <desc id="desc">Six feature cards: high cache-hit architecture, polished terminal UI, general-purpose use cases, zero telemetry, single binary, and three providers.</desc>
+
+  <rect width="1200" height="356" rx="26" fill="#0D1017"/>
+
+  <!-- 1. cache -->
+  <g transform="translate(24 20)">
+    <rect width="368" height="150" rx="16" fill="#121724" stroke="#1F2736" stroke-width="1.5"/>
+    <g transform="translate(28 26)">
+      <rect x="0" y="4" width="30" height="6" rx="3" fill="#A78BFA" opacity="0.45"/>
+      <rect x="0" y="14" width="24" height="6" rx="3" fill="#A78BFA" opacity="0.7"/>
+      <rect x="0" y="24" width="18" height="6" rx="3" fill="#A78BFA"/>
+    </g>
+    <text x="72" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="21" font-weight="700" fill="#E6EAF2">High Cache Hit</text>
+    <text x="28" y="94" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" fill="#8B94A7">KV-cache-aware prompt design,</text>
+    <text x="28" y="122" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" fill="#8B94A7">much lower first-token latency</text>
+  </g>
+
+  <!-- 2. themes -->
+  <g transform="translate(416 20)">
+    <rect width="368" height="150" rx="16" fill="#121724" stroke="#1F2736" stroke-width="1.5"/>
+    <g transform="translate(28 26)">
+      <circle cx="3"  cy="3"  r="2.6" fill="#A78BFA"/><circle cx="11" cy="3" r="2.6" fill="#34D399"/><circle cx="19" cy="3" r="2.6" fill="#F472B6"/><circle cx="27" cy="3" r="2.6" fill="#60A5FA"/>
+      <circle cx="3"  cy="12" r="2.6" fill="#FBBF24"/><circle cx="11" cy="12" r="2.6" fill="#22D3EE"/><circle cx="19" cy="12" r="2.6" fill="#F87171"/><circle cx="27" cy="12" r="2.6" fill="#A3E635"/>
+      <circle cx="3"  cy="21" r="2.6" fill="#E879F9"/><circle cx="11" cy="21" r="2.6" fill="#38BDF8"/><circle cx="19" cy="21" r="2.6" fill="#FB923C"/><circle cx="27" cy="21" r="2.6" fill="#94A3B8"/>
+    </g>
+    <text x="72" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="21" font-weight="700" fill="#E6EAF2">Polished TUI</text>
+    <text x="28" y="94" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" fill="#8B94A7">12 themes, 6 animation systems,</text>
+    <text x="28" y="122" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" fill="#8B94A7">instant 中文 / English switching</text>
+  </g>
+
+  <!-- 3. scenes -->
+  <g transform="translate(808 20)">
+    <rect width="368" height="150" rx="16" fill="#121724" stroke="#1F2736" stroke-width="1.5"/>
+    <g transform="translate(28 26)">
+      <rect x="0"  y="0"  width="13" height="13" rx="3" fill="#A78BFA"/>
+      <rect x="17" y="0"  width="13" height="13" rx="3" fill="#34D399"/>
+      <rect x="0"  y="17" width="13" height="13" rx="3" fill="#F472B6"/>
+      <rect x="17" y="17" width="13" height="13" rx="3" fill="#60A5FA"/>
+    </g>
+    <text x="72" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="21" font-weight="700" fill="#E6EAF2">Beyond Coding</text>
+    <text x="28" y="94" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" fill="#8B94A7">coding, analysis, research, ops —</text>
+    <text x="28" y="122" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" fill="#8B94A7">no language or workflow limits</text>
+  </g>
+
+  <!-- 4. telemetry -->
+  <g transform="translate(24 194)">
+    <rect width="368" height="150" rx="16" fill="#121724" stroke="#1F2736" stroke-width="1.5"/>
+    <g transform="translate(28 26)">
+      <circle cx="15" cy="15" r="12" fill="none" stroke="#F472B6" stroke-width="2.5"/>
+      <line x1="6" y1="24" x2="24" y2="6" stroke="#F472B6" stroke-width="2.5" stroke-linecap="round"/>
+    </g>
+    <text x="72" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="21" font-weight="700" fill="#E6EAF2">Zero Telemetry</text>
+    <text x="28" y="94" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" fill="#8B94A7">only your APIs + GitHub Releases,</text>
+    <text x="28" y="122" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" fill="#8B94A7">no analytics, no tracking</text>
+  </g>
+
+  <!-- 5. binary -->
+  <g transform="translate(416 194)">
+    <rect width="368" height="150" rx="16" fill="#121724" stroke="#1F2736" stroke-width="1.5"/>
+    <g transform="translate(28 26)">
+      <rect x="6" y="2" width="20" height="12" rx="3" fill="none" stroke="#34D399" stroke-width="2.5"/>
+      <line x1="16" y1="18" x2="16" y2="28" stroke="#34D399" stroke-width="2.5" stroke-linecap="round"/>
+      <polyline points="11,24 16,29 21,24" fill="none" stroke="#34D399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <text x="72" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="21" font-weight="700" fill="#E6EAF2">Single Binary</text>
+    <text x="28" y="94" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" fill="#8B94A7">one file for macOS / Linux / Windows,</text>
+    <text x="28" y="122" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" fill="#8B94A7">self-updates via kimix update</text>
+  </g>
+
+  <!-- 6. providers -->
+  <g transform="translate(808 194)">
+    <rect width="368" height="150" rx="16" fill="#121724" stroke="#1F2736" stroke-width="1.5"/>
+    <g transform="translate(28 26)">
+      <polygon points="5,15 10,20 5,25 0,20" fill="#A78BFA" opacity="0.6"/>
+      <polygon points="16,9 23,16 16,23 9,16" fill="#A78BFA"/>
+      <polygon points="27,15 32,20 27,25 22,20" fill="#A78BFA" opacity="0.6"/>
+    </g>
+    <text x="72" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="21" font-weight="700" fill="#E6EAF2">Three Providers</text>
+    <text x="28" y="94" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace"
+          font-size="16" fill="#8B94A7">kimi-code subscription OAuth,</text>
+    <text x="28" y="122" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace"
+          font-size="16" fill="#8B94A7">moonshot-cn / moonshot-ai keys</text>
+  </g>
+</svg>
