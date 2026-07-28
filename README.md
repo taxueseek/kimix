@@ -4,6 +4,8 @@
 
 **通用终端 AI 代理工具** — 让你的终端拥有 AI 超能力。
 
+kimix 采用 Grok 4.5、kimi K3 ，两个非常优秀的模型来构建的，在真实实用环境上还使用了 Deepseek、Mimo 、LongCat-2.0 等开源模型进行了广泛的测试。已经实现了通过 kimix 来更新迭代 kimix。 
+
 **A general-purpose terminal AI agent** — give your terminal superpowers.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
