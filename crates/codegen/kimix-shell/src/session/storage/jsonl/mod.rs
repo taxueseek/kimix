@@ -9,10 +9,13 @@ use crate::tools::todo::TodoState;
 use agent_client_protocol as acp;
 use async_trait::async_trait;
 use kimix_workspace::session::file_state::RewindPoint;
+use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::Mutex;
 /// How the adapter resolves the session directory on disk.
 ///
 /// - `FromRoot` (default): computes `{root}/sessions/{urlencoded(cwd)}/{session_id}/`
@@ -30,6 +33,41 @@ enum SessionDirMode {
 #[derive(Clone)]
 pub struct JsonlStorageAdapter {
     dir_mode: SessionDirMode,
+    /// 缓存的文件句柄：路径 → (文件, 上次 append 后的长度)
+    /// 复用句柄避免每次 append 都 open/stat（5 次 syscall → 2 次）
+    /// 注意：不缓存 torn_checked，因为文件可能被外部截断（torn write）
+    file_cache: Arc<Mutex<HashMap<PathBuf, (tokio::fs::File, u64)>>>,
+}
+
+/// 获取或创建缓存的文件句柄
+/// 首次打开返回 last_len=0，强制检查 torn tail（文件可能被外部写入）
+async fn get_or_open_cached(
+    cache: &Arc<Mutex<HashMap<PathBuf, (tokio::fs::File, u64)>>>,
+    path: &PathBuf,
+) -> io::Result<(tokio::fs::File, u64)> {
+    let mut guard = cache.lock().await;
+    if let Some((file, len)) = guard.remove(path) {
+        return Ok((file, len));
+    }
+    drop(guard);
+    // 未缓存：首次打开，last_len=0 强制检查 torn tail
+    let file = tokio::fs::OpenOptions::new()
+        .read(true)
+        .create(true)
+        .append(true)
+        .open(path)
+        .await?;
+    Ok((file, 0))
+}
+
+/// 归还句柄到缓存
+async fn return_to_cache(
+    cache: &Arc<Mutex<HashMap<PathBuf, (tokio::fs::File, u64)>>>,
+    path: PathBuf,
+    file: tokio::fs::File,
+    len: u64,
+) {
+    let _ = cache.lock().await.insert(path, (file, len));
 }
 impl Default for JsonlStorageAdapter {
     fn default() -> Self {
@@ -40,11 +78,13 @@ impl JsonlStorageAdapter {
     pub fn new() -> Self {
         Self {
             dir_mode: SessionDirMode::FromRoot(crate::util::kimix_home::kimix_home()),
+            file_cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
     pub fn with_root(root_dir: PathBuf) -> Self {
         Self {
             dir_mode: SessionDirMode::FromRoot(root_dir),
+            file_cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
     /// Create an adapter that writes directly to `session_dir`, bypassing
@@ -55,6 +95,7 @@ impl JsonlStorageAdapter {
     pub fn with_explicit_session_dir(session_dir: PathBuf) -> Self {
         Self {
             dir_mode: SessionDirMode::Explicit(session_dir),
+            file_cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
     /// Load chat history from a specific directory.
@@ -246,16 +287,17 @@ impl JsonlStorageAdapter {
     /// the torn record is terminated as its own (single) corrupt line. This
     /// bounds the damage of any torn write to exactly one record, which the
     /// lenient readers (e.g. [`Self::read_chat_history_sync`]) then skip.
+    ///
+    /// Optimization: file handle is cached in `self.file_cache` so subsequent
+    /// appends skip the open/stat syscalls. Torn-tail check runs only when the
+    /// file length changed since last append (e.g. external truncation = torn write).
+    /// Normal path: write + flush (2 syscalls). Torn path: metadata + seek + read + write + flush.
     async fn append_jsonl_line(&self, path: PathBuf, mut line: Vec<u8>) -> io::Result<()> {
         debug_assert!(line.ends_with(b"\n"), "JSONL record must end with \\n");
-        let mut file = tokio::fs::OpenOptions::new()
-            .read(true)
-            .create(true)
-            .append(true)
-            .open(&path)
-            .await?;
+        let (mut file, last_len) = get_or_open_cached(&self.file_cache, &path).await?;
         let len = file.metadata().await?.len();
-        if len > 0 {
+        // 文件长度与上次不同（可能被外部截断）时，检查 torn tail
+        if len > 0 && len != last_len {
             use tokio::io::{AsyncReadExt as _, AsyncSeekExt as _};
             file.seek(io::SeekFrom::Start(len - 1)).await?;
             let mut last = [0u8; 1];
@@ -271,6 +313,8 @@ impl JsonlStorageAdapter {
         }
         file.write_all(&line).await?;
         file.flush().await?;
+        let new_len = len + line.len() as u64;
+        return_to_cache(&self.file_cache, path, file, new_len).await;
         Ok(())
     }
     /// Write a full JSONL file (rewriting all items), crash-atomically: serialize

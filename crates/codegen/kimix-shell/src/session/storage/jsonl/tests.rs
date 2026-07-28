@@ -1790,9 +1790,7 @@ fn write_test_summary(
 }
 #[test]
 fn scan_session_dirs_returns_empty_for_explicit_mode() {
-    let adapter = JsonlStorageAdapter {
-        dir_mode: SessionDirMode::Explicit(PathBuf::from("/fake")),
-    };
+    let adapter = JsonlStorageAdapter::with_explicit_session_dir(PathBuf::from("/fake"));
     assert!(adapter.scan_session_dirs(None).is_empty());
 }
 #[test]
