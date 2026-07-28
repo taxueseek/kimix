@@ -249,7 +249,11 @@ pub fn truncate_head_tail_bytes(
     let hint = footer_hint.map(|h| format!(". {h}")).unwrap_or_default();
     // 先用最大可能位数（省略数 ≤ 总字节数）占位计算标注长度，保证最终
     // 结果不超预算；切分后再用精确省略数重建标注。
-    let marker = format!("\n\n[... {} of {} bytes omitted{hint} ...]\n\n", s.len(), s.len());
+    let marker = format!(
+        "\n\n[... {} of {} bytes omitted{hint} ...]\n\n",
+        s.len(),
+        s.len()
+    );
     // 标注计入预算；预算放不下标注时退化为头部截断（仍尽力带标注）。
     if max_bytes <= marker.len() + 2 {
         let head = truncate_str(s, max_bytes.saturating_sub(marker.len()));
@@ -264,7 +268,10 @@ pub fn truncate_head_tail_bytes(
     let tail_start = s.ceil_char_boundary(s.len() - tail_budget);
     let omitted = tail_start - head_end;
 
-    let marker = format!("\n\n[... {omitted} of {} bytes omitted{hint} ...]\n\n", s.len());
+    let marker = format!(
+        "\n\n[... {omitted} of {} bytes omitted{hint} ...]\n\n",
+        s.len()
+    );
     let mut result = String::with_capacity(head_end + marker.len() + (s.len() - tail_start));
     result.push_str(&s[..head_end]);
     result.push_str(&marker);
@@ -614,8 +621,11 @@ mod tests {
     #[test]
     fn head_tail_includes_hint() {
         let s = "x".repeat(10_000);
-        let (result, truncated) =
-            truncate_head_tail_bytes(&s, 2_000, Some("Use read_file on /tmp/out for full content"));
+        let (result, truncated) = truncate_head_tail_bytes(
+            &s,
+            2_000,
+            Some("Use read_file on /tmp/out for full content"),
+        );
         assert!(truncated);
         assert!(result.len() <= 2_000);
         assert!(result.contains("Use read_file on /tmp/out for full content"));

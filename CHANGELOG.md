@@ -7,12 +7,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Changed
-- 项目重新定位为通用终端 AI 代理工具，不限于编程场景
-- README 重写为全中英双语
+### Added
+- read_file 安全防护：metadata 检查（is_dir/is_file/100MB 上限），消灭 OOM + FIFO/设备文件挂死
+- fuzzy walker 线程 panic 防护：`unwrap()` → `is_err()` + warn，消灭用户输入触发的进程崩溃
 
-### Removed
-- 清理内部设计文档和研究材料，仅保留公开使用文档
+### Fixed
+- JSONL 存储：恢复文件句柄缓存（b646deb 原始设计），每条 append 从 6 次 syscall 降回 3 次
+- 消除 `once_cell` 外部依赖缺失导致的编译失败（改用 `std::sync::OnceLock`）
+- bash 截断提示修正：`first/last` 改为 `last`（实际只保留尾部，消除模型系统性误判）
+- 移除 `main.rs` 全 crate 级 `#![allow(unused_imports, ...)]`，恢复编译器死代码检测能力
+- 移除 12 处被全局 allow 掩盖的未使用 import 和变量警告
+
+### Changed
+- clippy 零警告：修复 fuzzy.rs unused_mut、session_lock.rs unused import
+- Cargo.toml 版本升至 0.1.14
 
 ## [0.1.13] - 2026-07-26
 

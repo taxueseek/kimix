@@ -8,7 +8,7 @@
 //!
 //! Run with: cargo test -p kimix-mcp --test mcp_integration
 
-use kimix_mcp::servers::{validate_tool_name, sanitize_descriptor_segment};
+use kimix_mcp::servers::{sanitize_descriptor_segment, validate_tool_name};
 
 // ───────────────────────────────────────────────────────────────────────────
 // Tool Name Validation Tests
@@ -148,9 +148,9 @@ fn test_mcp_tool_name_qualified_format() {
 #[test]
 fn test_mcp_module_structure() {
     // Verify that MCP modules are properly exported
-    use kimix_mcp::servers::validate_tool_name;
     use kimix_mcp::servers::sanitize_descriptor_segment;
-    
+    use kimix_mcp::servers::validate_tool_name;
+
     // Basic validation tests
     assert!(validate_tool_name("valid_tool").is_ok());
     assert_eq!(sanitize_descriptor_segment("test-name"), "test-name");

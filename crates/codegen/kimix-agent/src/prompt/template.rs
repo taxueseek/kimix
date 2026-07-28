@@ -740,7 +740,9 @@ mod tests {
                     .position(|w| w == b"}}")
                     .map(|e| i + 3 + e + 2)
                     .unwrap_or(bytes.len());
-                let body = std::str::from_utf8(&bytes[i + 3..end - 2]).unwrap_or("").trim();
+                let body = std::str::from_utf8(&bytes[i + 3..end - 2])
+                    .unwrap_or("")
+                    .trim();
                 // search_tool and use_tool are always built-in, so they
                 // never need a guard.
                 const ALWAYS_BUILTIN: &[&str] = &["search_tool", "use_tool"];

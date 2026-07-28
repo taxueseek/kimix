@@ -5,8 +5,8 @@
 //! firehose, subsystem file logs (memory, hooks, sampling), and the
 //! env-gated performance instrumentation. No module here opens a network
 //! connection — that property is the crate's contract.
-mod appender;
 pub mod aggregator;
+mod appender;
 pub mod debug_log;
 pub mod hooks_log;
 pub mod instrumentation;

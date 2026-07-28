@@ -1,10 +1,3 @@
-#![allow(
-    unused_imports,
-    unused_variables,
-    unused_mut,
-    unreachable_code,
-    dead_code
-)]
 #[cfg(all(feature = "jemalloc", unix))]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
@@ -32,7 +25,7 @@ use kimix_shell::leader::{
     ClientCapabilities, ClientMode, ControlCommand, LeaderCapabilities, LeaderDescriptor,
     LeaderRegistration, LeaderTarget, leader_is_older_than,
 };
-use kimix_shell::leader::{ControlPayload, LeaderClient, connect_or_spawn, default_socket_path};
+
 use kimix_tui::app::{
     AgentCmd, Command, LeaderMgmtArgs, LeaderMgmtCommand, LeaderTargetArgs, PagerArgs,
     resolve_use_leader,

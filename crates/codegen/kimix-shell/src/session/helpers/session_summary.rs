@@ -74,7 +74,7 @@ pub async fn generate_session_summary(
     model: &str,
 ) -> String {
     let clean_message = title_source_text(&user_message);
-    
+
     // Detect language: use current i18n language
     let lang = kimix_i18n::current();
     let (system_prompt, lang_instruction) = match lang {
@@ -102,7 +102,7 @@ Just generate the session_title and nothing else"#,
             "",
         ),
     };
-    
+
     let request = ConversationRequest::from_items(vec![
         ConversationItem::system(system_prompt),
         if !lang_instruction.is_empty() {

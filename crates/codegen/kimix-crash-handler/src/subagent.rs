@@ -27,7 +27,8 @@ mod imp {
 
     /// Flag indicating whether the current thread is a subagent thread.
     /// Set to true when entering a subagent context.
-    static IS_SUBAGENT_THREAD: AtomicBool = AtomicBool::new(false);
+    #[cfg_attr(test, allow(dead_code))]
+    pub(crate) static IS_SUBAGENT_THREAD: AtomicBool = AtomicBool::new(false);
 
     /// Mark the current thread as a subagent thread.
     ///
@@ -55,9 +56,11 @@ mod imp {
     /// process-global, so this affects all threads. However, the handlers
     /// check `is_subagent_thread()` to only suspend subagent threads.
     pub unsafe fn install_subagent_crash_handler() {
-        use libc::{SIGBUS, SIGSEGV, sigaction, sigfillset, sigemptyset,
-                   sigset_t, select, timeval, pthread_sigmask, SIG_BLOCK};
-        
+        use libc::{
+            SIG_BLOCK, SIGBUS, SIGSEGV, pthread_sigmask, select, sigaction, sigemptyset,
+            sigfillset, sigset_t, timeval,
+        };
+
         mark_as_subagent();
 
         /// Signal handler for SIGSEGV/SIGBUS in subagent threads.
@@ -72,8 +75,13 @@ mod imp {
             _ctx: *mut libc::c_void,
         ) {
             // Write crash info to stderr (async-signal-safe)
-            let msg = b"\n=== SUBAGENT CRASH: Suspending thread instead of terminating process ===\n";
-            let _ = libc::write(libc::STDERR_FILENO, msg.as_ptr() as *const libc::c_void, msg.len());
+            let msg =
+                b"\n=== SUBAGENT CRASH: Suspending thread instead of terminating process ===\n";
+            let _ = libc::write(
+                libc::STDERR_FILENO,
+                msg.as_ptr() as *const libc::c_void,
+                msg.len(),
+            );
 
             // Block all signals on this thread
             let mut mask: sigset_t = std::mem::zeroed();
@@ -85,7 +93,13 @@ mod imp {
             loop {
                 let mut tv: timeval = std::mem::zeroed();
                 tv.tv_sec = 3600; // 1 hour
-                let _ = select(0, std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(), &mut tv);
+                let _ = select(
+                    0,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    &mut tv,
+                );
             }
         }
 
@@ -110,8 +124,8 @@ mod imp {
     ///
     /// Must be called when the subagent thread is being cleaned up.
     pub unsafe fn uninstall_subagent_crash_handler() {
-        use libc::{SIGBUS, SIGSEGV, sigaction, SIG_DFL};
-        
+        use libc::{SIG_DFL, SIGBUS, SIGSEGV, sigaction};
+
         // Restore default handlers
         let mut sa: libc::sigaction = std::mem::zeroed();
         sa.sa_sigaction = SIG_DFL;
@@ -126,7 +140,7 @@ mod imp {
 mod imp {
     /// No-op on non-Unix platforms.
     pub fn mark_as_subagent() {}
-    
+
     /// No-op on non-Unix platforms.
     pub fn is_subagent_thread() -> bool {
         false
@@ -147,7 +161,10 @@ mod imp {
     pub unsafe fn uninstall_subagent_crash_handler() {}
 }
 
-pub use imp::{mark_as_subagent, is_subagent_thread, install_subagent_crash_handler, uninstall_subagent_crash_handler};
+pub use imp::{
+    install_subagent_crash_handler, is_subagent_thread, mark_as_subagent,
+    uninstall_subagent_crash_handler,
+};
 
 /// RAII guard for subagent crash isolation.
 ///
@@ -204,6 +221,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::Ordering;
 
     #[test]
     fn test_subagent_guard_creation() {

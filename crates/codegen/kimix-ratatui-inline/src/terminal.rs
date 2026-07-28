@@ -717,7 +717,9 @@ where
             Viewport::Fixed(_) => {
                 let area = self.viewport_area;
                 for y in area.top()..area.bottom() {
-                    self.backend.set_cursor_position(Position { x: 0, y }).io()?;
+                    self.backend
+                        .set_cursor_position(Position { x: 0, y })
+                        .io()?;
                     self.backend.clear_region(ClearType::AfterCursor).io()?;
                 }
             }
@@ -1087,7 +1089,9 @@ where
         let viewport_top = self.viewport_area.top();
         while height > 0 {
             let to_draw = height.min(viewport_top);
-            self.backend.scroll_region_up(0..viewport_top, to_draw).io()?;
+            self.backend
+                .scroll_region_up(0..viewport_top, to_draw)
+                .io()?;
             buffer = self.draw_lines_over_cleared(viewport_top - to_draw, to_draw, buffer)?;
             height -= to_draw;
         }

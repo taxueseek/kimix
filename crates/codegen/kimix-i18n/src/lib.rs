@@ -11,8 +11,8 @@
 //!
 //! 对存量英文文案采用 gettext 风格：渲染处调用 [`tr`]，中文查表，
 //! 英文原样透传。新文案直接走 [`Strings`] 字段。
-use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 /// 界面语言。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -370,31 +370,53 @@ fn zh_lookup(en: &str) -> Option<&'static str> {
         "Deep crimson with blood red glow. 红月。" => "深红色配血红光晕。",
         "Grok inspired dark theme." => "Grok 风格深色主题。",
         "Deep ocean blue whale theme. 蓝鲸。" => "深海蓝鲸主题。",
-        "Use the agent's default permission behavior (currently equivalent to Ask)." => "使用 Agent 默认权限行为（当前等同于询问）。",
+        "Use the agent's default permission behavior (currently equivalent to Ask)." => {
+            "使用 Agent 默认权限行为（当前等同于询问）。"
+        }
         "Prompt for permission before tool actions." => "工具操作前提示权限。",
-        "LLM classifier approves safe tools; dangerous actions may still prompt or deny." => "LLM 分类器批准安全工具；危险操作可能仍需提示或拒绝。",
-        "Auto-approve every tool action. Skips ALL permission prompts." => "自动批准所有工具操作，跳过所有权限提示。",
+        "LLM classifier approves safe tools; dangerous actions may still prompt or deny." => {
+            "LLM 分类器批准安全工具；危险操作可能仍需提示或拒绝。"
+        }
+        "Auto-approve every tool action. Skips ALL permission prompts." => {
+            "自动批准所有工具操作，跳过所有权限提示。"
+        }
         "Follow the system locale. 跟随系统语言。" => "跟随系统语言。",
         "Simplified Chinese interface. 简体中文界面。" => "简体中文界面。",
         "English interface. 英文界面。" => "英文界面。",
-        "Agent runs tools and edits files directly (default)." => "Agent 直接运行工具和编辑文件（默认）。",
-        "Agent summarises a plan and asks for approval before running tools." => "Agent 汇总计划并请求批准后再运行工具。",
-        "Show diagrams with a clickable row to open/copy the rendered image." => "显示图表，提供可点击行以打开/复制渲染图像。",
+        "Agent runs tools and edits files directly (default)." => {
+            "Agent 直接运行工具和编辑文件（默认）。"
+        }
+        "Agent summarises a plan and asks for approval before running tools." => {
+            "Agent 汇总计划并请求批准后再运行工具。"
+        }
+        "Show diagrams with a clickable row to open/copy the rendered image." => {
+            "显示图表，提供可点击行以打开/复制渲染图像。"
+        }
         "Same as auto: always show the clickable affordance row." => "同自动：始终显示可点击行。",
-        "Always show the raw Mermaid source as a code block." => "始终以代码块显示原始 Mermaid 源码。",
-        "Detect wheel vs trackpad per gesture from event timing. Default." => "根据事件时间检测滚轮或触控板。默认。",
+        "Always show the raw Mermaid source as a code block." => {
+            "始终以代码块显示原始 Mermaid 源码。"
+        }
+        "Detect wheel vs trackpad per gesture from event timing. Default." => {
+            "根据事件时间检测滚轮或触控板。默认。"
+        }
 
         // ── 文档标题 ─────────────────────────────────────────
         "Getting Started" => "快速入门",
         "Installation, first launch, and basic interaction" => "安装、首次启动和基本交互",
         "Authentication" => "认证",
-        "Browser login, API keys, OIDC, external auth providers" => "浏览器登录、API 密钥、OIDC、外部认证",
+        "Browser login, API keys, OIDC, external auth providers" => {
+            "浏览器登录、API 密钥、OIDC、外部认证"
+        }
         "Keyboard Shortcuts" => "键盘快捷键",
         "Complete reference for all TUI key bindings" => "所有 TUI 快捷键的完整参考",
         "Slash Commands" => "斜杠命令",
-        "All / commands for session management, models, memory, hooks" => "所有 / 命令：会话管理、模型、记忆、钩子",
+        "All / commands for session management, models, memory, hooks" => {
+            "所有 / 命令：会话管理、模型、记忆、钩子"
+        }
         "Configuration" => "配置",
-        "config.toml, pager.toml, environment variables, file locations" => "config.toml、pager.toml、环境变量、文件位置",
+        "config.toml, pager.toml, environment variables, file locations" => {
+            "config.toml、pager.toml、环境变量、文件位置"
+        }
         "Theming and Appearance" => "主题与外观",
         "Themes, color support, pager.toml customization" => "主题、颜色支持、pager.toml 自定义",
         "MCP Servers" => "MCP 服务器",
@@ -404,7 +426,9 @@ fn zh_lookup(en: &str) -> Option<&'static str> {
         "Plugins" => "插件",
         "Installing, managing, and creating plugin packages" => "安装、管理和创建插件包",
         "Hooks" => "钩子",
-        "Project lifecycle scripts for pre/post tool-use events" => "工具使用前后的项目生命周期脚本",
+        "Project lifecycle scripts for pre/post tool-use events" => {
+            "工具使用前后的项目生命周期脚本"
+        }
         "Custom Models" => "自定义模型",
         "BYOK, Ollama, OpenAI-compatible endpoints" => "自带密钥、Ollama、OpenAI 兼容端点",
         "Project Rules (AGENTS.md)" => "项目规则 (AGENTS.md)",
