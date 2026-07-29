@@ -5,7 +5,7 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.1.14] - 2026-07-29
 
 ### Added
 - read_file 安全防护：metadata 检查（is_dir/is_file/100MB 上限），消灭 OOM + FIFO/设备文件挂死
@@ -21,6 +21,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - clippy 零警告：修复 fuzzy.rs unused_mut、session_lock.rs unused import
 - Cargo.toml 版本升至 0.1.14
+
+## [Unreleased]
 
 ## [0.1.13] - 2026-07-26
 
