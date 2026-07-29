@@ -366,6 +366,7 @@ pub(in crate::app::dispatch) fn dispatch_new_session_inner_with_id(
 pub(in crate::app::dispatch) fn dispatch_exit_session(app: &mut AppView) -> Vec<Effect> {
     let effects =
         unregister_session_effect(get_active_agent(app).and_then(|a| a.session.session_id.clone()));
+    crate::memory_release::release_retained_memory_with("exit-session");
     show_welcome(app);
     app.welcome_prompt_focused = true;
     app.session_picker_entries = None;

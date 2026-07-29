@@ -11,6 +11,7 @@ mod tests {
             context_budget_prune: true,
             max_ephemeral_kept: 5,
             max_tool_output_tokens: 10000,
+            context_window: None,
         }
     }
 

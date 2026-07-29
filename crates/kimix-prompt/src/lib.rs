@@ -186,6 +186,11 @@ pub struct PromptConfig {
     /// Default: 10_000 (matches Codex's truncation policy).
     /// Set to 0 to disable truncation.
     pub max_tool_output_tokens: usize,
+    /// Optional context window size for auto-compact observability.
+    /// When set, `begin_turn` will log a warning if total estimated tokens
+    /// exceed 80% of this window. Does NOT trigger compaction itself.
+    /// Default: None (observability disabled).
+    pub context_window: Option<usize>,
 }
 
 impl Default for PromptConfig {
@@ -198,6 +203,7 @@ impl Default for PromptConfig {
             context_budget_prune: true,
             max_ephemeral_kept: 3,
             max_tool_output_tokens: 10_000,
+            context_window: None,
         }
     }
 }
@@ -256,9 +262,10 @@ impl AgentPrompt {
     /// Begin a new turn.
     ///
     /// 1. Strip stale system reminders from previous turns
-    /// 2. Prune consumed ephemeral messages (context-budget optimization)
-    /// 3. Inject fresh recall context as system reminders
-    /// 4. Append the user's message
+    /// 2. Check auto_compact threshold (80% — observability only)
+    /// 3. Prune consumed ephemeral messages (context-budget optimization)
+    /// 4. Inject fresh recall context as system reminders
+    /// 5. Append the user's message
     ///
     /// Returns the messages that should be sent to the LLM for this turn.
     pub fn begin_turn(
@@ -270,6 +277,31 @@ impl AgentPrompt {
 
         // Step 1: Strip stale system reminders from ALL previous turns
         self.strip_stale_reminders();
+
+        // Step 1.5: Auto-compact observability — log when estimated tokens
+        // exceed 80% of the context window. This does NOT trigger compaction
+        // (compaction is handled at the kimix-shell level via
+        // `check_auto_compact_needed`). This is purely observability.
+        // TODO: wire context_window from SamplingConfig into PromptConfig
+        //       so this check fires for all sessions.
+        if let Some(context_window) = self.config.context_window
+            && context_window > 0
+        {
+            let current_tokens = self.total_estimated_tokens();
+            let token_usage_ratio = current_tokens as f64 / context_window as f64;
+            if token_usage_ratio > 0.8 {
+                tracing::info!(
+                    ratio = token_usage_ratio,
+                    current_tokens,
+                    context_window,
+                    turn = self.turn,
+                    "auto_compact: token usage at {:.1}% ({} / {}), threshold 80% crossed",
+                    token_usage_ratio * 100.0,
+                    current_tokens,
+                    context_window,
+                );
+            }
+        }
 
         // Step 2: Context-budget prune — remove consumed ephemera
         if self.config.context_budget_prune {
@@ -288,6 +320,12 @@ impl AgentPrompt {
 
         // Return visible messages (exclude stripped ones)
         self.visible_messages()
+    }
+
+    /// Estimate total tokens across all messages in the conversation.
+    /// Uses the per-message `estimated_tokens()` method and sums them.
+    pub fn total_estimated_tokens(&self) -> usize {
+        self.messages.iter().map(|m| m.estimated_tokens()).sum()
     }
 
     /// Record the assistant's response for this turn.
