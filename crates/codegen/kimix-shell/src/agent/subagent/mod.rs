@@ -172,6 +172,9 @@ pub(crate) struct SubagentSpawnContext {
     /// parent's. Call [`Self::resolve_auto_compact_threshold_percent`]
     /// once the subagent's `effective_sampling_config.model` is known.
     pub auto_compact_threshold_tiers: AutoCompactThresholdTiers,
+    /// Parent's `[session].max_effective_context_tokens` (pre-resolve).
+    /// Env still wins at resolve time via `resolve_max_effective_context_tokens`.
+    pub user_max_effective_context_tokens: Option<u32>,
     /// Parent's hunk tracker handle — cheap Clone, backed by an mpsc channel
     /// to the parent's HunkTrackerActor. Subagent edits are attributed to
     /// the same hunk tracker so the parent sees all file changes.

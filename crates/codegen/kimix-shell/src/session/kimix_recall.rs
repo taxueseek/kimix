@@ -132,6 +132,14 @@ pub fn set_context_window(window: u64) {
     }
 }
 
+/// Set the effective context cap for the 80% observability ratio.
+/// `0` clears the cap (use full context window).
+pub fn set_max_effective_context_tokens(cap: u32) {
+    if let Ok(mut adapter) = prompt_adapter().lock() {
+        adapter.set_max_effective_context_tokens(cap);
+    }
+}
+
 pub fn reset_all() {
     if let Some(r) = RECALL.get() {
         let _ = r.lock().map(|mut e| *e = KimixRecallEngine::new());

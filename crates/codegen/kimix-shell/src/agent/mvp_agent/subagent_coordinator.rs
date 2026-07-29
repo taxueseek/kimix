@@ -417,6 +417,11 @@ impl MvpAgent {
             inference_idle_timeout_secs,
             auto_compact_threshold_tiers:
                 crate::agent::subagent::AutoCompactThresholdTiers::capture(&self.cfg.borrow()),
+            user_max_effective_context_tokens: self
+                .cfg
+                .borrow()
+                .session
+                .max_effective_context_tokens,
             hunk_tracker_handle,
             hunk_tracking_enabled,
             fs,

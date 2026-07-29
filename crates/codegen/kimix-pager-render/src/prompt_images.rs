@@ -232,6 +232,16 @@ const VIDEO_FPS: f64 = 10.0;
 /// Maximum pixel width for extracted frames.
 const VIDEO_MAX_WIDTH: u32 = 640;
 
+/// Hard cap on extracted frames kept in memory.
+///
+/// At [`VIDEO_FPS`] (10 fps) this is ~12 seconds of playback. Longer videos
+/// are truncated at extract time so a 60s clip cannot allocate hundreds of
+/// multi-MB PNG/JPEG buffers (~60MB+ class leaks).
+pub const MAX_VIDEO_EXTRACT_FRAMES: usize = 120;
+
+/// Wall-clock duration passed to ffmpeg (`-t`) so extraction stops early.
+const MAX_VIDEO_EXTRACT_SECS: f64 = 12.0;
+
 /// Modal video viewer state.
 ///
 /// Holds pre-extracted frames and playback position. The rendering path
@@ -278,8 +288,9 @@ impl VideoViewerState {
     /// Open a video file for playback. Returns `None` if ffmpeg is
     /// unavailable or the video cannot be decoded.
     ///
-    /// Extracts all frames upfront — for short videos (5–15s at 10fps)
-    /// this is 50–150 frames and takes ~1–3 seconds.
+    /// Extracts frames up front for the first [`MAX_VIDEO_EXTRACT_SECS`]
+    /// seconds (capped at [`MAX_VIDEO_EXTRACT_FRAMES`]). Longer videos play
+    /// only that window so memory stays bounded.
     pub fn open_from_path(path: &std::path::Path) -> Option<Self> {
         use crate::terminal::image::{GraphicsProtocol, detect_graphics_protocol};
 
@@ -290,6 +301,11 @@ impl VideoViewerState {
 
         let (width, height, duration, fps) = ffprobe_metadata(path)?;
         let target_fps = VIDEO_FPS.min(fps);
+        let extract_secs = MAX_VIDEO_EXTRACT_SECS.min(if duration > 0.0 {
+            duration
+        } else {
+            MAX_VIDEO_EXTRACT_SECS
+        });
 
         // PNG for Kitty (required), JPEG for iTerm2 (smaller).
         let ext = match protocol {
@@ -308,10 +324,21 @@ impl VideoViewerState {
         std::fs::create_dir_all(&tmp_dir).ok()?;
 
         let mut ffmpeg_cmd = std::process::Command::new("ffmpeg");
+        // `-t` stops decode early; `-frames:v` is a second hard stop so a
+        // misreported fps cannot still dump unbounded frames to disk/RAM.
         ffmpeg_cmd
             .args(["-hide_banner", "-loglevel", "error", "-i"])
             .arg(path)
-            .args(["-vf", &vf, "-q:v", "5"])
+            .args([
+                "-t",
+                &format!("{extract_secs:.3}"),
+                "-vf",
+                &vf,
+                "-frames:v",
+                &MAX_VIDEO_EXTRACT_FRAMES.to_string(),
+                "-q:v",
+                "5",
+            ])
             .arg(tmp_dir.join(format!("%06d.{ext}")))
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
@@ -336,6 +363,12 @@ impl VideoViewerState {
             return None;
         }
 
+        let playable_secs = if target_fps > 0.0 {
+            frames.len() as f64 / target_fps
+        } else {
+            extract_secs
+        };
+
         Some(Self {
             current_frame: 0,
             playing: true,
@@ -343,7 +376,9 @@ impl VideoViewerState {
             last_frame_time: Instant::now(),
             video_width: width,
             video_height: height,
-            duration_secs: duration,
+            // Report the loaded window, not the full source duration, so the
+            // progress bar matches what is actually in memory.
+            duration_secs: playable_secs.min(duration),
             title: path.file_name().map(|n| n.to_string_lossy().into_owned()),
             frames,
         })
@@ -461,7 +496,9 @@ fn make_temp_dir() -> PathBuf {
     ))
 }
 
-/// Read all frame files from `dir` with the given extension, sorted by name.
+/// Read frame files from `dir` with the given extension, sorted by name.
+/// Hard-capped at [`MAX_VIDEO_EXTRACT_FRAMES`] as a defense in depth if
+/// ffmpeg ignores `-frames:v`.
 fn load_frames(dir: &std::path::Path, ext: &str) -> Vec<Vec<u8>> {
     let mut paths: Vec<_> = std::fs::read_dir(dir)
         .into_iter()
@@ -471,7 +508,21 @@ fn load_frames(dir: &std::path::Path, ext: &str) -> Vec<Vec<u8>> {
         .filter(|p| p.extension().is_some_and(|e| e == ext))
         .collect();
     paths.sort();
+    if paths.len() > MAX_VIDEO_EXTRACT_FRAMES {
+        tracing::debug!(
+            total = paths.len(),
+            cap = MAX_VIDEO_EXTRACT_FRAMES,
+            "video extract: truncating frame list to memory cap"
+        );
+        paths.truncate(MAX_VIDEO_EXTRACT_FRAMES);
+    }
     paths.iter().filter_map(|p| std::fs::read(p).ok()).collect()
+}
+
+/// Pure helper: clamp a frame list length to the memory cap (testable).
+#[cfg(test)]
+fn cap_frame_count(count: usize) -> usize {
+    count.min(MAX_VIDEO_EXTRACT_FRAMES)
 }
 
 /// Probe video metadata via ffprobe. Returns `(width, height, duration, fps)`.
@@ -1966,6 +2017,26 @@ pub fn extract_video_refs(text: &str) -> Vec<ScrollbackVideoRef> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn video_frame_cap_bounds_memory() {
+        assert_eq!(cap_frame_count(0), 0);
+        assert_eq!(cap_frame_count(1), 1);
+        assert_eq!(cap_frame_count(MAX_VIDEO_EXTRACT_FRAMES), MAX_VIDEO_EXTRACT_FRAMES);
+        assert_eq!(
+            cap_frame_count(MAX_VIDEO_EXTRACT_FRAMES + 500),
+            MAX_VIDEO_EXTRACT_FRAMES
+        );
+        // 10 fps × 12s = 120 frames → cap equals the designed window.
+        assert_eq!(MAX_VIDEO_EXTRACT_FRAMES, 120);
+    }
+
+    #[test]
+    fn video_viewer_stub_still_constructs() {
+        let v = VideoViewerState::test_stub();
+        assert_eq!(v.frames.len(), 1);
+        assert!(!v.playing);
+    }
 
     /// The image dir is keyed off the session's cwd — the glue the cross-cwd
     /// resume fix relies on: with `AgentSession.cwd` anchored to the origin cwd,

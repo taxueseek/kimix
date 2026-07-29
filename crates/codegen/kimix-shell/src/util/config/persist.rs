@@ -532,6 +532,7 @@ mod tests {
         // and auto_compact_threshold_percent: Some(70).
         let cfg = crate::agent::config::SessionConfig {
             auto_compact_threshold_percent: Some(70),
+            max_effective_context_tokens: None,
             load_envrc: None,
         };
         merge_section(&mut table, "session", &cfg);
@@ -1089,6 +1090,7 @@ auto_update = true
         let cfg = crate::agent::config::SessionConfig {
             load_envrc: Some(true),
             auto_compact_threshold_percent: None,
+            max_effective_context_tokens: None,
         };
         merge_section(&mut table, "session", &cfg);
         let s = table.get("session").unwrap().as_table().unwrap();

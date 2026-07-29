@@ -491,6 +491,12 @@ impl AgentPrompt {
     pub fn set_context_window(&mut self, window: usize) {
         self.config.context_window = Some(window);
     }
+
+    /// Set the effective context cap used for the 80% observability ratio.
+    /// `0` clears the cap (full `context_window` is used).
+    pub fn set_max_effective_context_tokens(&mut self, cap: usize) {
+        self.config.max_effective_context_tokens = if cap == 0 { None } else { Some(cap) };
+    }
 }
 
 /// A single recall injection with relevance metadata.

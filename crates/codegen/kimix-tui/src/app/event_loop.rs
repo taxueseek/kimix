@@ -1102,6 +1102,10 @@ pub(crate) async fn run(
     // Animation tick: only scheduled when there are running entries.
     let mut tick_interval = tick_interval;
     let mut animation_tick_at: Option<Instant> = None;
+    // Consecutive animation ticks that did no work (no reconcile, tick=false).
+    // Feeds `idle_tick_backoff` so a sticky needs_animation cannot spin at
+    // full fps without producing frames.
+    let mut idle_tick_no_op_streak: u32 = 0;
 
     // Whether the extra Kitty keyboard layer (WASD release events) is
     // currently pushed for the /gboom game. Synced to `gboom_active` each
@@ -1701,6 +1705,7 @@ pub(crate) async fn run(
                 // keeps ticks alive while reconcile is armed.
                 let reconciled = dispatch::reconcile_overdue_turn_ends(&mut app);
                 if let Some(effs) = reconciled {
+                    idle_tick_no_op_streak = 0;
                     if process_effects(effs, &mut tasks, &mut app, &progress_tx) {
                         break;
                     }
@@ -1708,13 +1713,22 @@ pub(crate) async fn run(
                     last_draw_at = Instant::now();
                     draw_scheduled_at = None;
                 } else if app.tick() {
+                    idle_tick_no_op_streak = 0;
                     app.draw(terminal);
                     last_draw_at = Instant::now();
                     draw_scheduled_at = None;
+                } else {
+                    idle_tick_no_op_streak = idle_tick_no_op_streak.saturating_add(1);
                 }
                 // Keep ticking as long as there are running animations
-                // or pending actions waiting to expire.
-                schedule_tick(&mut animation_tick_at, &app, tick_interval);
+                // or pending actions waiting to expire. Back off when the
+                // last N ticks produced no visual work.
+                schedule_tick_with_backoff(
+                    &mut animation_tick_at,
+                    &app,
+                    tick_interval,
+                    idle_tick_no_op_streak,
+                );
             }
 
             _ = roster_poll => {
@@ -2208,20 +2222,49 @@ fn should_pregenerate_away_recap(app: &AppView) -> bool {
     })
 }
 
+/// Exponential backoff for consecutive no-op animation ticks.
+///
+/// When `needs_animation` stays true but `AppView::tick` returns false
+/// (nothing to draw), spacing out the next arm avoids spinning at full
+/// fps. Resets on any productive tick. Cap keeps UI still responsive.
+pub(crate) fn idle_tick_backoff(base: Duration, no_op_streak: u32) -> Duration {
+    if no_op_streak == 0 {
+        return base;
+    }
+    // streak 1 → 2x, 2 → 4x, … capped at 16x and 250ms.
+    let shift = no_op_streak.min(4);
+    let mult = 1u32 << shift;
+    base.saturating_mul(mult)
+        .min(Duration::from_millis(250))
+}
+
 fn schedule_tick(tick_at: &mut Option<Instant>, app: &AppView, interval: Duration) {
+    schedule_tick_with_backoff(tick_at, app, interval, 0);
+}
+
+fn schedule_tick_with_backoff(
+    tick_at: &mut Option<Instant>,
+    app: &AppView,
+    interval: Duration,
+    no_op_streak: u32,
+) {
     if tick_at.is_none() {
         let interval = match app.tick_demand() {
             crate::app::app_view::TickDemand::None => return,
             // A view can request a faster cadence than the configured
             // animation fps (e.g. the /gboom easter egg targets ~30 fps).
-            crate::app::app_view::TickDemand::Fast => match app.tick_interval_ceiling() {
-                Some(ceiling) => interval.min(ceiling),
-                None => interval,
-            },
+            crate::app::app_view::TickDemand::Fast => {
+                let base = match app.tick_interval_ceiling() {
+                    Some(ceiling) => interval.min(ceiling),
+                    None => interval,
+                };
+                idle_tick_backoff(base, no_op_streak)
+            }
             // Only low-frequency work (welcome shimmer, Cmd link poll):
             // don't spin the full 30fps loop for it.
             crate::app::app_view::TickDemand::Slow => {
-                interval.max(crate::app::app_view::SLOW_TICK_INTERVAL)
+                let base = interval.max(crate::app::app_view::SLOW_TICK_INTERVAL);
+                idle_tick_backoff(base, no_op_streak)
             }
         };
         *tick_at = Some(Instant::now() + interval);
@@ -2843,6 +2886,18 @@ fn process_effects(
 mod tests {
     use super::*;
     use crossterm::event::{KeyEvent, KeyEventState};
+
+    #[test]
+    fn idle_tick_backoff_doubles_up_to_cap() {
+        let base = Duration::from_millis(16);
+        assert_eq!(idle_tick_backoff(base, 0), base);
+        assert_eq!(idle_tick_backoff(base, 1), Duration::from_millis(32));
+        assert_eq!(idle_tick_backoff(base, 2), Duration::from_millis(64));
+        assert_eq!(idle_tick_backoff(base, 3), Duration::from_millis(128));
+        // 16 * 16 = 256 → capped at 250
+        assert_eq!(idle_tick_backoff(base, 4), Duration::from_millis(250));
+        assert_eq!(idle_tick_backoff(base, 20), Duration::from_millis(250));
+    }
 
     // ── plan_reconnect_load ──────────────────────────────────────────────
 

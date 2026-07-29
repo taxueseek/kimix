@@ -1,6 +1,14 @@
 /// Default auto-compact threshold (% of context window) when no source sets it.
 pub const DEFAULT_AUTO_COMPACT_THRESHOLD_PERCENT: u8 = 75;
 
+/// Default effective context cap (tokens) for compaction trigger math.
+/// Aligns with NoLiMa quality cliff; set 0 via config/env to disable.
+pub const DEFAULT_MAX_EFFECTIVE_CONTEXT_TOKENS: u32 = 200_000;
+
+/// Env override for `max_effective_context_tokens`. Parsed as `u32`.
+/// `0` disables the cap (use full model context window).
+pub(crate) const ENV_MAX_EFFECTIVE_CONTEXT_TOKENS: &str = "KIMIX_MAX_EFFECTIVE_CONTEXT_TOKENS";
+
 /// Env-var override for `auto_compact_threshold_percent`. Parsed as `u8`;
 /// out-of-range or unparseable values are ignored.
 pub(crate) const ENV_AUTO_COMPACT_THRESHOLD_PERCENT: &str = "KIMIX_AUTO_COMPACT_THRESHOLD_PERCENT";
@@ -127,6 +135,24 @@ pub fn resolve_compaction_wall_clock_budget_secs(gb_global: Option<u64>) -> u64 
     resolved
 }
 
+/// Resolve the effective-context cap used for compaction triggers and the
+/// prompt 80% observability log.
+///
+/// Precedence (highest first):
+/// 1. env `KIMIX_MAX_EFFECTIVE_CONTEXT_TOKENS`
+/// 2. user TOML `[session].max_effective_context_tokens`
+/// 3. [`DEFAULT_MAX_EFFECTIVE_CONTEXT_TOKENS`] (200_000)
+///
+/// `0` disables the cap (full model context window is used for thresholds).
+pub fn resolve_max_effective_context_tokens(user_session: Option<u32>) -> u32 {
+    if let Ok(raw) = std::env::var(ENV_MAX_EFFECTIVE_CONTEXT_TOKENS)
+        && let Ok(n) = raw.trim().parse::<u32>()
+    {
+        return n;
+    }
+    user_session.unwrap_or(DEFAULT_MAX_EFFECTIVE_CONTEXT_TOKENS)
+}
+
 #[cfg(test)]
 mod compaction_wall_clock_budget_tests {
     use super::resolve_compaction_wall_clock_budget_secs as resolve;
@@ -138,5 +164,24 @@ mod compaction_wall_clock_budget_tests {
         assert_eq!(resolve(Some(450)), 450); // server global wins
         assert_eq!(resolve(Some(0)), 0); // 0 explicitly disables (no clamp)
         assert_eq!(resolve(Some(5)), 5); // low values pass through (warned, not clamped)
+    }
+}
+
+#[cfg(test)]
+mod max_effective_context_tokens_tests {
+    use super::{DEFAULT_MAX_EFFECTIVE_CONTEXT_TOKENS, resolve_max_effective_context_tokens};
+
+    #[test]
+    fn default_is_200k() {
+        assert_eq!(DEFAULT_MAX_EFFECTIVE_CONTEXT_TOKENS, 200_000);
+    }
+
+    #[test]
+    fn user_session_honored_when_env_unset() {
+        if std::env::var(super::ENV_MAX_EFFECTIVE_CONTEXT_TOKENS).is_err() {
+            assert_eq!(resolve_max_effective_context_tokens(None), 200_000);
+            assert_eq!(resolve_max_effective_context_tokens(Some(0)), 0);
+            assert_eq!(resolve_max_effective_context_tokens(Some(150_000)), 150_000);
+        }
     }
 }
