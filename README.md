@@ -67,7 +67,7 @@ irm https://raw.githubusercontent.com/taxueseek/kimix/main/install.ps1 | iex
 ```
 
 ```sh
-kimix --version   # kimix 0.1.12 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.14 … unofficial Kimi Code CLI community build
 kimix login       # Kimi Code 订阅登录（设备码 OAuth 流程）
 kimix             # 启动全屏 TUI
 kimix -p "你好"    # 无头模式，直接提问
@@ -196,7 +196,7 @@ irm https://raw.githubusercontent.com/taxueseek/kimix/main/install.ps1 | iex
 ```
 
 ```sh
-kimix --version   # kimix 0.1.12 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.14 … unofficial Kimi Code CLI community build
 kimix login       # sign in with your Kimi Code subscription (device-code OAuth)
 kimix             # start the TUI
 kimix -p "Hello"  # headless mode
