@@ -581,6 +581,23 @@ impl ScrollbackState {
             self.running.insert(id);
         }
 
+        // Hard cap: evict the oldest non-running entry when we've hit the limit.
+        // Running entries (agent streaming in progress) are never evicted.
+        const MAX_SCROLLBACK_ENTRIES: usize = 8192;
+        while self.entries.len() >= MAX_SCROLLBACK_ENTRIES {
+            let evict_id = self
+                .entries
+                .keys()
+                .find(|id| !self.running.contains(id))
+                .copied();
+            match evict_id {
+                Some(id) => {
+                    self.remove_entry(id);
+                }
+                None => break, // All entries are running; cannot evict further
+            }
+        }
+
         self.entries.insert(id, entry);
         if self.batch_depth == 0 {
             self.rebuild_turns();

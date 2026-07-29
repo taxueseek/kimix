@@ -7,6 +7,7 @@ description = "Cache-friendly prompt construction with message pipeline and inje
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+tracing = "0.1"
 
 [dev-dependencies]
 serde_json = { workspace = true }
