@@ -266,11 +266,14 @@ impl SubagentBackend for ChannelBackend {
 pub const VALIDATE_TYPE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// Env-var override for [`VALIDATE_TYPE_TIMEOUT`] (positive milliseconds).
+/// Legacy xAI name kept for backwards compatibility.
 pub const VALIDATE_TYPE_TIMEOUT_ENV_VAR: &str = "XAI_VALIDATE_TYPE_TIMEOUT_MS";
 
 /// Validation timeout, honoring the env-var override.
 pub(crate) fn validate_type_timeout() -> std::time::Duration {
-    let raw = std::env::var(VALIDATE_TYPE_TIMEOUT_ENV_VAR).ok();
+    let raw = std::env::var("KIMIX_VALIDATE_TYPE_TIMEOUT_MS")
+        .ok()
+        .or_else(|| std::env::var(VALIDATE_TYPE_TIMEOUT_ENV_VAR).ok());
     parse_timeout_ms(raw.as_deref())
         .map(std::time::Duration::from_millis)
         .unwrap_or(VALIDATE_TYPE_TIMEOUT)

@@ -176,7 +176,7 @@ const GREP_TIMEOUT_DEFAULT_SECS: u64 = 20;
 const GREP_TIMEOUT_WSL_SECS: u64 = 60;
 
 /// Grep's wall-clock timeout in whole seconds: 60s on WSL (slow filesystem), 20s elsewhere.
-fn grep_timeout_secs(is_wsl: bool) -> u64 {
+pub(crate) fn grep_timeout_secs(is_wsl: bool) -> u64 {
     if is_wsl {
         GREP_TIMEOUT_WSL_SECS
     } else {
@@ -185,7 +185,7 @@ fn grep_timeout_secs(is_wsl: bool) -> u64 {
 }
 
 /// Grep's wall-clock timeout for the current platform.
-fn grep_timeout() -> Duration {
+pub(crate) fn grep_timeout() -> Duration {
     Duration::from_secs(grep_timeout_secs(kimix_tty_utils::is_wsl()))
 }
 

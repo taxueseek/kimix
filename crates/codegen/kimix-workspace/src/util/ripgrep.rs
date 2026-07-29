@@ -26,7 +26,9 @@ fn resolve_bundled_rg() -> std::io::Result<PathBuf> {
         ));
     if !p.exists() {
         fs::create_dir_all(p.parent().unwrap())?;
-        fs::write(&p, RG_BYTES)?;
+        let tmp = p.with_extension("tmp");
+        fs::write(&tmp, RG_BYTES)?;
+        fs::rename(&tmp, &p)?;
         let mut perms = fs::metadata(&p)?.permissions();
         perms.set_mode(0o755);
         fs::set_permissions(&p, perms)?;
