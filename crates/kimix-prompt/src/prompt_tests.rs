@@ -12,6 +12,7 @@ mod tests {
             max_ephemeral_kept: 5,
             max_tool_output_tokens: 10000,
             context_window: None,
+            max_effective_context_tokens: None,
         }
     }
 

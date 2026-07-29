@@ -138,7 +138,7 @@ fn picker_still_drops_build_row_with_empty_summary() {
 }
 #[test]
 fn parse_kill_outcome_reads_result_envelope() {
-    use kimix_tools::types::KillOutcome;
+    use kimix_shell::extensions::task::KillOutcome;
     let resp = r#"{"result":{"taskId":"t-1","outcome":"not_found"}}"#;
     assert_eq!(parse_kill_outcome(resp), Some(KillOutcome::NotFound));
     let resp = r#"{"result":{"taskId":"t-1","outcome":"killed"}}"#;
@@ -153,7 +153,7 @@ fn parse_kill_outcome_reads_result_envelope() {
 fn parse_kill_outcome_round_trips_agent_serialization() {
     use kimix_shell::extensions::task::KillTaskResponse;
     use kimix_shell::session::result::ExtMethodResult;
-    use kimix_tools::types::KillOutcome;
+    use kimix_shell::extensions::task::KillOutcome;
     let wire = serde_json::to_string(
             &ExtMethodResult::success(KillTaskResponse {
                 task_id: "t-1".into(),

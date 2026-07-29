@@ -349,6 +349,10 @@ pub(crate) async fn spawn_session_actor(
         reasoning_effort: sampling_config.reasoning_effort,
         stream_tool_calls: Some(sampling_config.stream_tool_calls),
     };
+    // Wire context window into PromptConfig for 80% usage observability.
+    crate::session::kimix_recall::set_context_window(
+        chat_state_sampling_config.context_window.get(),
+    );
     let actor_pruning_config = kimix_chat_state::PruningConfig {
         enabled: session_pruning_config.enabled,
         keep_last_n_turns: session_pruning_config.keep_last_n_turns,
@@ -520,6 +524,7 @@ pub(crate) async fn spawn_session_actor(
     let initial_agent_type = Some(agent_definition.name.clone());
     let compaction_policy = kimix_agent::CompactionPolicy {
         auto_compact_threshold_percent: auto_compact_threshold_percent as u32,
+        max_effective_context_tokens: 200_000,
         compact_model: None,
         memory_flush_enabled: memory_config.as_ref().is_some_and(|mc| mc.flush.enabled),
         wall_clock_budget_secs: crate::util::config::resolve_compaction_wall_clock_budget_secs(

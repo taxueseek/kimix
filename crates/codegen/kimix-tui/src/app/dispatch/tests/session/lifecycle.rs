@@ -1517,7 +1517,7 @@ fn bg_task_killed_no_op_for_unknown_session() {
         Action::TaskComplete(TaskResult::BgTaskKilled {
             session_id: "nonexistent".into(),
             task_id: "task-B-1".into(),
-            outcome: Some(kimix_tools::types::KillOutcome::AlreadyExited),
+            outcome: Some(kimix_shell::extensions::task::KillOutcome::AlreadyExited),
         }),
         &mut app,
     );

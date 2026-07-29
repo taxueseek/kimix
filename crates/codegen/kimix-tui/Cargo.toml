@@ -90,6 +90,7 @@ kimix-update = { path = "../kimix-update" }
 # ACP
 agent-client-protocol = { workspace = true }
 kimix-acp-lib = { workspace = true }
+kimix-headless = { workspace = true }
 kimix-file-utils = { path = "../kimix-file-utils" }
 kimix-config = { workspace = true }
 kimix-shell = { workspace = true }

@@ -133,11 +133,24 @@ pub fn should_compact(
         return None;
     }
 
-    let threshold = (context_window as u64 * policy.trigger_threshold_percent as u64 / 100) as u32;
+    // Cap the effective context window for threshold computation.
+    // Large-context models (1M tokens) hit a quality cliff well below
+    // their nominal window; this cap keeps compaction triggers in the
+    // reliable working range (research shows degradation starts at ~32K,
+    // becomes severe beyond ~200K).
+    let effective_window = if policy.max_effective_context_tokens > 0 {
+        context_window.min(policy.max_effective_context_tokens)
+    } else {
+        context_window
+    };
+
+    let threshold =
+        (effective_window as u64 * policy.trigger_threshold_percent as u64 / 100) as u32;
     if last_prompt_tokens <= threshold {
         return None;
     }
 
+    // Report percent against actual context_window for observability
     let percent = (last_prompt_tokens as u64 * 100 / context_window as u64).min(100) as u8;
     Some(IntraCompactionTrigger {
         last_prompt_tokens,
@@ -155,7 +168,7 @@ mod tests {
         IntraCompactionConfig {
             enabled: true,
             // Default mode is FullReplace — min_steps stored but not enforced.
-            trigger_threshold_percent: 85,
+            trigger_threshold_percent: 75,
             target_threshold_percent: 50,
             min_steps_before_compact: 3,
             ..Default::default()
@@ -179,8 +192,8 @@ mod tests {
     #[test]
     fn returns_none_when_below_threshold() {
         let p = enabled_policy();
-        // 84% of 100K = 84_000, threshold 85% = 85_000.
-        assert!(should_compact(&p, 84_000, 100_000, 10).is_none());
+        // 74% of 100K = 74_000, threshold 75% = 75_000.
+        assert!(should_compact(&p, 74_000, 100_000, 10).is_none());
     }
 
     #[test]
@@ -239,8 +252,46 @@ mod tests {
     fn boundary_exact_threshold_does_not_trigger() {
         let p = enabled_policy();
         // last_prompt_tokens == threshold: not strictly greater than.
-        assert!(should_compact(&p, 85_000, 100_000, 10).is_none());
+        assert!(should_compact(&p, 75_000, 100_000, 10).is_none());
         // One above triggers.
-        assert!(should_compact(&p, 85_001, 100_000, 10).is_some());
+        assert!(should_compact(&p, 75_001, 100_000, 10).is_some());
+    }
+
+    #[test]
+    fn effective_cap_triggers_earlier_for_large_context() {
+        let p = enabled_policy();
+        // 1M context, cap at 200K, threshold 75% of 200K = 150K
+        // 180K tokens should trigger (180K > 150K)
+        assert!(should_compact(&p, 180_000, 1_000_000, 10).is_some());
+        // 120K tokens should NOT trigger (120K < 150K)
+        assert!(should_compact(&p, 120_000, 1_000_000, 10).is_none());
+    }
+
+    #[test]
+    fn effective_cap_does_not_affect_small_context() {
+        let p = enabled_policy();
+        // 64K context, cap at 200K — cap doesn't apply
+        // 75% of 64K = 48K
+        assert!(should_compact(&p, 50_000, 64_000, 10).is_some());
+        assert!(should_compact(&p, 40_000, 64_000, 10).is_none());
+    }
+
+    #[test]
+    fn effective_cap_disabled_when_zero() {
+        let mut p = enabled_policy();
+        p.max_effective_context_tokens = 0;
+        // 1M context, cap disabled, threshold 75% of 1M = 750K
+        assert!(should_compact(&p, 800_000, 1_000_000, 10).is_some());
+        assert!(should_compact(&p, 700_000, 1_000_000, 10).is_none());
+    }
+
+    #[test]
+    fn effective_cap_at_boundary_256k() {
+        let p = enabled_policy();
+        // 256K context, cap at 200K, threshold 75% of 200K = 150K
+        // 160K tokens should trigger (160K > 150K)
+        assert!(should_compact(&p, 160_000, 256_000, 10).is_some());
+        // 140K tokens should NOT trigger (140K < 150K)
+        assert!(should_compact(&p, 140_000, 256_000, 10).is_none());
     }
 }

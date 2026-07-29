@@ -1,0 +1,39 @@
+[package]
+name = "kimix-headless"
+version.workspace = true
+edition.workspace = true
+license = "Apache-2.0"
+authors = ["Kimix Contributors"]
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = [
+    "sync",
+    "rt",
+    "macros",
+    "rt-multi-thread",
+    "io-util",
+    "io-std",
+] }
+tokio-util = { workspace = true, features = ["compat"] }
+tracing = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+dunce = { workspace = true }
+chrono = { workspace = true }
+indexmap = { workspace = true, features = ["serde"] }
+uuid = { workspace = true, features = ["v4"] }
+
+agent-client-protocol = { workspace = true }
+kimix-acp-lib = { workspace = true }
+kimix-shell = { workspace = true }
+kimix-workspace = { workspace = true }
+kimix-log = { workspace = true }
+kimix-version = { workspace = true }
+kimix-tools = { workspace = true }
+
+[features]
+default = []
+# Enable when the kimix-tui crate also builds with test-support.
+test-support = []

@@ -70,52 +70,62 @@ mod imp {
         /// 2. Block all signals on this thread
         /// 3. Suspend the thread forever via select()
         unsafe extern "C" fn subagent_crash_handler(
-            sig: libc::c_int,
+            _sig: libc::c_int,
             _info: *mut libc::siginfo_t,
             _ctx: *mut libc::c_void,
         ) {
             // Write crash info to stderr (async-signal-safe)
             let msg =
                 b"\n=== SUBAGENT CRASH: Suspending thread instead of terminating process ===\n";
-            let _ = libc::write(
-                libc::STDERR_FILENO,
-                msg.as_ptr() as *const libc::c_void,
-                msg.len(),
-            );
+            unsafe {
+                let _ = libc::write(
+                    libc::STDERR_FILENO,
+                    msg.as_ptr() as *const libc::c_void,
+                    msg.len(),
+                );
+            }
 
             // Block all signals on this thread
-            let mut mask: sigset_t = std::mem::zeroed();
-            sigfillset(&mut mask);
-            pthread_sigmask(SIG_BLOCK, &mask, std::ptr::null_mut());
+            unsafe {
+                let mut mask: sigset_t = std::mem::zeroed();
+                sigfillset(&mut mask);
+                pthread_sigmask(SIG_BLOCK, &mask, std::ptr::null_mut());
+            }
 
             // Suspend the thread forever
             // Note: select() is async-signal-safe on most platforms
             loop {
-                let mut tv: timeval = std::mem::zeroed();
+                let mut tv: timeval = unsafe { std::mem::zeroed() };
                 tv.tv_sec = 3600; // 1 hour
-                let _ = select(
-                    0,
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                    &mut tv,
-                );
+                unsafe {
+                    let _ = select(
+                        0,
+                        std::ptr::null_mut(),
+                        std::ptr::null_mut(),
+                        std::ptr::null_mut(),
+                        &mut tv,
+                    );
+                }
             }
         }
 
         // Install handler for SIGSEGV
-        let mut sa: libc::sigaction = std::mem::zeroed();
-        sa.sa_sigaction = subagent_crash_handler as libc::sighandler_t;
+        let mut sa: libc::sigaction = unsafe { std::mem::zeroed() };
+        sa.sa_sigaction = subagent_crash_handler as *const () as libc::sighandler_t;
         sa.sa_flags = libc::SA_SIGINFO;
-        sigemptyset(&mut sa.sa_mask);
-        sigaction(SIGSEGV, &sa, std::ptr::null_mut());
+        unsafe {
+            sigemptyset(&mut sa.sa_mask);
+            sigaction(SIGSEGV, &sa, std::ptr::null_mut());
+        }
 
         // Install handler for SIGBUS
-        let mut sa: libc::sigaction = std::mem::zeroed();
-        sa.sa_sigaction = subagent_crash_handler as libc::sighandler_t;
+        let mut sa: libc::sigaction = unsafe { std::mem::zeroed() };
+        sa.sa_sigaction = subagent_crash_handler as *const () as libc::sighandler_t;
         sa.sa_flags = libc::SA_SIGINFO;
-        sigemptyset(&mut sa.sa_mask);
-        sigaction(SIGBUS, &sa, std::ptr::null_mut());
+        unsafe {
+            sigemptyset(&mut sa.sa_mask);
+            sigaction(SIGBUS, &sa, std::ptr::null_mut());
+        }
     }
 
     /// Remove subagent crash handler and restore default signal handling.
@@ -127,10 +137,12 @@ mod imp {
         use libc::{SIG_DFL, SIGBUS, SIGSEGV, sigaction};
 
         // Restore default handlers
-        let mut sa: libc::sigaction = std::mem::zeroed();
+        let mut sa: libc::sigaction = unsafe { std::mem::zeroed() };
         sa.sa_sigaction = SIG_DFL;
-        sigaction(SIGSEGV, &sa, std::ptr::null_mut());
-        sigaction(SIGBUS, &sa, std::ptr::null_mut());
+        unsafe {
+            sigaction(SIGSEGV, &sa, std::ptr::null_mut());
+            sigaction(SIGBUS, &sa, std::ptr::null_mut());
+        }
 
         IS_SUBAGENT_THREAD.store(false, Ordering::Relaxed);
     }
@@ -180,6 +192,12 @@ impl SubagentCrashGuard {
             install_subagent_crash_handler();
         }
         Self { installed: true }
+    }
+}
+
+impl Default for SubagentCrashGuard {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

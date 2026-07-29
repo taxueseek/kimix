@@ -1,5 +1,5 @@
 /// Default auto-compact threshold (% of context window) when no source sets it.
-pub const DEFAULT_AUTO_COMPACT_THRESHOLD_PERCENT: u8 = 85;
+pub const DEFAULT_AUTO_COMPACT_THRESHOLD_PERCENT: u8 = 75;
 
 /// Env-var override for `auto_compact_threshold_percent`. Parsed as `u8`;
 /// out-of-range or unparseable values are ignored.
@@ -24,7 +24,7 @@ pub(crate) const ENV_AUTO_COMPACT_THRESHOLD_PERCENT: &str = "KIMIX_AUTO_COMPACT_
 ///      user-vs-GB per-model distinction is preserved)
 ///   5. remote settings global `RemoteSettings.auto_compact_threshold_percent`
 ///      (populated from `kimix_settings.auto_compact_threshold_percent`)
-///   6. default `DEFAULT_AUTO_COMPACT_THRESHOLD_PERCENT` (85)
+///   6. default `DEFAULT_AUTO_COMPACT_THRESHOLD_PERCENT` (75)
 ///
 /// Values outside `0..=100` from the env var are ignored with a debug log and
 /// the resolver falls through to the next tier. TOML/remote fields are typed

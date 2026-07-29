@@ -191,7 +191,7 @@ fn zh_lookup(en: &str) -> Option<&'static str> {
         "Always Approve Mode" => "自动批准模式",
         "Multiline Input" => "多行输入",
         "Tools" => "工具",
-        "Hooks" => "Hooks",
+        "Hooks" => "钩子",
         "Plugins" => "插件",
         "Skills" => "技能",
         "MCP Servers" => "MCP 服务器",
@@ -407,7 +407,6 @@ fn zh_lookup(en: &str) -> Option<&'static str> {
         "Browser login, API keys, OIDC, external auth providers" => {
             "浏览器登录、API 密钥、OIDC、外部认证"
         }
-        "Keyboard Shortcuts" => "键盘快捷键",
         "Complete reference for all TUI key bindings" => "所有 TUI 快捷键的完整参考",
         "Slash Commands" => "斜杠命令",
         "All / commands for session management, models, memory, hooks" => {
@@ -419,13 +418,9 @@ fn zh_lookup(en: &str) -> Option<&'static str> {
         }
         "Theming and Appearance" => "主题与外观",
         "Themes, color support, pager.toml customization" => "主题、颜色支持、pager.toml 自定义",
-        "MCP Servers" => "MCP 服务器",
         "Setting up external tool integrations via MCP" => "通过 MCP 设置外部工具集成",
-        "Skills" => "技能",
         "Creating and using reusable prompt packages" => "创建和使用可复用的提示词包",
-        "Plugins" => "插件",
         "Installing, managing, and creating plugin packages" => "安装、管理和创建插件包",
-        "Hooks" => "钩子",
         "Project lifecycle scripts for pre/post tool-use events" => {
             "工具使用前后的项目生命周期脚本"
         }
@@ -739,54 +734,6 @@ fn zh_lookup(en: &str) -> Option<&'static str> {
         "Oscura Midnight" => "幽暗午夜",
 
         // ── 设置面板：选项描述 ─────────────────────────────────
-        "Follow system dark/light appearance." => "跟随系统深浅色外观。",
-        "Neutral dark with magenta accent." => "中性深色，品红点缀。",
-        "Light theme for bright environments." => "适合明亮环境的浅色主题。",
-        "Dark + blue-tinted; needs truecolor." => "深色偏蓝；需要 truecolor 支持。",
-        "Muted dark with mauve accents; needs truecolor." => {
-            "柔和深色，紫红点缀；需要 truecolor 支持。"
-        }
-        "Deep dark with warm accents; needs truecolor." => {
-            "深邃深色，暖色点缀；需要 truecolor 支持。"
-        }
-        "Dark plum with sakura-pink accents. 暗夜樱花。" => "深梅底色，樱粉点缀。",
-        "Dark green with jade accents. 暗夜森林。" => "深绿底色，翠玉点缀。",
-        "Deep space black with cold blue. 月之暗面。" => "深空黑，冷蓝点缀。",
-        "Moonlit white with warm silver. 月之亮面。" => "月光白，暖银点缀。",
-        "Deep crimson with blood red glow. 红月。" => "深红底色，血红光晕。",
-        "Grok inspired dark theme." => "受 Grok 启发的深色主题。",
-        "Deep ocean blue whale theme. 蓝鲸。" => "深海蓝鲸主题。",
-        "Use the agent's default permission behavior (currently equivalent to Ask)." => {
-            "使用 Agent 的默认权限行为（目前等同于 Ask）。"
-        }
-        "Prompt for permission before tool actions." => "工具操作前征求确认。",
-        "LLM classifier approves safe tools; dangerous actions may still prompt or deny." => {
-            "LLM 分类器自动批准安全工具；危险操作仍可能询问或拒绝。"
-        }
-        "Auto-approve every tool action. Skips ALL permission prompts." => {
-            "自动批准所有工具操作，跳过全部权限提示。"
-        }
-        "Follow the system locale. 跟随系统语言。" => "跟随系统语言。",
-        "Simplified Chinese interface. 简体中文界面。" => "简体中文界面。",
-        "English interface. 英文界面。" => "英文界面。",
-        "Agent runs tools and edits files directly (default)." => {
-            "Agent 直接运行工具、修改文件（默认）。"
-        }
-        "Agent summarises a plan and asks for approval before running tools." => {
-            "Agent 先给出计划摘要，经确认后再运行工具。"
-        }
-        "Show diagrams with a clickable row to open/copy the rendered image." => {
-            "显示图表，并附一行可点击入口用于打开/复制渲染图。"
-        }
-        "Same as auto: always show the clickable affordance row." => {
-            "同 auto：始终显示可点击的操作入口。"
-        }
-        "Always show the raw Mermaid source as a code block." => {
-            "始终以代码块显示 Mermaid 原始源码。"
-        }
-        "Detect wheel vs trackpad per gesture from event timing. Default." => {
-            "根据事件时序逐次判断滚轮或触控板。默认。"
-        }
         "Always treat scrolling as wheel notches (fixed lines per tick)." => {
             "始终把滚动当作滚轮刻度（每次固定行数）。"
         }

@@ -189,6 +189,11 @@ impl KimixPromptAdapter {
     pub fn is_prune_enabled(&self) -> bool {
         self.prompt.is_prune_enabled()
     }
+
+    /// Set the context window for auto-compact observability (80% usage logging).
+    pub fn set_context_window(&mut self, window: usize) {
+        self.prompt.set_context_window(window);
+    }
 }
 
 // ============================================================================

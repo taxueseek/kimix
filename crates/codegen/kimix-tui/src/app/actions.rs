@@ -2118,7 +2118,7 @@ pub enum TaskResult {
     BgTaskKilled {
         session_id: String,
         task_id: String,
-        outcome: Option<kimix_tools::types::KillOutcome>,
+        outcome: Option<kimix_shell::extensions::task::KillOutcome>,
     },
     /// Background task kill failed.
     BgTaskKillFailed {

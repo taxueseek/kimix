@@ -115,12 +115,6 @@ pub struct McpEnvVar {
     pub value: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum McpServerSource {
-    Local,
-}
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpServerSessionState {
@@ -141,19 +135,7 @@ pub enum McpSessionStatus {
     Unavailable,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct McpToolEntry {
-    pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub display_name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
-    pub meta: Option<serde_json::Value>,
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-}
+pub use kimix_shell_base::extensions_types::{McpServerSource, McpToolEntry};
 
 // ── Wire types: mcp/call ────────────────────────────────────────────
 

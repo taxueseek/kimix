@@ -15,29 +15,50 @@ use crate::types::{
 
 /// Handle to communicate with ChatStateActor.
 /// This is cheap to clone and can be shared across tasks.
+///
+/// The underlying channel is bounded (512). Fire-and-forget methods use
+/// `try_send`: under extreme backpressure a command may be dropped and
+/// a warning logged. Query-style methods use `send().await` and will
+/// wait for buffer space before the actor processes the request.
 #[derive(Clone)]
 pub struct ChatStateHandle {
-    cmd_tx: mpsc::UnboundedSender<ChatStateCommand>,
+    cmd_tx: mpsc::Sender<ChatStateCommand>,
 }
 
 impl ChatStateHandle {
     /// Create a new handle with the given command sender.
-    pub(crate) fn new(cmd_tx: mpsc::UnboundedSender<ChatStateCommand>) -> Self {
+    pub(crate) fn new(cmd_tx: mpsc::Sender<ChatStateCommand>) -> Self {
         Self { cmd_tx }
     }
 
     /// Create a no-op handle that discards all commands.
     /// Useful for tests and situations where chat state tracking is not needed.
     pub fn noop() -> Self {
-        let (cmd_tx, _cmd_rx) = mpsc::unbounded_channel();
+        let (cmd_tx, _cmd_rx) = mpsc::channel(1);
         Self { cmd_tx }
+    }
+
+    /// Fire-and-forget send via the bounded channel.
+    /// Logs a warning when the buffer is full; silently discards when the
+    /// actor has shut down.
+    fn send_cmd(&self, cmd: ChatStateCommand) {
+        if let Err(e) = self.cmd_tx.try_send(cmd) {
+            match e {
+                mpsc::error::TrySendError::Full(_) => {
+                    tracing::warn!("ChatStateActor channel full, command dropped");
+                }
+                mpsc::error::TrySendError::Closed(_) => {
+                    tracing::debug!("ChatStateActor closed, command dropped");
+                }
+            }
+        }
     }
 
     // ═══ Fire-and-forget mutations ═══
 
     /// Push a user message into the conversation.
     pub fn push_user_message(&self, item: ConversationItem) {
-        let _ = self.cmd_tx.send(ChatStateCommand::PushUserMessage { item });
+        self.send_cmd(ChatStateCommand::PushUserMessage { item });
     }
 
     /// Push a user message and await acknowledgement that the chat-state actor
@@ -55,36 +76,28 @@ impl ChatStateHandle {
         item: ConversationItem,
         reason: DanglingToolCallReason,
     ) {
-        let _ = self
-            .cmd_tx
-            .send(ChatStateCommand::PushUserMessageWithRepairReason { item, reason });
+        self.send_cmd(ChatStateCommand::PushUserMessageWithRepairReason { item, reason });
     }
 
     /// Record the assistant's response.
     pub fn push_assistant_response(&self, item: ConversationItem) {
-        let _ = self
-            .cmd_tx
-            .send(ChatStateCommand::PushAssistantResponse { item });
+        self.send_cmd(ChatStateCommand::PushAssistantResponse { item });
     }
 
     /// Record a tool result.
     pub fn push_tool_result(&self, item: ConversationItem) {
-        let _ = self.cmd_tx.send(ChatStateCommand::PushToolResult { item });
+        self.send_cmd(ChatStateCommand::PushToolResult { item });
     }
 
     /// Record accumulated token usage.
     pub fn record_token_usage(&self, total_tokens: u64) {
-        let _ = self
-            .cmd_tx
-            .send(ChatStateCommand::RecordTokenUsage { total_tokens });
+        self.send_cmd(ChatStateCommand::RecordTokenUsage { total_tokens });
     }
 
     /// Stash the per-turn `TokenUsage` from the most recent model response.
     /// Fire-and-forget — no ack returned.
     pub fn record_last_turn_usage(&self, usage: TokenUsage) {
-        let _ = self
-            .cmd_tx
-            .send(ChatStateCommand::RecordLastTurnUsage { usage });
+        self.send_cmd(ChatStateCommand::RecordLastTurnUsage { usage });
     }
 
     pub fn record_model_call_usage(
@@ -94,7 +107,7 @@ impl ChatStateHandle {
         api_duration_ms: Option<u64>,
         cost_usd_ticks: Option<i64>,
     ) {
-        let _ = self.cmd_tx.send(ChatStateCommand::RecordModelCallUsage {
+        self.send_cmd(ChatStateCommand::RecordModelCallUsage {
             model_id,
             usage,
             api_duration_ms,
@@ -136,35 +149,27 @@ impl ChatStateHandle {
 
     /// Increment prompt index (called at start of each user turn).
     pub fn increment_prompt_index(&self) {
-        let _ = self.cmd_tx.send(ChatStateCommand::IncrementPromptIndex);
+        self.send_cmd(ChatStateCommand::IncrementPromptIndex);
     }
 
     /// Update the sampling config (e.g., model switch).
     pub fn update_sampling_config(&self, config: SamplingConfig) {
-        let _ = self
-            .cmd_tx
-            .send(ChatStateCommand::UpdateSamplingConfig { config });
+        self.send_cmd(ChatStateCommand::UpdateSamplingConfig { config });
     }
 
     /// Track that the agent edited a file path.
     pub fn record_agent_edited_path(&self, path: String) {
-        let _ = self
-            .cmd_tx
-            .send(ChatStateCommand::RecordAgentEditedPath { path });
+        self.send_cmd(ChatStateCommand::RecordAgentEditedPath { path });
     }
 
     /// Record stream timing metadata.
     pub fn record_stream_start(&self, timestamp_ms: i64) {
-        let _ = self
-            .cmd_tx
-            .send(ChatStateCommand::RecordStreamStart { timestamp_ms });
+        self.send_cmd(ChatStateCommand::RecordStreamStart { timestamp_ms });
     }
 
     /// Record turn timing metadata.
     pub fn record_turn_start(&self, timestamp_ms: i64) {
-        let _ = self
-            .cmd_tx
-            .send(ChatStateCommand::RecordTurnStart { timestamp_ms });
+        self.send_cmd(ChatStateCommand::RecordTurnStart { timestamp_ms });
     }
 
     /// Replace conversation history.
@@ -179,7 +184,7 @@ impl ChatStateHandle {
     }
 
     fn send_replace(&self, items: Vec<ConversationItem>, is_compaction: bool) {
-        let _ = self.cmd_tx.send(ChatStateCommand::ReplaceConversation {
+        self.send_cmd(ChatStateCommand::ReplaceConversation {
             items,
             is_compaction,
         });
@@ -215,39 +220,33 @@ impl ChatStateHandle {
 
     /// Cache prompt text for rewind preview.
     pub fn cache_prompt_text(&self, text: String) {
-        let _ = self.cmd_tx.send(ChatStateCommand::CachePromptText { text });
+        self.send_cmd(ChatStateCommand::CachePromptText { text });
     }
 
     /// Record compaction boundary for rewind.
     pub fn record_compaction_at(&self, prompt_index: usize) {
-        let _ = self
-            .cmd_tx
-            .send(ChatStateCommand::RecordCompactionAt { prompt_index });
+        self.send_cmd(ChatStateCommand::RecordCompactionAt { prompt_index });
     }
 
     /// Flush pending persistence writes to disk.
     pub fn flush(&self) {
-        let _ = self.cmd_tx.send(ChatStateCommand::Flush);
+        self.send_cmd(ChatStateCommand::Flush);
     }
 
     /// Update opaque credential secrets held by the actor.
     pub fn update_credentials(&self, credentials: Credentials) {
-        let _ = self
-            .cmd_tx
-            .send(ChatStateCommand::UpdateCredentials { credentials });
+        self.send_cmd(ChatStateCommand::UpdateCredentials { credentials });
     }
 
     /// Restore from a snapshot.
     pub fn restore_snapshot(&self, snapshot: ChatStateSnapshot) {
-        let _ = self
-            .cmd_tx
-            .send(ChatStateCommand::RestoreSnapshot(Box::new(snapshot)));
+        self.send_cmd(ChatStateCommand::RestoreSnapshot(Box::new(snapshot)));
     }
 
     /// Begin capturing turn messages. Call at the start of a real user turn
     /// (in `handle_prompt`), before `push_user_message`.
     pub fn begin_turn_capture(&self) {
-        let _ = self.cmd_tx.send(ChatStateCommand::BeginTurnCapture);
+        self.send_cmd(ChatStateCommand::BeginTurnCapture);
     }
 
     /// Append synthetic `task` pairs for a harness-spawned subagent (goal
@@ -259,9 +258,7 @@ impl ChatStateHandle {
         if items.is_empty() {
             return;
         }
-        let _ = self
-            .cmd_tx
-            .send(ChatStateCommand::AppendHarnessTraceItems { items });
+        self.send_cmd(ChatStateCommand::AppendHarnessTraceItems { items });
     }
 
     /// Seal the harness items accumulated since the last flush into one trace
@@ -269,14 +266,12 @@ impl ChatStateHandle {
     /// panel) so each phase becomes its own uploaded `turn_{N}` artifact. No-op
     /// when nothing was recorded since the last flush.
     pub fn flush_harness_trace_turn(&self) {
-        let _ = self.cmd_tx.send(ChatStateCommand::FlushHarnessTraceTurn);
+        self.send_cmd(ChatStateCommand::FlushHarnessTraceTurn);
     }
 
     /// Repair dangling tool calls after a harness-initiated halt.
     pub fn repair_dangling_after_harness_halt(&self, class: &'static str) {
-        let _ = self
-            .cmd_tx
-            .send(ChatStateCommand::RepairDanglingAfterHarnessHalt { class });
+        self.send_cmd(ChatStateCommand::RepairDanglingAfterHarnessHalt { class });
     }
 
     // ═══ Async queries (via oneshot) ═══
@@ -292,7 +287,7 @@ impl ChatStateHandle {
         make_cmd: impl FnOnce(oneshot::Sender<T>) -> ChatStateCommand,
     ) -> Option<T> {
         let (tx, rx) = oneshot::channel();
-        if self.cmd_tx.send(make_cmd(tx)).is_err() {
+        if self.cmd_tx.send(make_cmd(tx)).await.is_err() {
             tracing::error!(cmd_name, "ChatStateActor dead: send failed");
             return None;
         }
@@ -581,7 +576,8 @@ impl ChatStateHandle {
         .flatten()
     }
 
-    /// Get the processed text of the last user query (metadata tags stripped).
+    /// Get the processed text of the last user query (text after the last
+    /// `💬` marker stripped of metadata tags).
     ///
     /// Equivalent to `extract_last_user_query(&full_conv)` but without cloning
     /// the full conversation. Returns `None` if there are no user messages or

@@ -235,7 +235,16 @@ impl SessionActor {
         let estimated_total = self.chat_state_handle.get_estimated_total_tokens().await;
         let threshold = self.compaction.threshold_percent.get() as u64;
         let start_pct = threshold.saturating_sub(prefire_lead_percent());
-        kimix_token_estimation::exceeds_threshold(estimated_total, cw, start_pct as u8)
+        let cap = self
+            .rebuild_spec
+            .compaction_policy
+            .max_effective_context_tokens as u64;
+        let effective_window = if cap > 0 { cw.min(cap) } else { cw };
+        kimix_token_estimation::exceeds_threshold(
+            estimated_total,
+            effective_window,
+            start_pct as u8,
+        )
     }
     /// Background pass-1: summarize the ~95% prefix → NOTE₁ and cache it for a
     /// later pass-2 apply. Always releases the in-flight guard. Spawned via
@@ -743,7 +752,18 @@ impl SessionActor {
                 );
                 if kimix_token_estimation::exceeds_threshold(
                     projected_preserved,
-                    context_window,
+                    {
+                        // Same effective cap as should_auto_compact
+                        let cap = self
+                            .rebuild_spec
+                            .compaction_policy
+                            .max_effective_context_tokens as u64;
+                        if cap > 0 {
+                            context_window.min(cap)
+                        } else {
+                            context_window
+                        }
+                    },
                     self.compaction.threshold_percent.get(),
                 ) {
                     self.compaction
@@ -1686,9 +1706,16 @@ impl SessionActor {
         context_window: std::num::NonZeroU64,
     ) -> Option<AutoCompactTriggerInfo> {
         let cw = context_window.get();
+        // Cap the effective window for threshold computation so large-context
+        // models (1M tokens) compact before hitting the quality cliff.
+        let cap = self
+            .rebuild_spec
+            .compaction_policy
+            .max_effective_context_tokens;
+        let effective_window = if cap > 0 { cw.min(cap as u64) } else { cw };
         if kimix_token_estimation::exceeds_threshold(
             total_tokens,
-            cw,
+            effective_window,
             self.compaction.threshold_percent.get(),
         ) {
             let percentage = kimix_token_estimation::usage_percentage_u8(total_tokens, cw);

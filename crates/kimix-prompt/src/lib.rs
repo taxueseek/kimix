@@ -191,6 +191,13 @@ pub struct PromptConfig {
     /// exceed 80% of this window. Does NOT trigger compaction itself.
     /// Default: None (observability disabled).
     pub context_window: Option<usize>,
+
+    /// Optional maximum effective context window for the 80% observation log.
+    /// When set and `context_window` is larger, the effective window used for
+    /// the 80% ratio is this cap instead of the full context window. Aligns
+    /// with `CompactionPolicy::max_effective_context_tokens`.
+    /// Default: None (use full `context_window`).
+    pub max_effective_context_tokens: Option<usize>,
 }
 
 impl Default for PromptConfig {
@@ -204,6 +211,7 @@ impl Default for PromptConfig {
             max_ephemeral_kept: 3,
             max_tool_output_tokens: 10_000,
             context_window: None,
+            max_effective_context_tokens: None,
         }
     }
 }
@@ -288,17 +296,24 @@ impl AgentPrompt {
             && context_window > 0
         {
             let current_tokens = self.total_estimated_tokens();
-            let token_usage_ratio = current_tokens as f64 / context_window as f64;
+            // Apply effective context cap (aligns with CompactionPolicy)
+            let effective_window = match self.config.max_effective_context_tokens {
+                Some(cap) if cap > 0 => context_window.min(cap),
+                _ => context_window,
+            };
+            let token_usage_ratio = current_tokens as f64 / effective_window as f64;
             if token_usage_ratio > 0.8 {
                 tracing::info!(
                     ratio = token_usage_ratio,
                     current_tokens,
                     context_window,
+                    effective_window,
                     turn = self.turn,
-                    "auto_compact: token usage at {:.1}% ({} / {}), threshold 80% crossed",
+                    "auto_compact: token usage at {:.1}% ({} / {}), effective_window={}, threshold 80% crossed",
                     token_usage_ratio * 100.0,
                     current_tokens,
                     context_window,
+                    effective_window,
                 );
             }
         }
@@ -470,6 +485,11 @@ impl AgentPrompt {
     /// Whether context-budget pruning is enabled.
     pub fn is_prune_enabled(&self) -> bool {
         self.config.context_budget_prune
+    }
+
+    /// Set the context window for auto-compact observability (80% usage logging).
+    pub fn set_context_window(&mut self, window: usize) {
+        self.config.context_window = Some(window);
     }
 }
 

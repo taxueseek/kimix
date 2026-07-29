@@ -123,6 +123,15 @@ pub fn recall_stats() -> usize {
         0
     }
 }
+
+/// Set the context window on the global prompt adapter for auto-compact
+/// observability (80% usage logging in `AgentPrompt::begin_turn`).
+pub fn set_context_window(window: u64) {
+    if let Ok(mut adapter) = prompt_adapter().lock() {
+        adapter.set_context_window(window as usize);
+    }
+}
+
 pub fn reset_all() {
     if let Some(r) = RECALL.get() {
         let _ = r.lock().map(|mut e| *e = KimixRecallEngine::new());

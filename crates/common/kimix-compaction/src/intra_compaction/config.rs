@@ -53,7 +53,7 @@ pub enum IntraSummarizer {
 ///   `agents.<name>.intra_compaction` in agent config YAML (none set today).
 ///   There is no standalone service config for it.
 ///
-/// When `enabled = false` (default), no intra-compaction runs for that agent.
+/// When `enabled = true` (default), intra-compaction runs for this agent.
 ///
 /// Uses **percentage** thresholds (borrowed from Kimix-shell's
 /// `CompactionPolicy`) for portability across models with different context
@@ -86,7 +86,7 @@ pub struct IntraCompactionConfig {
     // are ignored under FullReplace (see per-field docs).
 
     // -- Enablement & strategy selection --
-    /// Enable intra-compaction between steps. Default: `false` (disabled).
+    /// Enable intra-compaction between steps. Default: `true` (enabled).
     pub enabled: bool,
 
     /// Which targets intra-compaction may compact. See [`IntraCompactionMode`].
@@ -96,8 +96,22 @@ pub struct IntraCompactionConfig {
     // -- Trigger gating: when a compaction pass fires (see `should_compact`) --
     /// Context window usage percentage (0-100) that triggers compaction.
     /// Compared against: `last_prompt_tokens / context_length.max_len`.
-    /// Default: `85`.
+    /// Default: `75`.
     pub trigger_threshold_percent: u8,
+
+    /// Maximum effective context window (in tokens) for compaction trigger
+    /// calculation. When the model's context_window exceeds this cap, the
+    /// effective window used for threshold computation is this value instead.
+    ///
+    /// Rationale: LLM output quality degrades non-linearly with context length.
+    /// Research (NoLiMa benchmark, Aider) shows quality drops start at 25-32K
+    /// tokens and become severe beyond 200K. Without this cap, a 1M-context
+    /// model would only compact at 750K tokens — well past the quality cliff.
+    ///
+    /// Default: 200,000 (200K), aligning with Claude Code's recommended
+    /// `CLAUDE_CODE_DISABLE_1M_CONTEXT` + 70% threshold strategy.
+    /// Set to 0 to disable (use full context window).
+    pub max_effective_context_tokens: u32,
 
     /// Minimum number of completed steps before compaction can trigger.
     /// Default: `3`. Always stored on [`IntraCompactionConfig`]; agent YAML
@@ -223,9 +237,10 @@ impl Default for IntraCompactionConfig {
         // is absent in YAML or left blank in an agent config editor.
         Self {
             // Common (all modes; min_steps stored always, enforced except FullReplace)
-            enabled: false,
+            enabled: true,
             mode: IntraCompactionMode::default(),
-            trigger_threshold_percent: 85,
+            trigger_threshold_percent: 75,
+            max_effective_context_tokens: 200_000,
             min_steps_before_compact: 3,
             min_compactable_tokens: 5_000,
             max_reduction_ratio: 0.8,
@@ -248,12 +263,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_is_disabled() {
+    fn default_is_enabled() {
         let p = IntraCompactionConfig::default();
-        assert!(!p.enabled);
+        assert!(p.enabled);
         assert_eq!(p.mode, IntraCompactionMode::FullReplace);
         assert_eq!(p.summarizer, IntraSummarizer::Shared);
-        assert_eq!(p.trigger_threshold_percent, 85);
+        assert_eq!(p.trigger_threshold_percent, 75);
+        assert_eq!(p.max_effective_context_tokens, 200_000);
         assert_eq!(p.target_threshold_percent, 50);
         assert_eq!(
             p.compaction_model_name.as_deref(),

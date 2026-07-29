@@ -38,9 +38,9 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Test
-        run: cargo test --workspace --lib
+        run: cargo test --workspace --all-targets
 
       - name: Deny
         run: |
           cargo install cargo-deny --locked
-          cargo deny check advisories
+          cargo deny check advisories bans sources licenses

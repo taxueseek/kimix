@@ -18,14 +18,24 @@ where
 {
     let opts = width_or_options.into();
     let mut lines: Vec<Range<usize>> = Vec::new();
+    let text_start = text.as_ptr() as usize;
+    let text_end = text_start + text.len();
     for line in textwrap::wrap(text, opts).iter() {
         match line {
             Cow::Borrowed(slice) => {
-                let start = unsafe { slice.as_ptr().offset_from(text.as_ptr()) as usize };
+                let slice_addr = slice.as_ptr() as usize;
+                if slice_addr < text_start || slice_addr > text_end {
+                    continue;
+                }
+                let start = slice_addr - text_start;
                 let end = start + slice.len();
                 lines.push(start..end);
             }
-            Cow::Owned(_) => panic!("wrap_ranges_trim: unexpected owned string"),
+            Cow::Owned(_) => {
+                // textwrap may return Owned when using non-default splitters or indents.
+                // We cannot compute byte offsets for Owned strings; skip them.
+                continue;
+            }
         }
     }
     lines

@@ -11,11 +11,8 @@
 # local sccache install) breaks CI runners and every other machine that
 # clones this repo. Use the RUSTC_WRAPPER env var locally instead.
 
-# 减小 debug 产物体积：行表级 debuginfo + 关闭增量编译 + 关闭 split-debuginfo
-[profile.dev]
-debug = 1
-incremental = false
-split-debuginfo = "off"
+# [profile.dev] is defined in Cargo.toml (debug = "line-tables-only",
+# split-debuginfo = "unpacked"). Do not override here.
 
 [target.x86_64-apple-darwin]
 rustflags = [

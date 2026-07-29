@@ -39,7 +39,8 @@ pub struct TaskToolInput {
     /// retrieve results. This is set to true by default.
     #[schemars(
         description = "Returns immediately with a subagent_id. Use the task output tool to \
-            retrieve results. This is set to true by default."
+            retrieve results. This is set to true by default.",
+        default = "default_true"
     )]
     #[serde(
         default = "default_true",
@@ -869,6 +870,7 @@ pub fn build_task_description(subagents: &[SubagentDescriptor], naming: &TaskToo
          {agent_lines}\n\n\
          ## Usage notes\n\
          - When the agent is done, it returns a single message with its agent ID. Use that ID to resume the agent later for follow-up work.\n\
+         - You can call this tool multiple times in a single turn to spawn multiple subagents in parallel. Subagents run independently and their results can be retrieved with {background_retrieval_tool}.\n\
          - {run_in_background_param}: Returns immediately with a subagent_id. Use {background_retrieval_tool} to retrieve results. This is set to true by default.\n\
          - Subagents receive a compacted version of project instructions (AGENTS.md). If the task requires detailed conventions (e.g., build rules, testing patterns), include the relevant rules directly in the prompt.\n\
          - When using the {task_tool} tool, you must specify a {subagent_type_param} parameter to select which agent type to use.\n\n\

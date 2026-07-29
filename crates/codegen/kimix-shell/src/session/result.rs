@@ -3,74 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::value::to_raw_value;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExtMethodError {
-    pub code: String,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<serde_json::Value>,
-}
-
-impl ExtMethodError {
-    pub fn with_data<D: Serialize>(
-        code: impl Into<String>,
-        message: impl Into<String>,
-        data: D,
-    ) -> Self {
-        Self {
-            code: code.into(),
-            message: message.into(),
-            data: serde_json::to_value(data).ok(),
-        }
-    }
-}
-
-/// Extension method result: `{ result: T | null, error?: string | ExtMethodError }`
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExtMethodResult<T: Serialize> {
-    pub result: Option<T>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<serde_json::Value>,
-}
-
-impl<T: Serialize> ExtMethodResult<T> {
-    pub fn success(result: T) -> Self {
-        Self {
-            result: Some(result),
-            error: None,
-        }
-    }
-
-    pub fn failure(error: impl std::fmt::Display) -> Self {
-        Self {
-            result: None,
-            error: Some(serde_json::Value::String(error.to_string())),
-        }
-    }
-
-    pub fn partial(result: T, error: impl std::fmt::Display) -> Self {
-        Self {
-            result: Some(result),
-            error: Some(serde_json::Value::String(error.to_string())),
-        }
-    }
-
-    pub fn from_result<E: std::fmt::Display>(result: Result<T, E>) -> Self {
-        match result {
-            Ok(value) => Self::success(value),
-            Err(e) => Self::failure(e),
-        }
-    }
-
-    pub fn to_ext_response(&self) -> anyhow::Result<acp::ExtResponse> {
-        serde_json::to_value(self)
-            .and_then(|v| to_raw_value(&v))
-            .map(|raw| acp::ExtResponse::new(Arc::from(raw)))
-            .map_err(|e| anyhow::anyhow!(e))
-    }
-}
+pub use kimix_shell_base::session_types::{ExtMethodError, ExtMethodResult};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Empty {}

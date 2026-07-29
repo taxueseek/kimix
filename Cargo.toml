@@ -22,6 +22,7 @@ members = [
     "crates/codegen/kimix-auth",
     "crates/codegen/kimix-config",
     "crates/codegen/kimix-config-types",
+    "crates/codegen/kimix-headless",
     "crates/codegen/kimix-env",
     "crates/codegen/kimix-hooks",
     "crates/codegen/kimix-http",
@@ -60,10 +61,8 @@ members = [
     "crates/codegen/kimix-sqlite-journal",
     "crates/codegen/kimix-system-power",
     "crates/codegen/kimix-token-estimation",
-    "crates/codegen/kimix-tracing-macros",
     "crates/codegen/kimix-tty-utils",
     "crates/common/kimix-compaction",
-    "crates/common/kimix-interjection-core",
     "crates/common/kimix-test-utils",
     "crates/common/kimix-tool-protocol",
     "crates/common/kimix-tool-runtime",
@@ -78,7 +77,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.14"
+version = "0.1.15"
 edition = "2024"
 license = "Apache-2.0"
 
@@ -261,6 +260,7 @@ kimix-agent = { path = "crates/codegen/kimix-agent" }
 kimix-auth = { path = "crates/codegen/kimix-auth" }
 kimix-config = { path = "crates/codegen/kimix-config" }
 kimix-config-types = { path = "crates/codegen/kimix-config-types" }
+kimix-headless = { path = "crates/codegen/kimix-headless" }
 kimix-env = { path = "crates/codegen/kimix-env" }
 kimix-http = { path = "crates/codegen/kimix-http" }
 kimix-markdown = { path = "crates/codegen/kimix-markdown" }
