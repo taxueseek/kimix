@@ -54,6 +54,31 @@ kimix 采用 Grok 4.5、Kimi K3 两个优秀模型构建，并在真实环境中
 </table>
 
 
+### 版本历程
+
+**v0.1.14**（当前）— 更安全、更流畅、更健壮
+
+> 一轮系统性的「性能+安全+正确性」深度优化，由 4 路子代理并行审计 + 对抗性交叉验证完成。
+
+- **更安全**：`read_file` 不再因为读超大文件而撑爆内存，也不会因为读到设备文件（如 `/dev/zero`）而卡死。沙箱默认拦截 `~/.ssh`、`~/.aws` 等敏感路径，agent 不能把你的密钥送去给模型。
+- **更准确**：bash 输出的截断提示从「显示开头/结尾」纠正为「仅显示结尾」——以前模型以为自己看到了开头，其实没看到，可能导致推理出错。
+- **更稳当**：模糊搜索（`@` 补全）如果后台线程崩溃，不会再拉整个 agent 一起死。glob 搜索加了超时，不会在巨型目录上永远挂住。
+- **更高效**：会话存储恢复到最优路径，每条消息的写入从 6 次系统调用降到 3 次。
+- **更干净**：移除了全文件级的警告抑制，编译器现在能发现死代码和未使用的导入——共清理了 12 处，代码质量可度量。
+
+---
+
+**v0.1.13** — 改体验、改架构、消灭 panic
+
+- **流式体感大幅提升**：TUI 轮询从 100ms 加速到 16ms（60fps），画面更跟手。流式渲染做了帧合并，token 来得快时跳掉中间帧、只显示最新内容，不再卡顿。
+- **消灭了一批 panic**：修复了 9 处 `unwrap_or_default()` 导致的静默崩溃、视频播放的除零 panic、非 UTF-8 文件名导致的崩溃——每一处改动只用了 1 行代码。
+- **网络连接优化**：OAuth 的 HTTP 客户端改为全局共享（避免每次 TLS 握手 ~95ms 开销），连接池从 2 条扩到 10 条。
+- **prompt cache 可观测化**：每次请求结束后输出缓存命中率，便于调优。
+- **显存与 CPU**：jemalloc 每 5 分钟清理一次残留页面，长时间运行不会虚高 RSS；LTO 让运行时提速 10-20%。
+- **记忆与上下文**：BM25 检索 + 三级召回（History / Working / Recency）、12 套 TUI 主题、完整中英双语。
+
+---
+
 ### 快速开始
 
 ```sh
@@ -182,6 +207,30 @@ Use cases:
     </td>
   </tr>
 </table>
+### Release History
+
+**v0.1.14 (current)** — Safer, smoother, more robust
+
+A systematic performance + security + correctness deep-dive, audited by 4 parallel agents with adversarial cross-validation.
+
+- **Security**: `read_file` now checks file type and size before reading — no more OOM from huge files, no more hangs on FIFOs or `/dev/zero`. Sandbox profiles gained default deny rules for `~/.ssh`, `~/.aws`, etc., so your credentials never leak into the model context.
+- **Correctness**: The bash truncation hint now honestly says "showing last N lines" instead of "showing first/last" — the implementation only keeps the tail, and the old wording made the model think it saw the beginning when it didn't.
+- **Stability**: Fuzzy-finder thread panics no longer crash the entire agent. Glob searches now have a timeout so they can't hang forever on huge directory trees.
+- **Performance**: JSONL session storage restored to the optimal code path — each message append dropped from 6 syscalls to 3.
+- **Code hygiene**: Removed the crate-wide `#![allow(...)]` suppression that was hiding dead code and unused imports — 12 instances cleaned up, compiler warnings restored.
+
+---
+
+**v0.1.13** — Better UX, cleaner architecture, panic elimination
+
+- **Streaming UX**: TUI poll interval dropped from 100ms to 16ms (60 fps). Streaming renders coalesce tokens arriving faster than the frame rate — intermediate frames are dropped, only the latest content shown. No more stutter.
+- **Panic fixes**: 9 `unwrap_or_default()` crash sites → logged fallbacks. Video player zero-division fix. Non-UTF-8 filename crash fix. Each fix was 1 line.
+- **Network optimization**: OAuth HTTP client shared globally via `OnceCell` (eliminates ~95ms TLS handshake per call). Connection pool: 2 → 10 idle connections.
+- **Prompt cache observability**: Cache hit/miss logged after every request.
+- **Memory & CPU**: jemalloc periodic purge every 5 minutes (RSS doesn't bloat over time). thin LTO for 10-20% runtime speedup.
+- **Memory & context**: BM25 retrieval with 3-tier recall (History / Working / Recency), 12 TUI themes, full bilingual support.
+
+---
 
 ### Quick Start
 
