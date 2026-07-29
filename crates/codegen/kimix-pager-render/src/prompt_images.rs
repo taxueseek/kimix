@@ -1059,15 +1059,48 @@ fn normalize_line_endings(text: &str) -> std::borrow::Cow<'_, str> {
     }
 }
 
+/// Maximum size for a single pasted image (20 MiB).
+pub const MAX_PASTE_IMAGE_BYTES: usize = 20 * 1024 * 1024;
+
+/// Maximum total size for all images in a single paste operation (100 MiB).
+pub const MAX_TOTAL_PASTE_IMAGE_BYTES: usize = 100 * 1024 * 1024;
+
 /// Filter the output of [`try_read_dropped_paths`] down to image
 /// entries only — kept as a stable API for prior image-only callers.
 /// See [`try_read_dropped_paths`] for the full tokenisation and
 /// decoding behaviour spec.
+///
+/// Images that exceed [`MAX_PASTE_IMAGE_BYTES`] individually are skipped.
+/// Once the cumulative size reaches [`MAX_TOTAL_PASTE_IMAGE_BYTES`],
+/// remaining images are dropped to bound memory usage.
 pub fn try_read_images_from_paste(text: &str) -> Vec<PastedImage> {
+    let mut total_bytes: usize = 0;
     try_read_dropped_paths(text)
         .into_iter()
         .filter_map(|d| match d {
-            DroppedPath::Image(img) => Some(img),
+            DroppedPath::Image(img) => {
+                if img.byte_len > MAX_PASTE_IMAGE_BYTES {
+                    tracing::warn!(
+                        target: PROMPT_IMAGES_TRACING_TARGET,
+                        byte_len = img.byte_len,
+                        limit = MAX_PASTE_IMAGE_BYTES,
+                        "skipping pasted image: exceeds per-image size limit",
+                    );
+                    return None;
+                }
+                if total_bytes + img.byte_len > MAX_TOTAL_PASTE_IMAGE_BYTES {
+                    tracing::warn!(
+                        target: PROMPT_IMAGES_TRACING_TARGET,
+                        current_total = total_bytes,
+                        byte_len = img.byte_len,
+                        limit = MAX_TOTAL_PASTE_IMAGE_BYTES,
+                        "stopping paste: total image size limit reached",
+                    );
+                    return None;
+                }
+                total_bytes += img.byte_len;
+                Some(img)
+            }
             DroppedPath::NonImage(_) => None,
         })
         .collect()

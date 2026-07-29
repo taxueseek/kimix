@@ -281,6 +281,16 @@ impl ScrollbackEntry {
         *self.cached_estimate_lines.borrow_mut() = None;
     }
 
+    /// Invalidate cached output and truncated height, but KEEP the cheap
+    /// height estimate cache. Used on width changes: the underlying content
+    /// hasn't changed, so the estimate is still a reasonable approximation
+    /// within a small tolerance — a full O(history) re-estimate on every
+    /// resize would block the render loop for large sessions.
+    pub fn invalidate_output_caches(&mut self) {
+        *self.cached_output.borrow_mut() = None;
+        *self.cached_truncated_height.borrow_mut() = None;
+    }
+
     /// Drop the heavyweight cached render output (and the block's internal
     /// rebuildable caches) while KEEPING the cheap height caches, so layout —
     /// entry heights, scroll position — is untouched. Re-rendering happens
@@ -297,10 +307,14 @@ impl ScrollbackEntry {
     }
 
     /// Memoized cheap height-estimate line count for `content_width`, if cached.
+    ///
+    /// Accepts cached values within 10% of the requested width so that small
+    /// terminal resizes don't trigger a full O(history) re-estimate of every
+    /// off-screen entry.
     pub fn cached_estimate_lines(&self, content_width: u16) -> Option<u16> {
         self.cached_estimate_lines
             .borrow()
-            .filter(|&(w, _)| w == content_width)
+            .filter(|&(w, _)| w == content_width || w.abs_diff(content_width) * 10 <= w)
             .map(|(_, lines)| lines)
     }
 

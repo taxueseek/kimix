@@ -30,7 +30,7 @@ where
                 let trailing_spaces = text[end..].chars().take_while(|c| *c == ' ').count();
                 lines.push(start..end + trailing_spaces);
             }
-            std::borrow::Cow::Owned(_) => panic!("wrap_ranges: unexpected owned string"),
+            std::borrow::Cow::Owned(_) => continue,
         }
     }
     lines
@@ -58,7 +58,7 @@ where
                 let end = start + slice.len();
                 lines.push(start..end);
             }
-            std::borrow::Cow::Owned(_) => panic!("wrap_ranges_trim: unexpected owned string"),
+            std::borrow::Cow::Owned(_) => continue,
         }
     }
     lines

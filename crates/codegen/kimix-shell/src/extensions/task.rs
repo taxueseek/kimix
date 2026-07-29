@@ -1,5 +1,5 @@
 use agent_client_protocol as acp;
-use kimix_tools::types::{KillOutcome, TaskSnapshot};
+use kimix_tools::types::TaskSnapshot;
 use serde::{Deserialize, Serialize};
 
 use kimix_tools::implementations::kimix::task::types::{
@@ -12,29 +12,9 @@ use crate::session::ExtMethodResult;
 
 type ExtResult = Result<acp::ExtResponse, acp::Error>;
 
-/// Wire DTO for the `Kimix/task/kill` ext request.
-///
-/// `pub` (with both serde directions) so ACP clients (Kimix-tui) build
-/// the request from the same type the agent parses — keeping the wire
-/// contract typed end-to-end instead of duplicated `json!` literals.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KillTaskRequest {
-    pub session_id: String,
-    pub task_id: String,
-}
-
-/// Wire DTO for the `Kimix/task/kill` ext response payload (nested under
-/// `result` in the `ExtMethodResult` envelope).
-///
-/// `pub` (with both serde directions) so ACP clients deserialize the typed
-/// outcome instead of probing raw JSON.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KillTaskResponse {
-    pub task_id: String,
-    pub outcome: KillOutcome,
-}
+pub use kimix_shell_base::extensions_types::{
+    CancelSubagentRequest, KillOutcome, KillTaskRequest, KillTaskResponse,
+};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,16 +26,6 @@ struct ListTasksRequest {
 #[serde(rename_all = "camelCase")]
 struct ListTasksResponse {
     tasks: Vec<TaskSnapshot>,
-}
-
-/// Wire DTO for the `Kimix/subagent/cancel` ext request.
-///
-/// `pub` (with both serde directions) so ACP clients (Kimix-tui) build
-/// the request from the same type the agent parses.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CancelSubagentRequest {
-    pub subagent_id: String,
 }
 
 /// Wire mirror of the coordinator's [`SubagentCancelOutcome`], `kind`-tagged so
@@ -335,7 +305,17 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
                 .await
                 .map(|outcome| KillTaskResponse {
                     task_id: req.task_id,
-                    outcome,
+                    outcome: match outcome {
+                        kimix_tools::types::KillOutcome::Killed => {
+                            kimix_shell_base::extensions_types::KillOutcome::Killed
+                        }
+                        kimix_tools::types::KillOutcome::AlreadyExited => {
+                            kimix_shell_base::extensions_types::KillOutcome::AlreadyExited
+                        }
+                        kimix_tools::types::KillOutcome::NotFound => {
+                            kimix_shell_base::extensions_types::KillOutcome::NotFound
+                        }
+                    },
                 });
             respond(result)
         }

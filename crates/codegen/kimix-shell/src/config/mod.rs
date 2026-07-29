@@ -275,6 +275,27 @@ pub struct SubagentsConfig {
     pub personas: std::collections::HashMap<String, SubagentPersona>,
 }
 use kimix_subagent_resolution::config::{SubagentPersona, SubagentRole};
+use thiserror::Error;
+
+/// Errors that can occur when mutating the kimix config file.
+#[derive(Debug, Error)]
+pub enum ConfigMutationError {
+    /// An I/O error occurred (read, write, create_dir).
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+
+    /// Failed to deserialize the config.toml content.
+    #[error("config parse error: {0}")]
+    TomlDeserialize(String),
+
+    /// Failed to serialize the config.toml content.
+    #[error("config serialize error: {0}")]
+    TomlSerialize(#[from] toml::ser::Error),
+
+    /// The config file has an unexpected structure.
+    #[error("invalid config: {0}")]
+    InvalidConfig(String),
+}
 impl SubagentsConfig {
     fn discover_personas_in_dir(&mut self, dir: &std::path::Path) {
         if !dir.is_dir() {
@@ -1170,17 +1191,19 @@ pub use kimix_config::{deep_merge_toml, expand_env_vars_in_string, expand_env_va
 ///
 /// Creates the `[plugins]` section and `paths` array if they don't exist.
 /// Deduplicates: if the path is already present, this is a no-op.
-pub fn add_plugin_path(path: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn add_plugin_path(path: &str) -> Result<(), ConfigMutationError> {
     let config_path = crate::util::kimix_home::kimix_home().join("config.toml");
     let content = std::fs::read_to_string(&config_path).unwrap_or_default();
     let mut config: toml::Value = if content.is_empty() {
         toml::Value::Table(toml::map::Map::new())
     } else {
-        toml::from_str(&content).map_err(|e| format!("failed to parse config.toml: {e}"))?
+        toml::from_str(&content).map_err(|e| ConfigMutationError::TomlDeserialize(e.to_string()))?
     };
     let table = config
         .as_table_mut()
-        .ok_or("config.toml root is not a table")?;
+        .ok_or(ConfigMutationError::InvalidConfig(
+            "config.toml root is not a table".into(),
+        ))?;
     if !table.contains_key("plugins") {
         table.insert(
             "plugins".to_string(),
@@ -1190,14 +1213,18 @@ pub fn add_plugin_path(path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let plugins = table
         .get_mut("plugins")
         .and_then(|v| v.as_table_mut())
-        .ok_or("[plugins] is not a table")?;
+        .ok_or(ConfigMutationError::InvalidConfig(
+            "[plugins] is not a table".into(),
+        ))?;
     if !plugins.contains_key("paths") {
         plugins.insert("paths".to_string(), toml::Value::Array(vec![]));
     }
     let paths = plugins
         .get_mut("paths")
         .and_then(|v| v.as_array_mut())
-        .ok_or("[plugins].paths is not an array")?;
+        .ok_or(ConfigMutationError::InvalidConfig(
+            "[plugins].paths is not an array".into(),
+        ))?;
     let already_present = paths.iter().any(|v| v.as_str().is_some_and(|s| s == path));
     if !already_present {
         paths.push(toml::Value::String(path.to_string()));
@@ -1211,15 +1238,15 @@ pub fn add_plugin_path(path: &str) -> Result<(), Box<dyn std::error::Error>> {
 /// Remove a plugin path from `[plugins].paths` in `~/.kimix/config.toml`.
 ///
 /// If the path is not found, this is a no-op (returns Ok).
-pub fn remove_plugin_path(path: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn remove_plugin_path(path: &str) -> Result<(), ConfigMutationError> {
     let config_path = crate::util::kimix_home::kimix_home().join("config.toml");
     let content = match std::fs::read_to_string(&config_path) {
         Ok(c) => c,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(e) => return Err(e.into()),
     };
-    let mut config: toml::Value =
-        toml::from_str(&content).map_err(|e| format!("failed to parse config.toml: {e}"))?;
+    let mut config: toml::Value = toml::from_str(&content)
+        .map_err(|e| ConfigMutationError::TomlDeserialize(e.to_string()))?;
     if let Some(plugins) = config
         .as_table_mut()
         .and_then(|t| t.get_mut("plugins"))
@@ -1235,17 +1262,19 @@ pub fn remove_plugin_path(path: &str) -> Result<(), Box<dyn std::error::Error>> 
 ///
 /// Creates the `[plugins]` section and `disabled` array if they don't exist.
 /// Deduplicates: if already present, this is a no-op.
-pub fn add_disabled_plugin(plugin_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn add_disabled_plugin(plugin_id: &str) -> Result<(), ConfigMutationError> {
     let config_path = crate::util::kimix_home::kimix_home().join("config.toml");
     let content = std::fs::read_to_string(&config_path).unwrap_or_default();
     let mut config: toml::Value = if content.is_empty() {
         toml::Value::Table(toml::map::Map::new())
     } else {
-        toml::from_str(&content).map_err(|e| format!("failed to parse config.toml: {e}"))?
+        toml::from_str(&content).map_err(|e| ConfigMutationError::TomlDeserialize(e.to_string()))?
     };
     let table = config
         .as_table_mut()
-        .ok_or("config.toml root is not a table")?;
+        .ok_or(ConfigMutationError::InvalidConfig(
+            "config.toml root is not a table".into(),
+        ))?;
     if !table.contains_key("plugins") {
         table.insert(
             "plugins".to_string(),
@@ -1255,14 +1284,18 @@ pub fn add_disabled_plugin(plugin_id: &str) -> Result<(), Box<dyn std::error::Er
     let plugins = table
         .get_mut("plugins")
         .and_then(|v| v.as_table_mut())
-        .ok_or("[plugins] is not a table")?;
+        .ok_or(ConfigMutationError::InvalidConfig(
+            "[plugins] is not a table".into(),
+        ))?;
     if !plugins.contains_key("disabled") {
         plugins.insert("disabled".to_string(), toml::Value::Array(vec![]));
     }
     let disabled = plugins
         .get_mut("disabled")
         .and_then(|v| v.as_array_mut())
-        .ok_or("[plugins].disabled is not an array")?;
+        .ok_or(ConfigMutationError::InvalidConfig(
+            "[plugins].disabled is not an array".into(),
+        ))?;
     let already = disabled
         .iter()
         .any(|v| v.as_str().is_some_and(|s| s == plugin_id));
@@ -1278,15 +1311,15 @@ pub fn add_disabled_plugin(plugin_id: &str) -> Result<(), Box<dyn std::error::Er
 /// Remove a plugin from `[plugins].disabled` in `~/.kimix/config.toml`.
 ///
 /// If the plugin is not in the disabled list, this is a no-op.
-pub fn remove_disabled_plugin(plugin_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn remove_disabled_plugin(plugin_id: &str) -> Result<(), ConfigMutationError> {
     let config_path = crate::util::kimix_home::kimix_home().join("config.toml");
     let content = match std::fs::read_to_string(&config_path) {
         Ok(c) => c,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(e) => return Err(e.into()),
     };
-    let mut config: toml::Value =
-        toml::from_str(&content).map_err(|e| format!("failed to parse config.toml: {e}"))?;
+    let mut config: toml::Value = toml::from_str(&content)
+        .map_err(|e| ConfigMutationError::TomlDeserialize(e.to_string()))?;
     if let Some(plugins) = config
         .as_table_mut()
         .and_then(|t| t.get_mut("plugins"))
@@ -1302,7 +1335,7 @@ pub fn remove_disabled_plugin(plugin_id: &str) -> Result<(), Box<dyn std::error:
 ///
 /// Creates the `[plugin_cta]` section and `dismissed` array if they don't exist.
 /// Deduplicates: if already present, this is a no-op.
-pub fn add_dismissed_plugin_cta(plugin_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn add_dismissed_plugin_cta(plugin_id: &str) -> Result<(), ConfigMutationError> {
     let config_path = crate::util::kimix_home::kimix_home().join("config.toml");
     add_dismissed_plugin_cta_to_file(plugin_id, &config_path)
 }
@@ -1311,16 +1344,18 @@ pub fn add_dismissed_plugin_cta(plugin_id: &str) -> Result<(), Box<dyn std::erro
 pub fn add_dismissed_plugin_cta_to_file(
     plugin_id: &str,
     config_path: &std::path::Path,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), ConfigMutationError> {
     let content = std::fs::read_to_string(config_path).unwrap_or_default();
     let mut config: toml::Value = if content.is_empty() {
         toml::Value::Table(toml::map::Map::new())
     } else {
-        toml::from_str(&content).map_err(|e| format!("failed to parse config.toml: {e}"))?
+        toml::from_str(&content).map_err(|e| ConfigMutationError::TomlDeserialize(e.to_string()))?
     };
     let table = config
         .as_table_mut()
-        .ok_or("config.toml root is not a table")?;
+        .ok_or(ConfigMutationError::InvalidConfig(
+            "config.toml root is not a table".into(),
+        ))?;
     if !table.contains_key("plugin_cta") {
         table.insert(
             "plugin_cta".to_string(),
@@ -1330,14 +1365,18 @@ pub fn add_dismissed_plugin_cta_to_file(
     let plugin_cta = table
         .get_mut("plugin_cta")
         .and_then(|v| v.as_table_mut())
-        .ok_or("[plugin_cta] is not a table")?;
+        .ok_or(ConfigMutationError::InvalidConfig(
+            "[plugin_cta] is not a table".into(),
+        ))?;
     if !plugin_cta.contains_key("dismissed") {
         plugin_cta.insert("dismissed".to_string(), toml::Value::Array(vec![]));
     }
     let dismissed = plugin_cta
         .get_mut("dismissed")
         .and_then(|v| v.as_array_mut())
-        .ok_or("[plugin_cta].dismissed is not an array")?;
+        .ok_or(ConfigMutationError::InvalidConfig(
+            "[plugin_cta].dismissed is not an array".into(),
+        ))?;
     let already = dismissed
         .iter()
         .any(|v| v.as_str().is_some_and(|s| s == plugin_id));
@@ -1387,10 +1426,12 @@ pub fn dismissed_plugin_ctas_in_file(
 /// CWE-427: Only paths under `~/.kimix/` are allowed to prevent
 /// arbitrary hook path injection that bypasses the project trust gate.
 /// Paths are canonicalized (resolving symlinks and `..`) before checking.
-pub fn validate_hooks_path(path: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn validate_hooks_path(path: &str) -> Result<(), ConfigMutationError> {
     let candidate = std::path::Path::new(path);
     if !candidate.is_absolute() {
-        return Err("Hook path must be absolute.".into());
+        return Err(ConfigMutationError::InvalidConfig(
+            "Hook path must be absolute.".into(),
+        ));
     }
     let kimix_home = crate::util::kimix_home::kimix_home();
     let canonical = dunce::canonicalize(candidate)
@@ -1411,15 +1452,16 @@ pub fn validate_hooks_path(path: &str) -> Result<(), Box<dyn std::error::Error>>
             }
             Ok(resolved)
         })
-        .map_err(|e: std::io::Error| format!("Cannot resolve hook path: {e}"))?;
+        .map_err(|e: std::io::Error| {
+            ConfigMutationError::InvalidConfig(format!("Cannot resolve hook path: {e}"))
+        })?;
     let canonical_home = dunce::canonicalize(&kimix_home).unwrap_or_else(|_| kimix_home.clone());
     if !canonical.starts_with(&canonical_home) {
-        return Err(format!(
+        return Err(ConfigMutationError::InvalidConfig(format!(
             "Hook path must be under ~/.kimix/ ({}). Got: {}",
             canonical_home.display(),
             canonical.display()
-        )
-        .into());
+        )));
     }
     Ok(())
 }
@@ -1448,17 +1490,19 @@ pub fn post_install_plugin(repo_key: &str) -> (Vec<String>, Vec<String>) {
 ///
 /// Used for project-scope plugins that are disabled by default.
 /// Deduplicates: if already present, this is a no-op.
-pub fn add_enabled_plugin(plugin_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn add_enabled_plugin(plugin_id: &str) -> Result<(), ConfigMutationError> {
     let config_path = crate::util::kimix_home::kimix_home().join("config.toml");
     let content = std::fs::read_to_string(&config_path).unwrap_or_default();
     let mut config: toml::Value = if content.is_empty() {
         toml::Value::Table(toml::map::Map::new())
     } else {
-        toml::from_str(&content).map_err(|e| format!("failed to parse config.toml: {e}"))?
+        toml::from_str(&content).map_err(|e| ConfigMutationError::TomlDeserialize(e.to_string()))?
     };
     let table = config
         .as_table_mut()
-        .ok_or("config.toml root is not a table")?;
+        .ok_or(ConfigMutationError::InvalidConfig(
+            "config.toml root is not a table".into(),
+        ))?;
     if !table.contains_key("plugins") {
         table.insert(
             "plugins".to_string(),
@@ -1468,14 +1512,18 @@ pub fn add_enabled_plugin(plugin_id: &str) -> Result<(), Box<dyn std::error::Err
     let plugins = table
         .get_mut("plugins")
         .and_then(|v| v.as_table_mut())
-        .ok_or("[plugins] is not a table")?;
+        .ok_or(ConfigMutationError::InvalidConfig(
+            "[plugins] is not a table".into(),
+        ))?;
     if !plugins.contains_key("enabled") {
         plugins.insert("enabled".to_string(), toml::Value::Array(Vec::new()));
     }
     let enabled = plugins
         .get_mut("enabled")
         .and_then(|v| v.as_array_mut())
-        .ok_or("[plugins].enabled is not an array")?;
+        .ok_or(ConfigMutationError::InvalidConfig(
+            "[plugins].enabled is not an array".into(),
+        ))?;
     let already = enabled
         .iter()
         .any(|v| v.as_str().is_some_and(|s| s == plugin_id));
@@ -1489,15 +1537,15 @@ pub fn add_enabled_plugin(plugin_id: &str) -> Result<(), Box<dyn std::error::Err
     Ok(())
 }
 /// Remove a plugin from `[plugins].enabled` in `~/.kimix/config.toml`.
-pub fn remove_enabled_plugin(plugin_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn remove_enabled_plugin(plugin_id: &str) -> Result<(), ConfigMutationError> {
     let config_path = crate::util::kimix_home::kimix_home().join("config.toml");
     let content = match std::fs::read_to_string(&config_path) {
         Ok(c) => c,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(e) => return Err(e.into()),
     };
-    let mut config: toml::Value =
-        toml::from_str(&content).map_err(|e| format!("failed to parse config.toml: {e}"))?;
+    let mut config: toml::Value = toml::from_str(&content)
+        .map_err(|e| ConfigMutationError::TomlDeserialize(e.to_string()))?;
     if let Some(plugins) = config
         .as_table_mut()
         .and_then(|t| t.get_mut("plugins"))
@@ -1513,7 +1561,7 @@ pub fn remove_enabled_plugin(plugin_id: &str) -> Result<(), Box<dyn std::error::
 ///
 /// If the path is already present (exact string match), this is a no-op.
 /// CWE-427: The path is validated to be under `~/.kimix/` before writing.
-pub fn add_hooks_path(path: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn add_hooks_path(path: &str) -> Result<(), ConfigMutationError> {
     validate_hooks_path(path)?;
     add_hooks_path_to_file(
         path,
@@ -1524,7 +1572,7 @@ pub fn add_hooks_path(path: &str) -> Result<(), Box<dyn std::error::Error>> {
 pub fn add_hooks_path_to_file(
     path: &str,
     paths_file: &std::path::Path,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), ConfigMutationError> {
     if let Some(parent) = paths_file.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -1544,7 +1592,7 @@ pub fn add_hooks_path_to_file(
 ///
 /// If the path is not found (exact string match), this is a no-op.
 /// Matches the same exact-string behavior as `add_hooks_path`.
-pub fn remove_hooks_path(path: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn remove_hooks_path(path: &str) -> Result<(), ConfigMutationError> {
     remove_hooks_path_from_file(
         path,
         &crate::util::kimix_home::kimix_home().join("hooks-paths"),
@@ -1554,7 +1602,7 @@ pub fn remove_hooks_path(path: &str) -> Result<(), Box<dyn std::error::Error>> {
 pub fn remove_hooks_path_from_file(
     path: &str,
     paths_file: &std::path::Path,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), ConfigMutationError> {
     let content = match std::fs::read_to_string(paths_file) {
         Ok(c) => c,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),

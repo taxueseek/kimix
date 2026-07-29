@@ -8,8 +8,16 @@
 #[derive(Debug, Clone)]
 pub struct CompactionPolicy {
     /// Percentage of context window that triggers auto-compaction.
-    /// E.g., 85 means compact when 85% of the context window is used.
+    /// E.g., 75 means compact when 75% of the context window is used.
     pub auto_compact_threshold_percent: u32,
+
+    /// Maximum effective context window (in tokens) for compaction-trigger
+    /// calculation. When the model's actual context_window exceeds this cap,
+    /// threshold computation uses this value instead, keeping triggers in the
+    /// reliable working range before LLM output quality degrades.
+    ///
+    /// Default: 200,000 (200K). Set to 0 to disable (use full window).
+    pub max_effective_context_tokens: u32,
 
     /// Model to use for generating the compaction summary.
     /// None = use the session's current model.
@@ -36,7 +44,8 @@ pub struct CompactionPolicy {
 impl Default for CompactionPolicy {
     fn default() -> Self {
         Self {
-            auto_compact_threshold_percent: 85,
+            auto_compact_threshold_percent: 75,
+            max_effective_context_tokens: 200_000,
             compact_model: None,
             memory_flush_enabled: false,
             wall_clock_budget_secs: 300,

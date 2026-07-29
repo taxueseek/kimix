@@ -22,6 +22,7 @@ use kimix_sampling_types::{
     ContentPart, ConversationItem, ConversationRequest, SystemItem, UserItem,
 };
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::session::{
     CollectedTodoGateInput, DebugDecision, LAZINESS_CLASSIFIER_PROMPT,
@@ -32,6 +33,24 @@ use crate::session::{
     format_runtime_state_line, laziness_window_start, parse_classifier_output,
 };
 use crate::tools::todo::{TodoItem, TodoPriority, TodoState, TodoStatus};
+
+// ---- Error type ----
+
+/// Errors surfaced by the trace-classifier module.
+#[derive(Debug, Error)]
+pub enum ClassifierError {
+    /// Input validation failed (e.g. `min_confidence` out of range).
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
+
+    /// Failed to parse a value (e.g. float parsing error).
+    #[error("parse error: {0}")]
+    ParseError(String),
+
+    /// The classifier sampler returned an error.
+    #[error("sampler error: {0}")]
+    SamplerError(String),
+}
 
 // Trace JSON shape
 
@@ -523,7 +542,7 @@ fn run_todo_gate(state: &TodoState, gate_backing_task_count: usize) -> TodoGateO
 /// Trait so tests can mock the sampler call.
 #[async_trait::async_trait]
 pub trait ClassifierClient: Send + Sync {
-    async fn run(&self, request: ConversationRequest) -> Result<String, String>;
+    async fn run(&self, request: ConversationRequest) -> Result<String, ClassifierError>;
 }
 
 /// Production sampler-backed [`ClassifierClient`] used by the CLI
@@ -541,7 +560,7 @@ impl SamplerClassifierClient {
 
 #[async_trait::async_trait]
 impl ClassifierClient for SamplerClassifierClient {
-    async fn run(&self, request: ConversationRequest) -> Result<String, String> {
+    async fn run(&self, request: ConversationRequest) -> Result<String, ClassifierError> {
         self.inner
             .conversation_collect(request)
             .await
@@ -550,7 +569,7 @@ impl ClassifierClient for SamplerClassifierClient {
                     .map(|a| a.content.as_ref().to_owned())
                     .unwrap_or_default()
             })
-            .map_err(|e| e.to_string())
+            .map_err(|e| ClassifierError::SamplerError(e.to_string()))
     }
 }
 
@@ -696,7 +715,7 @@ async fn classify_turn(
             parsed: None,
             decision: LazinessDecisionKind::Aborted,
             abort_reason: Some(AbortReasonKind::ClassifierError),
-            error_detail: Some(detail),
+            error_detail: Some(detail.to_string()),
             raw_output: None,
         },
         Ok(Ok(raw_text)) => match parse_classifier_output(&raw_text) {
@@ -985,15 +1004,19 @@ impl RunArgs {
 
 /// Validate `min_confidence` is finite and in the closed unit
 /// interval. Used by clap's `value_parser` (N5).
-pub fn validate_min_confidence(raw: &str) -> std::result::Result<f32, String> {
+pub fn validate_min_confidence(raw: &str) -> std::result::Result<f32, ClassifierError> {
     let v: f32 = raw
         .parse()
-        .map_err(|e: std::num::ParseFloatError| e.to_string())?;
+        .map_err(|e: std::num::ParseFloatError| ClassifierError::ParseError(e.to_string()))?;
     if !v.is_finite() {
-        return Err(format!("min_confidence must be finite, got {v}"));
+        return Err(ClassifierError::InvalidInput(format!(
+            "min_confidence must be finite, got {v}"
+        )));
     }
     if !(0.0..=1.0).contains(&v) {
-        return Err(format!("min_confidence must be in [0.0, 1.0], got {v}"));
+        return Err(ClassifierError::InvalidInput(format!(
+            "min_confidence must be in [0.0, 1.0], got {v}"
+        )));
     }
     Ok(v)
 }
@@ -1609,7 +1632,7 @@ mod tests {
 
     #[async_trait::async_trait]
     impl ClassifierClient for StubClient {
-        async fn run(&self, _request: ConversationRequest) -> Result<String, String> {
+        async fn run(&self, _request: ConversationRequest) -> Result<String, ClassifierError> {
             Ok(self.0.clone())
         }
     }
@@ -1815,7 +1838,7 @@ mod tests {
 
     #[async_trait::async_trait]
     impl ClassifierClient for CapturingStub {
-        async fn run(&self, request: ConversationRequest) -> Result<String, String> {
+        async fn run(&self, request: ConversationRequest) -> Result<String, ClassifierError> {
             *self.last.lock().expect("mutex poisoned") = Some(request);
             Ok(self.response.clone())
         }

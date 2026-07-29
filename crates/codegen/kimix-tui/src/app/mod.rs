@@ -354,12 +354,9 @@ pub async fn run(
         refreshed_auth,
     ));
     kimix_shell::agent::mvp_agent::warm_async_http_client();
-    tokio::task::spawn_blocking(|| {});
     if let Ok(cwd) = std::env::current_dir() {
         crate::git_info::populate_from_cwd_async(cwd);
     }
-    let raw_config = kimix_shell::config::load_effective_config()
-        .map_err(|e| anyhow::anyhow!("Failed to load config: {e}"))?;
     let prefetch_elapsed = startup_start.elapsed();
     let (use_leader, policy_disable_reason) =
         resolve_use_leader(args.leader, args.no_leader, &raw_config, true);

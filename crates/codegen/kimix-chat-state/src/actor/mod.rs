@@ -22,7 +22,15 @@ use crate::persistence::ChatPersistence;
 use crate::types::{PruningConfig, TurnCapture};
 
 use kimix_sampling_types::{ConversationItem, SamplingConfig};
-use state::ChatState;
+use state::{ChatState, MAX_EDITED_PATHS, MAX_PROMPT_TEXT_CACHE};
+
+/// Buffer size for the command channel.
+///
+/// A bounded channel provides backpressure: when 512 commands are
+/// queued, fire-and-forget senders will drop further commands with a
+/// warning. Query-style senders (which use `send().await`) will wait
+/// for the actor to drain the queue.
+pub const CMD_CHANNEL_BUFFER: usize = 512;
 
 /// The actor that owns all chat state.
 /// Runs in a dedicated tokio task and processes commands sequentially.
@@ -34,7 +42,8 @@ pub struct ChatStateActor {
     /// Persistence implementation — owned exclusively, called with `&mut self`.
     persistence: Box<dyn ChatPersistence>,
     /// Channel to receive commands from handles.
-    cmd_rx: mpsc::UnboundedReceiver<ChatStateCommand>,
+    /// Bounded (512) to prevent unbounded queue growth under load.
+    cmd_rx: mpsc::Receiver<ChatStateCommand>,
     /// Channel to send events to the session main loop.
     event_tx: mpsc::UnboundedSender<ChatStateEvent>,
     /// Cancellation token for graceful shutdown.
@@ -76,7 +85,7 @@ impl ChatStateActor {
         event_tx: mpsc::UnboundedSender<ChatStateEvent>,
         cancellation_token: tokio_util::sync::CancellationToken,
     ) -> ChatStateHandle {
-        let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
+        let (cmd_tx, cmd_rx) = mpsc::channel(CMD_CHANNEL_BUFFER);
 
         let actor = ChatStateActor {
             state: ChatState::new(initial_conversation, sampling_config),
@@ -171,6 +180,13 @@ impl ChatStateActor {
             }
             ChatStateCommand::RecordAgentEditedPath { path } => {
                 self.state.agent_edited_paths.insert(path);
+                if self.state.agent_edited_paths.len() > MAX_EDITED_PATHS {
+                    tracing::warn!(
+                        edited_path_count = self.state.agent_edited_paths.len(),
+                        limit = MAX_EDITED_PATHS,
+                        "agent_edited_paths cap hit; BTreeSet cannot evict oldest entries"
+                    );
+                }
             }
             ChatStateCommand::RecordStreamStart { timestamp_ms } => {
                 self.state.stream_start_ms = Some(timestamp_ms);
@@ -209,6 +225,12 @@ impl ChatStateActor {
             }
             ChatStateCommand::CachePromptText { text } => {
                 self.state.prompt_texts.push(text);
+                // Enforce a hard cap so long-running sessions don't
+                // leak unbounded memory through prompt_texts.
+                if self.state.prompt_texts.len() > MAX_PROMPT_TEXT_CACHE {
+                    let excess = self.state.prompt_texts.len() - MAX_PROMPT_TEXT_CACHE;
+                    self.state.prompt_texts.drain(..excess);
+                }
             }
             ChatStateCommand::RecordCompactionAt { prompt_index } => {
                 self.state.last_compaction_prompt_index = Some(prompt_index);

@@ -1584,6 +1584,13 @@ impl ScrollbackState {
         // Update viewport height
         self.viewport_height = height;
 
+        // Clear the verb-group header label cache if content or dimensions
+        // changed since last frame — staleness is cheaper to fix by
+        // invalidating than by adding per-entry version keys.
+        if !self.dirty_heights.is_empty() || self.gaps_may_be_dirty || width != self.last_width {
+            verb_group::clear_header_label_cache();
+        }
+
         // Case 1: Cache missing or width changed - full rebuild
         if self.layout_cache.is_none() || width != self.last_width {
             // A width change re-wraps every entry, so the absolute wrapped-row
@@ -1601,8 +1608,12 @@ impl ScrollbackState {
                 };
 
             if width != self.last_width {
+                // Only invalidate output caches on width change — the cheap
+                // height estimate cache (cached_estimate_lines) tolerates a
+                // small width delta (10%), so a resize doesn't force an
+                // O(history) re-estimate of every off-screen entry.
                 for entry in self.entries.values_mut() {
-                    entry.invalidate_cache();
+                    entry.invalidate_output_caches();
                 }
                 self.last_width = width;
             }
@@ -1690,8 +1701,11 @@ impl ScrollbackState {
     /// Invalidate caches if width changed.
     pub fn invalidate_if_width_changed(&mut self, width: u16) {
         if width != self.last_width {
+            // Only invalidate output caches on width change, matching
+            // prepare_layout — the cheap estimate cache tolerates a small
+            // width delta.
             for entry in self.entries.values_mut() {
-                entry.invalidate_cache();
+                entry.invalidate_output_caches();
             }
             self.last_width = width;
             self.layout_cache = None;

@@ -904,18 +904,6 @@ pub enum SessionUpdate {
     Unknown,
 }
 
-/// Metadata for a single memory file, sent to the pager for the memory modal.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub struct MemoryFileInfo {
-    pub path: String,
-    /// `"global"`, `"workspace"`, or `"session"`.
-    pub source: String,
-    pub size_bytes: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub modified_epoch_secs: Option<u64>,
-}
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct ImageCompressedEntry {
     pub index: usize,
@@ -941,39 +929,7 @@ impl From<&crate::session::image_normalize::ImageCompressionInfo> for ImageCompr
     }
 }
 
-/// State of a retry operation or error for visual feedback in the TUI
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase", tag = "type")]
-pub enum RetryState {
-    /// A retry is in progress
-    Retrying {
-        /// Current retry attempt number (1-indexed)
-        attempt: u32,
-        /// Maximum number of retries allowed
-        max_retries: u32,
-        /// Human-readable reason for the retry
-        reason: String,
-    },
-    /// All retries have been exhausted
-    Exhausted {
-        /// Total number of attempts made
-        attempts: u32,
-        /// Human-readable reason for the failure
-        reason: String,
-        /// True when the exhaustion was caused by an HTTP 429 rate limit.
-        /// Clients use this to show a user-friendly upgrade message instead
-        /// of the raw `reason` string.
-        #[serde(default)]
-        is_rate_limited: bool,
-    },
-    /// A non-retryable error occurred (e.g., auth error, invalid params)
-    Failed {
-        /// Category of the error (e.g., "auth", "invalid_params", "server")
-        error_type: String,
-        /// Human-readable error message
-        message: String,
-    },
-}
+pub use kimix_shell_base::extensions_types::{MemoryFileInfo, RetryState};
 
 /// Whether a terminal retry failure is a recoverable authentication error
 /// (expired/invalid credentials, 401) that the user can fix by signing in

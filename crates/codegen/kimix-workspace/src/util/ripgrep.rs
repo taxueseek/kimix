@@ -4,6 +4,10 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 
 #[cfg(bundle_rg)]
+use kimix_tools::implementations::kimix::grep::ripgrep::install_bundled_binary;
+use kimix_tools::implementations::kimix::grep::ripgrep::resolve_rg_fallback;
+
+#[cfg(bundle_rg)]
 const RG_BYTES: &[u8] = include_bytes!(concat!(
     env!("KIMIX_SHELL_RG_GEN_DIR"),
     "/rg-",
@@ -15,25 +19,15 @@ const RG_BYTES: &[u8] = include_bytes!(concat!(
 
 #[cfg(bundle_rg)]
 fn resolve_bundled_rg() -> std::io::Result<PathBuf> {
-    use std::{fs, os::unix::fs::PermissionsExt};
-    let p = kimix_tools::util::kimix_home::kimix_home()
-        .join("vendor")
-        .join(concat!(
+    install_bundled_binary(
+        RG_BYTES,
+        concat!(
             "rg-",
             env!("KIMIX_SHELL_RG_VER"),
             "-",
             env!("KIMIX_SHELL_RG_TARGET")
-        ));
-    if !p.exists() {
-        fs::create_dir_all(p.parent().unwrap())?;
-        let tmp = p.with_extension("tmp");
-        fs::write(&tmp, RG_BYTES)?;
-        fs::rename(&tmp, &p)?;
-        let mut perms = fs::metadata(&p)?.permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&p, perms)?;
-    }
-    Ok(p)
+        ),
+    )
 }
 
 pub fn rg_path() -> PathBuf {
@@ -42,11 +36,11 @@ pub fn rg_path() -> PathBuf {
         .get_or_init(|| {
             #[cfg(bundle_rg)]
             {
-                resolve_bundled_rg().unwrap_or_else(|_| PathBuf::from("rg"))
+                resolve_bundled_rg().unwrap_or_else(|_| resolve_rg_fallback())
             }
             #[cfg(not(bundle_rg))]
             {
-                PathBuf::from("rg")
+                resolve_rg_fallback()
             }
         })
         .clone()

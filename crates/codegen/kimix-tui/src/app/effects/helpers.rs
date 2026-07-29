@@ -997,7 +997,7 @@ pub(super) fn should_send_yolo_acp_notification(
 /// session resume.
 pub(super) fn parse_kill_outcome(
     resp: &str,
-) -> Option<kimix_tools::types::KillOutcome> {
+) -> Option<kimix_shell::extensions::task::KillOutcome> {
     use kimix_shell::extensions::task::KillTaskResponse;
     use kimix_shell::session::result::ExtMethodResult;
     serde_json::from_str::<ExtMethodResult<KillTaskResponse>>(resp)

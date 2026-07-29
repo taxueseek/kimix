@@ -9,7 +9,6 @@ use std::ops::Range;
 
 use anstyle::Style;
 use pulldown_cmark::{CodeBlockKind, CowStr, Event, Tag, TagEnd, TextMergeWithOffset};
-use ratatui::style::Stylize as RatatuiStylize;
 use ratatui::text::{Line, Span};
 
 use crate::buffers::{

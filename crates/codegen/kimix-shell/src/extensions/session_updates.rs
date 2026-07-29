@@ -129,11 +129,14 @@ fn try_stream_tail_page(request: &Request, updates_path: &Path) -> io::Result<Op
     let reader = BufReader::new(file);
 
     if is_turn_index {
-        // Single-pass scan: read lines, detect rewinds, and compute prompt
-        // boundaries in one pass to avoid a second traversal.
+        // Two-pass scan to avoid loading 200–400 MiB of JSONL into
+        // memory for large sessions.
+        //
+        // Pass 1: count lines and record turn boundaries only.
         let mut has_rewinds = false;
-        let mut all_lines = Vec::new();
-        let mut prompt_starts = Vec::new();
+        let mut total_count = 0usize;
+        // 1-indexed global line numbers of turn starts (ignoring empty lines).
+        let mut prompt_starts: Vec<usize> = Vec::new();
         let mut in_user = false;
 
         for line in reader.lines() {
@@ -141,40 +144,53 @@ fn try_stream_tail_page(request: &Request, updates_path: &Path) -> io::Result<Op
             if line.trim().is_empty() {
                 continue;
             }
+            total_count += 1;
             has_rewinds |= line.contains(&*REWIND_MARKER);
             let is_user = is_user_message_chunk(&line);
             if is_user && !in_user {
-                prompt_starts.push(all_lines.len());
+                prompt_starts.push(total_count);
             }
             in_user = is_user;
-            all_lines.push(line);
         }
 
-        // If rewinds are present, filter dead branches and recompute
-        // prompt boundaries over the live lines.
-        let (all_lines, prompt_starts) = if has_rewinds {
-            let refs: Vec<&str> = all_lines.iter().map(|s| s.as_str()).collect();
-            let live = crate::session::storage::filter_rewind_lines(refs);
-            let owned: Vec<String> = live.into_iter().map(|s| s.to_owned()).collect();
-            let ps = compute_prompt_starts(&owned);
-            (owned, ps)
-        } else {
-            (all_lines, prompt_starts)
-        };
-        let total_count = all_lines.len();
+        // Rewind sessions are rare — fall back to the full-scan path below
+        // which has correct rewind-aware boundary computation.
+        if has_rewinds {
+            return Ok(None);
+        }
 
         let tail_n = request.turn_index.unwrap();
-        let start = if tail_n >= prompt_starts.len() {
-            0
+        let start_line = if tail_n >= prompt_starts.len() {
+            1
         } else {
             prompt_starts[prompt_starts.len() - tail_n]
         };
-        let end = match request.limit {
-            Some(lim) => (start + lim).min(total_count),
+        let end_line = match request.limit {
+            Some(lim) => (start_line + lim - 1).min(total_count),
             None => total_count,
         };
-        let has_more = start > 0;
-        let lines = all_lines[start..end].to_vec();
+        let has_more = start_line > 1;
+
+        // Pass 2: re-read only the required line range.
+        let file2 = std::fs::File::open(updates_path)?;
+        let reader2 = BufReader::new(file2);
+        let mut lines = Vec::new();
+        let mut current_line: usize = 0;
+        for line in reader2.lines() {
+            let line = line?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            current_line += 1;
+            if current_line < start_line {
+                continue;
+            }
+            if current_line > end_line {
+                break;
+            }
+            lines.push(line);
+        }
+
         Ok(Some(TailPage {
             lines,
             total_count,

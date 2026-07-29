@@ -895,7 +895,7 @@ fn bg_task_killed_already_exited_clears_pending_kill_on_inactive_agent() {
         Action::TaskComplete(TaskResult::BgTaskKilled {
             session_id: "sess-B".into(),
             task_id: "task-B-1".into(),
-            outcome: Some(kimix_tools::types::KillOutcome::AlreadyExited),
+            outcome: Some(kimix_shell::extensions::task::KillOutcome::AlreadyExited),
         }),
         &mut app,
     );
@@ -913,7 +913,7 @@ fn bg_task_killed_not_found_removes_task_from_inactive_agent() {
         Action::TaskComplete(TaskResult::BgTaskKilled {
             session_id: "sess-B".into(),
             task_id: "task-B-1".into(),
-            outcome: Some(kimix_tools::types::KillOutcome::NotFound),
+            outcome: Some(kimix_shell::extensions::task::KillOutcome::NotFound),
         }),
         &mut app,
     );
@@ -952,7 +952,7 @@ fn bg_task_killed_not_found_finishes_scrollback_entry() {
         Action::TaskComplete(TaskResult::BgTaskKilled {
             session_id: "sess-B".into(),
             task_id: "task-B-1".into(),
-            outcome: Some(kimix_tools::types::KillOutcome::NotFound),
+            outcome: Some(kimix_shell::extensions::task::KillOutcome::NotFound),
         }),
         &mut app,
     );
@@ -993,7 +993,7 @@ fn bg_task_killed_keeps_pending_kill_on_killed_outcome() {
         Action::TaskComplete(TaskResult::BgTaskKilled {
             session_id: "sess-B".into(),
             task_id: "task-B-1".into(),
-            outcome: Some(kimix_tools::types::KillOutcome::Killed),
+            outcome: Some(kimix_shell::extensions::task::KillOutcome::Killed),
         }),
         &mut app,
     );

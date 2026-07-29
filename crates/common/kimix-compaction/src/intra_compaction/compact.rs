@@ -1099,7 +1099,7 @@ mod tests {
             // These tests exercise the steps (tail-keep) path; pin the mode so
             // they stay independent of the crate default (now `FullReplace`).
             mode: IntraCompactionMode::StepsOnly,
-            trigger_threshold_percent: 85,
+            trigger_threshold_percent: 75,
             target_threshold_percent: 50,
             min_steps_before_compact: 1,
             min_compactable_tokens: 1,

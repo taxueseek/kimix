@@ -1,4 +1,2 @@
-pub const PAGER_CLIENT_TYPE: &str = "kimix-pager";
-pub const HEADLESS_CLIENT_TYPE: &str = "kimix";
-
-pub const PAGER_CLIENT_VERSION: &str = kimix_version::VERSION;
+// Re-exported from kimix-headless to eliminate duplication.
+pub use kimix_headless::client_identity::*;

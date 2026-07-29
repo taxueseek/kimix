@@ -16,13 +16,32 @@
 //! families can't drift.
 use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
+use std::cell::RefCell;
+use std::collections::HashMap;
 
 use crate::scrollback::block::RenderBlock;
 use crate::scrollback::blocks::SubagentBlockKind;
 use crate::scrollback::blocks::tool::{ToolCallBlock, VerbGroupKind};
-use crate::scrollback::entry::ScrollbackEntry;
+use crate::scrollback::entry::{EntryId, ScrollbackEntry};
 use crate::scrollback::types::DisplayMode;
 use crate::theme::Theme;
+
+// Per-frame cache for verb-group and truncation header labels, keyed by
+// `(header_entry_id, end_entry_id, show_thinking)`. Labels are pure
+// aggregations of entry state over a range, so they only change when
+// entries are added/removed or entry state flips (running→finished).
+// Caching avoids re-walking the group every frame during idle periods.
+thread_local! {
+    static HEADER_LABEL_CACHE: RefCell<HashMap<(EntryId, EntryId, bool), GroupHeaderLabel>> =
+        RefCell::new(HashMap::new());
+}
+
+/// Clear the header label cache. Call when entry state changes might
+/// invalidate cached labels (e.g. after streaming, fold/expand, or
+/// thinking-toggle).
+pub(crate) fn clear_header_label_cache() {
+    HEADER_LABEL_CACHE.with(|c| c.borrow_mut().clear());
+}
 
 /// One step of a verb-group run walk.
 pub(crate) enum RunStep {
@@ -175,6 +194,7 @@ pub(crate) fn scan_run_forward<'e>(
 }
 
 /// Aggregated header state for one verb-group run.
+#[derive(Clone)]
 pub struct VerbGroupHeaderLabel {
     /// Styled label line rendered on the header row.
     pub line: Line<'static>,
@@ -192,6 +212,7 @@ pub struct VerbGroupHeaderLabel {
 /// the exclusivity is structural. The variant picks the header chrome
 /// (verb-run headers wear run-state accents; truncation headers keep the
 /// dimmed fold chrome); the label payload is shared.
+#[derive(Clone)]
 pub enum GroupHeaderLabel {
     /// Verb-group run header ("Read 3 files, Searched 2 patterns").
     VerbRun(VerbGroupHeaderLabel),
@@ -239,9 +260,34 @@ pub fn verb_group_header_label(
     show_thinking: bool,
     theme: &Theme,
 ) -> VerbGroupHeaderLabel {
+    if header_idx >= entries.len() {
+        return VerbGroupHeaderLabel {
+            line: Line::default(),
+            text: String::new(),
+            running: false,
+            failed: false,
+        };
+    }
+    let start_id = entries[header_idx].id;
+    let end = end.min(entries.len());
+    let end_id = entries
+        .get(end.saturating_sub(1))
+        .map(|e| e.id)
+        .unwrap_or(start_id);
+    let key = (start_id, end_id, show_thinking);
+
+    // Check the thread-local cache before walking the run.
+    if let Some(cached) = HEADER_LABEL_CACHE.with(|c| {
+        c.borrow().get(&key).and_then(|label| match label {
+            GroupHeaderLabel::VerbRun(v) => Some(v.clone()),
+            _ => None,
+        })
+    }) {
+        return cached;
+    }
+
     let mut acc = BucketAccumulator::default();
 
-    let end = end.min(entries.len());
     for &entry in &entries[header_idx.min(end)..end] {
         let kind = match run_step(entry, show_thinking) {
             RunStep::Member(kind) => kind,
@@ -251,7 +297,12 @@ pub fn verb_group_header_label(
         acc.push(kind, entry);
     }
 
-    acc.into_label(theme)
+    let label = acc.into_label(theme);
+    HEADER_LABEL_CACHE.with(|c| {
+        c.borrow_mut()
+            .insert(key, GroupHeaderLabel::VerbRun(label.clone()));
+    });
+    label
 }
 
 /// Aggregated label for a truncation ("N more") header, describing the rows

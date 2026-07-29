@@ -9,6 +9,10 @@ use kimix_sampling_types::{
 use crate::types::Credentials;
 use crate::usage::UsageLedger;
 
+/// Maximum number of cached prompt texts retained for rewind preview.
+/// Older entries are drained from the head once the limit is exceeded.
+pub const MAX_PROMPT_TEXT_CACHE: usize = 512;
+
 /// Bytes/4 estimate of the system prompt portion of a [`ConversationItem`].
 /// Returns 0 for non-system items so callers can pipe through whatever they
 /// have without unwrapping.
@@ -111,6 +115,8 @@ pub fn estimate_messages_tokens(items: &[ConversationItem]) -> u64 {
         .sum()
 }
 
+pub(crate) const MAX_EDITED_PATHS: usize = 1024;
+
 /// Internal mutable state for the ChatStateActor.
 ///
 /// All fields are owned exclusively by the actor task — no locks needed.
@@ -129,7 +135,11 @@ pub(crate) struct ChatState {
     pub stream_start_ms: Option<i64>,
     /// Timestamp when the current turn started (epoch ms).
     pub turn_start_ms: Option<i64>,
-    /// File paths the agent has edited.
+    /// File paths the agent has edited (deduplicated).
+    /// Capped at [`MAX_EDITED_PATHS`]; a warning is logged when the cap is
+    /// hit but no entries are evicted — BTreeSet has no insertion-order
+    /// tracking and evicting the oldest would require a separate data
+    /// structure. In practice < 1 000 unique paths is typical.
     pub agent_edited_paths: BTreeSet<String>,
     /// Prompt index at which the last compaction occurred.
     pub last_compaction_prompt_index: Option<usize>,

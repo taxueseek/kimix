@@ -11,6 +11,7 @@ description = "Foundation modules for the kimix shell crate family: environment 
 default-bazel = []
 
 [dependencies]
+agent-client-protocol = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 reqwest = { workspace = true }
@@ -24,6 +25,7 @@ kimix-config = { workspace = true }
 kimix-env = { workspace = true }
 kimix-shared = { workspace = true }
 kimix-version = { workspace = true }
+kimix-token-estimation = { workspace = true }
 kimix-tty-utils = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]

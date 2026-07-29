@@ -1,6 +1,9 @@
 //! Foundation modules shared by the Kimix shell crate family. Extracted from
 //! `Kimix-shell` (which re-exports them at their original paths) so they
 //! build in parallel and stop rebuilding on shell edits.
+pub mod agent_types;
 pub mod cpu_profile;
 pub mod env;
+pub mod extensions_types;
+pub mod session_types;
 pub mod util;

@@ -531,9 +531,9 @@ pub(super) fn handle_bg_task_killed(
     app: &mut AppView,
     session_id: String,
     task_id: String,
-    outcome: Option<kimix_tools::types::KillOutcome>,
+    outcome: Option<kimix_shell::extensions::task::KillOutcome>,
 ) -> Vec<Effect> {
-    use kimix_tools::types::KillOutcome;
+    use kimix_shell::extensions::task::KillOutcome;
     if let Some(agent) = find_agent_by_session_id(&mut app.agents, &session_id) {
         match outcome {
             Some(KillOutcome::Killed) => {

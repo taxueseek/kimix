@@ -5,6 +5,13 @@ check:
     cargo clippy --workspace --all-targets -- -D warnings
     cargo fmt --all --check
 
+gate:
+    cargo check --workspace --all-targets
+    cargo clippy --workspace --all-targets -- -D warnings
+    cargo fmt --all --check
+    cargo test --workspace --all-targets
+    cargo deny check advisories bans sources licenses
+
 deps:
     cargo deny check advisories
     cargo udeps
