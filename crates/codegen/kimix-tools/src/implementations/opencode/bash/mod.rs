@@ -17,7 +17,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::DEFAULT_TOOL_OUTPUT_CHARS;
+use crate::tool_output_chars_limit;
 use crate::computer::types::TerminalRunRequest;
 use crate::notification::types::{
     BashExecutionComplete, BashExecutionFailed, BashExecutionTimeout, BashNotificationBase,
@@ -358,15 +358,13 @@ impl kimix_tool_runtime::Tool for BashTool {
             .0
             .clone();
 
+        let default_limit = tool_output_chars_limit();
         let output_byte_limit = resources
             .lock()
             .await
             .get::<TruncationCfg>()
-            .map(|cfg| {
-                cfg.0
-                    .max_output_bytes_for("bash", DEFAULT_TOOL_OUTPUT_CHARS)
-            })
-            .unwrap_or(DEFAULT_TOOL_OUTPUT_CHARS);
+            .map(|cfg| cfg.0.max_output_bytes_for("bash", default_limit))
+            .unwrap_or(default_limit);
 
         // --- Resolve working directory ---
         let cwd = Self::resolve_cwd(&session_cwd, input.workdir.as_deref());

@@ -194,6 +194,13 @@ impl KimixPromptAdapter {
     pub fn set_context_window(&mut self, window: usize) {
         self.prompt.set_context_window(window);
     }
+
+    /// Set the effective context cap for the 80% observability ratio.
+    /// `0` clears the cap.
+    pub fn set_max_effective_context_tokens(&mut self, cap: u32) {
+        self.prompt
+            .set_max_effective_context_tokens(cap as usize);
+    }
 }
 
 // ============================================================================

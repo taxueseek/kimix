@@ -1415,6 +1415,15 @@ pub struct SessionConfig {
     /// precedence chain (env, per-model, remote, default).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_compact_threshold_percent: Option<u8>,
+    /// Maximum effective context window (tokens) used for compaction triggers
+    /// and 80% observability. When the model window is larger, thresholds use
+    /// `min(context_window, this value)`.
+    ///
+    /// `None` = resolver default (200_000). `Some(0)` disables the cap and
+    /// uses the full model context window. Override via env
+    /// `KIMIX_MAX_EFFECTIVE_CONTEXT_TOKENS` (highest precedence).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_effective_context_tokens: Option<u32>,
     /// Whether to load environment variables from .envrc files.
     /// When enabled, the session will parse .envrc in the workspace directory
     /// and inject the environment variables into bash commands.

@@ -27,7 +27,7 @@ use std::time::Duration;
 use kimix_config::shell::AmpersandSemantics;
 use regex::Regex;
 
-use crate::DEFAULT_TOOL_OUTPUT_CHARS;
+use crate::tool_output_chars_limit;
 use crate::computer::types::{ComputerError, TerminalRunRequest};
 use crate::notification::types::{
     BashExecutionBackgrounded, BashExecutionComplete, BashExecutionFailed, BashExecutionTimeout,
@@ -1825,7 +1825,7 @@ impl kimix_tool_runtime::Tool for BashTool {
 
         let config_output_byte_limit = params
             .output_byte_limit
-            .unwrap_or(DEFAULT_TOOL_OUTPUT_CHARS);
+            .unwrap_or_else(tool_output_chars_limit);
 
         // Use truncation config override if available
         let output_byte_limit = resources

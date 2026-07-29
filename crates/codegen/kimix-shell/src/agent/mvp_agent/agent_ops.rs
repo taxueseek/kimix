@@ -2022,6 +2022,12 @@ impl MvpAgent {
                 model.map(|e| &e.info),
             )
         };
+        let max_effective_context_tokens = {
+            let cfg = self.cfg.borrow();
+            crate::util::config::resolve_max_effective_context_tokens(
+                cfg.session.max_effective_context_tokens,
+            )
+        };
         let system_prompt_label = {
             let cfg = self.cfg.borrow();
             let models = self.models_manager.models();
@@ -2396,6 +2402,7 @@ impl MvpAgent {
                     startup_hints,
                     client_type,
                     auto_compact_threshold_percent,
+                    max_effective_context_tokens,
                     system_prompt_label,
                     compaction_mode,
                     compaction_verbatim_input,

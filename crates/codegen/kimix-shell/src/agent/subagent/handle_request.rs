@@ -1005,6 +1005,9 @@ pub(crate) async fn handle_subagent_request(
             },
             kimix_workspace::permission::ClientType::Generic,
             ctx.resolve_auto_compact_threshold_percent(&subagent_model_id),
+            crate::util::config::resolve_max_effective_context_tokens(
+                ctx.user_max_effective_context_tokens,
+            ),
             kimix_agent::DEFAULT_SYSTEM_PROMPT_LABEL.to_string(),
             kimix_chat_state::CompactionMode::Summary,
             ctx.resolve_compaction_verbatim_input(),
