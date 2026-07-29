@@ -9,6 +9,7 @@ use std::process::Stdio;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 
+use crate::implementations::kimix::grep::grep_timeout;
 use crate::implementations::kimix::grep::ripgrep::rg_path;
 use crate::types::output::ToolOutput;
 #[allow(unused_imports)]
@@ -197,30 +198,61 @@ impl kimix_tool_runtime::Tool for GlobTool {
             }
         };
 
-        // ── Read stdout with byte cap ───────────────────────────
+        // ── Read stdout with byte cap and wall-clock timeout ──────────
         let mut stdout_buf = Vec::with_capacity(MAX_STDOUT_BYTES.min(65_536));
         let mut truncated_by_bytes = false;
-        if let Some(mut stdout_pipe) = child.stdout.take() {
-            let mut tmp = [0u8; 8192];
-            loop {
-                match stdout_pipe.read(&mut tmp).await {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        if stdout_buf.len() + n <= MAX_STDOUT_BYTES {
-                            stdout_buf.extend_from_slice(&tmp[..n]);
-                        } else {
-                            let remaining = MAX_STDOUT_BYTES.saturating_sub(stdout_buf.len());
-                            if remaining > 0 {
-                                stdout_buf.extend_from_slice(&tmp[..remaining]);
+
+        let timeout_dur = grep_timeout();
+        let read_result = tokio::time::timeout(timeout_dur, async {
+            if let Some(mut stdout_pipe) = child.stdout.take() {
+                let mut tmp = [0u8; 8192];
+                loop {
+                    match stdout_pipe.read(&mut tmp).await {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            if stdout_buf.len() + n <= MAX_STDOUT_BYTES {
+                                stdout_buf.extend_from_slice(&tmp[..n]);
+                            } else {
+                                let remaining = MAX_STDOUT_BYTES.saturating_sub(stdout_buf.len());
+                                if remaining > 0 {
+                                    stdout_buf.extend_from_slice(&tmp[..remaining]);
+                                }
+                                truncated_by_bytes = true;
+                                let _ = child.start_kill();
+                                break;
                             }
-                            truncated_by_bytes = true;
-                            let _ = child.start_kill();
-                            break;
                         }
+                        Err(_) => break,
                     }
-                    Err(_) => break,
                 }
             }
+        })
+        .await;
+
+        if read_result.is_err() {
+            let _ = child.start_kill();
+            // Consume stderr to avoid deadlocks.
+            if let Some(stderr_pipe) = child.stderr.take() {
+                let _ = stderr_pipe
+                    .take(1_000_000)
+                    .read_to_end(&mut Vec::new())
+                    .await;
+            }
+            let _ = child.wait().await;
+
+            let cwd_for_display = display_cwd_or_cwd(&cwd, display_cwd.as_deref());
+            return Ok(GlobOutput {
+                tool_output_for_prompt: format!(
+                    "Glob search timed out after {} seconds. \
+                     Try a more specific path or pattern.",
+                    timeout_dur.as_secs()
+                ),
+                count: 0,
+                total_count: 0,
+                truncated: false,
+                entries: Vec::new(),
+                cwd_for_display: cwd_for_display.display().to_string(),
+            });
         }
 
         // Consume stderr to avoid deadlocks.

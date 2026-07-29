@@ -20,6 +20,26 @@ use crate::paths::{
     DEVICE_DIRS, DEVICE_FILES, essential_writable_paths, essential_writable_paths_minimal,
 };
 
+/// Sensitive credential paths denied by default in workspace, devbox, and
+/// read-only profiles. Uses `dirs::home_dir()` for absolute resolution; `~`
+/// is not expanded by the sandbox engine.
+fn default_sensitive_deny_paths() -> Vec<PathBuf> {
+    let Some(home) = dirs::home_dir() else {
+        return vec![];
+    };
+    vec![
+        // SSH: deny private key files and config, but not known_hosts
+        home.join(".ssh/id_*"),
+        home.join(".ssh/config"),
+        // Cloud / infra credentials
+        home.join(".aws/"),
+        home.join(".gnupg/"),
+        home.join(".kube/config"),
+        home.join(".docker/config.json"),
+        home.join(".netrc"),
+    ]
+}
+
 /// A resolved sandbox profile ready to be converted to a `CapabilitySet`.
 #[derive(Debug, Clone)]
 pub struct SandboxProfile {
@@ -305,7 +325,7 @@ impl ProfileName {
                 name: "workspace".to_string(),
                 read_only: vec![],
                 read_write: essential_writable_paths(workspace),
-                deny: vec![],
+                deny: default_sensitive_deny_paths(),
                 default_read: true,
                 restrict_network: false,
             }),
@@ -343,7 +363,7 @@ impl ProfileName {
                     name: "devbox".to_string(),
                     read_only: vec![],
                     read_write,
-                    deny: vec![],
+                    deny: default_sensitive_deny_paths(),
                     default_read: true,
                     restrict_network: false,
                 })
@@ -353,7 +373,7 @@ impl ProfileName {
                 name: "read-only".to_string(),
                 read_only: vec![],
                 read_write: essential_writable_paths_minimal(),
-                deny: vec![],
+                deny: default_sensitive_deny_paths(),
                 default_read: true,
                 restrict_network: true,
             }),
