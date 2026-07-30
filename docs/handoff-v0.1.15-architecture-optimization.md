@@ -11,7 +11,7 @@
 
 ### 基本信息
 
-- **项目路径**：`/Users/taxuexunxian/Documents/GPT/kimix`
+- **项目路径**：`$HOME/.../kimix`（本地 clone 根目录）
 - **GitHub**：`https://github.com/taxueseek/kimix`
 - **语言**：Rust 1.97.0 / edition 2024
 - **规模**：117.5 万行自研代码 + 2.6 万行 third_party，64 个 crate
