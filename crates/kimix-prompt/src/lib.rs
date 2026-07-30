@@ -15,11 +15,94 @@ pub mod template;
 #[cfg(test)]
 mod prompt_tests;
 
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 
 pub use template::{PromptTemplate, TemplateRegistry};
 pub mod stats;
 pub use stats::UsageStats;
+
+/// Minimum content size (chars) eligible for session content-hash dedup.
+/// Tiny payloads are cheaper to resend than a stub, and noisy for hashing.
+const MIN_DEDUP_CHARS: usize = 256;
+
+/// Soft efficiency-nudge text (one-turn system reminder only).
+///
+/// Inspired by Active Context Pruning's soft growth nudge: efficiency signal,
+/// not an overflow alarm. Injected at message-list tail / current-user prefix so
+/// the stable history prefix stays byte-identical for prompt-cache reuse.
+///
+/// Ideas only — no AGPL code copied from opencode-acp.
+pub const SOFT_EFFICIENCY_NUDGE: &str = "\
+[context efficiency] Estimated context is past the soft working range. Prefer \
+concise tool outputs, avoid re-reading large files already seen this session, \
+and keep replies tight. Auto-compact may fire later if usage keeps rising — \
+this is an efficiency signal, not an overflow alarm.";
+
+/// Whether usage sits in the soft efficiency band (above soft ratio, at or below
+/// the hard auto-compact observation band of 80%).
+///
+/// `soft_ratio <= 0` disables. `effective_window == 0` is treated as disabled.
+pub fn should_soft_efficiency_nudge(
+    soft_ratio: f64,
+    current_tokens: u64,
+    effective_window: u64,
+) -> bool {
+    if soft_ratio <= 0.0 || effective_window == 0 {
+        return false;
+    }
+    let ratio = current_tokens as f64 / effective_window as f64;
+    ratio > soft_ratio && ratio <= 0.8
+}
+
+/// Session-scoped content-hash deduper for tool payloads.
+///
+/// Only affects **newly admitted** content — never rewrites prior messages
+/// (prompt-cache safe). Identical large payloads collapse to a short stub.
+#[derive(Debug, Default, Clone)]
+pub struct ContentHashDeduper {
+    hashes: HashSet<u64>,
+    /// Duplicate payloads suppressed (cumulative).
+    pub dedup_count: usize,
+    /// Estimated tokens saved (cumulative).
+    pub tokens_saved: usize,
+}
+
+impl ContentHashDeduper {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Admit a payload. Returns original content or a short duplicate stub.
+    pub fn admit(&mut self, content: String) -> String {
+        if content.len() < MIN_DEDUP_CHARS {
+            if !content.is_empty() {
+                self.hashes.insert(content_fingerprint(&content));
+            }
+            return content;
+        }
+        let hash = content_fingerprint(&content);
+        if self.hashes.contains(&hash) {
+            let omitted = estimate_tokens_simple(&content);
+            self.dedup_count += 1;
+            self.tokens_saved += omitted;
+            return format!(
+                "[duplicate content hash={hash:016x}; already sent earlier this session; ~{omitted} tokens omitted]"
+            );
+        }
+        self.hashes.insert(hash);
+        content
+    }
+
+    pub fn len(&self) -> usize {
+        self.hashes.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.hashes.is_empty()
+    }
+}
 
 /// Role of a message in the conversation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -198,6 +281,15 @@ pub struct PromptConfig {
     /// with `CompactionPolicy::max_effective_context_tokens`.
     /// Default: None (use full `context_window`).
     pub max_effective_context_tokens: Option<usize>,
+    /// Soft efficiency-nudge ratio of the effective window (0.0–1.0).
+    /// When `context_window` is set and usage crosses this ratio, inject a
+    /// one-turn system reminder (stripped next turn). Default: 0.55.
+    /// Set to 0.0 to disable. Does not rewrite history — cache-safe.
+    pub soft_nudge_ratio: f64,
+    /// Session-scoped content-hash dedup for tool results.
+    /// Identical large payloads are replaced with a short stub on second
+    /// insert only (never mutates prior messages). Default: true.
+    pub content_hash_dedup: bool,
 }
 
 impl Default for PromptConfig {
@@ -212,6 +304,8 @@ impl Default for PromptConfig {
             max_tool_output_tokens: 10_000,
             context_window: None,
             max_effective_context_tokens: None,
+            soft_nudge_ratio: 0.55,
+            content_hash_dedup: true,
         }
     }
 }
@@ -230,6 +324,8 @@ pub struct AgentPrompt {
     pub tokens_saved: usize,
     /// Total prune passes executed.
     pub prune_count: usize,
+    /// Session content-hash deduper (tool ingress only).
+    content_deduper: ContentHashDeduper,
     /// Usage statistics tracker.
     pub stats: UsageStats,
 }
@@ -242,6 +338,7 @@ impl AgentPrompt {
             turn: 0,
             tokens_saved: 0,
             prune_count: 0,
+            content_deduper: ContentHashDeduper::new(),
             stats: UsageStats::default(),
         }
     }
@@ -270,10 +367,13 @@ impl AgentPrompt {
     /// Begin a new turn.
     ///
     /// 1. Strip stale system reminders from previous turns
-    /// 2. Check auto_compact threshold (80% — observability only)
+    /// 2. Soft efficiency nudge + hard auto_compact observability
     /// 3. Prune consumed ephemeral messages (context-budget optimization)
     /// 4. Inject fresh recall context as system reminders
     /// 5. Append the user's message
+    ///
+    /// Dynamic content is only appended at the tail (system_reminder / user).
+    /// Stable prefix messages are never rewritten — preserves prompt-cache hits.
     ///
     /// Returns the messages that should be sent to the LLM for this turn.
     pub fn begin_turn(
@@ -286,22 +386,31 @@ impl AgentPrompt {
         // Step 1: Strip stale system reminders from ALL previous turns
         self.strip_stale_reminders();
 
-        // Step 1.5: Auto-compact observability — log when estimated tokens
-        // exceed 80% of the context window. This does NOT trigger compaction
-        // (compaction is handled at the kimix-shell level via
-        // `check_auto_compact_needed`). This is purely observability.
-        // TODO: wire context_window from SamplingConfig into PromptConfig
-        //       so this check fires for all sessions.
+        // Step 1.5: Soft efficiency nudge + auto-compact observability.
+        // Compaction itself runs in kimix-shell (`check_auto_compact_needed`).
+        // Soft nudge is a one-turn system_reminder only (stripped next turn).
+        let mut soft_nudge_pending = false;
         if let Some(context_window) = self.config.context_window
             && context_window > 0
         {
             let current_tokens = self.total_estimated_tokens();
-            // Apply effective context cap (aligns with CompactionPolicy)
             let effective_window = match self.config.max_effective_context_tokens {
                 Some(cap) if cap > 0 => context_window.min(cap),
                 _ => context_window,
             };
             let token_usage_ratio = current_tokens as f64 / effective_window as f64;
+            let soft = self.config.soft_nudge_ratio;
+            if should_soft_efficiency_nudge(soft, current_tokens as u64, effective_window as u64) {
+                soft_nudge_pending = true;
+                tracing::debug!(
+                    ratio = token_usage_ratio,
+                    soft_nudge_ratio = soft,
+                    current_tokens,
+                    effective_window,
+                    turn = self.turn,
+                    "soft_nudge: context past soft working range"
+                );
+            }
             if token_usage_ratio > 0.8 {
                 tracing::info!(
                     ratio = token_usage_ratio,
@@ -330,11 +439,49 @@ impl AgentPrompt {
             self.messages.push(Message::system_reminder(content));
         }
 
+        // Soft efficiency reminder — tail-only, never mutates history.
+        if soft_nudge_pending {
+            self.messages
+                .push(Message::system_reminder(SOFT_EFFICIENCY_NUDGE));
+        }
+
         // Step 4: Append user message
         self.messages.push(Message::user(user_input.to_string()));
 
         // Return visible messages (exclude stripped ones)
         self.visible_messages()
+    }
+
+    /// Record a tool result with token-budget truncation and optional
+    /// session content-hash dedup.
+    ///
+    /// Dedup only affects the newly appended message — prior messages are
+    /// never rewritten, so prompt-cache prefixes stay stable.
+    pub fn record_tool_result(&mut self, content: impl Into<String>) {
+        let raw = content.into();
+        let truncated = truncate_tool_output(&raw, self.config.max_tool_output_tokens);
+        let final_content = self.apply_content_dedup(truncated);
+        self.messages.push(Message::tool_result(final_content));
+    }
+
+    /// Apply session content-hash dedup to a tool payload about to be inserted.
+    fn apply_content_dedup(&mut self, content: String) -> String {
+        if !self.config.content_hash_dedup {
+            return content;
+        }
+        let before_saved = self.content_deduper.tokens_saved;
+        let out = self.content_deduper.admit(content);
+        let gained = self.content_deduper.tokens_saved.saturating_sub(before_saved);
+        if gained > 0 {
+            self.tokens_saved += gained;
+            self.stats.record_prune_savings(gained);
+            tracing::debug!(
+                omitted_tokens = gained,
+                dedup_count = self.content_deduper.dedup_count,
+                "content_dedup: suppressed duplicate tool payload"
+            );
+        }
+        out
     }
 
     /// Estimate total tokens across all messages in the conversation.
@@ -497,6 +644,28 @@ impl AgentPrompt {
     pub fn set_max_effective_context_tokens(&mut self, cap: usize) {
         self.config.max_effective_context_tokens = if cap == 0 { None } else { Some(cap) };
     }
+
+    /// Tokens saved by content-hash dedup (cumulative).
+    pub fn dedup_tokens_saved(&self) -> usize {
+        self.content_deduper.tokens_saved
+    }
+
+    /// Number of duplicate tool payloads suppressed.
+    pub fn dedup_count(&self) -> usize {
+        self.content_deduper.dedup_count
+    }
+}
+
+/// Stable FNV-1a 64-bit fingerprint for session-scoped content dedup.
+pub fn content_fingerprint(text: &str) -> u64 {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x1000_0000_01b3;
+    let mut h = OFFSET;
+    for &b in text.as_bytes() {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(PRIME);
+    }
+    h
 }
 
 /// A single recall injection with relevance metadata.
@@ -884,7 +1053,8 @@ mod tests {
         let short = "hello world";
         assert_eq!(truncate_tool_output(short, 100), short);
 
-        let long = "x".repeat(200);
+        // ASCII ≈ 4 chars/token: need > 100 tokens → > 400 chars.
+        let long = "x".repeat(800);
         let result = truncate_tool_output(&long, 100);
         assert!(result.len() < long.len());
         assert!(result.contains("truncated"));
@@ -892,5 +1062,106 @@ mod tests {
         assert!(result.ends_with('x'));
 
         assert_eq!(truncate_tool_output(short, 0), short);
+    }
+
+    #[test]
+    fn test_should_soft_efficiency_nudge_band() {
+        assert!(!should_soft_efficiency_nudge(0.55, 50_000, 200_000)); // 25%
+        assert!(should_soft_efficiency_nudge(0.55, 120_000, 200_000)); // 60%
+        assert!(!should_soft_efficiency_nudge(0.55, 170_000, 200_000)); // 85% → hard band
+        assert!(!should_soft_efficiency_nudge(0.0, 120_000, 200_000)); // disabled
+        assert!(!should_soft_efficiency_nudge(0.55, 120_000, 0)); // no window
+    }
+
+    #[test]
+    fn test_content_hash_dedup_suppresses_second_copy() {
+        let mut d = ContentHashDeduper::new();
+        let payload = "A".repeat(400);
+        let first = d.admit(payload.clone());
+        assert_eq!(first, payload);
+        assert_eq!(d.dedup_count, 0);
+
+        let second = d.admit(payload.clone());
+        assert!(second.contains("duplicate content hash="));
+        assert!(second.contains("tokens omitted"));
+        assert_eq!(d.dedup_count, 1);
+        assert!(d.tokens_saved > 0);
+
+        // Prior admit is not rewritten — caller keeps first as-is.
+        assert_eq!(first, payload);
+    }
+
+    #[test]
+    fn test_content_hash_dedup_skips_tiny_payloads() {
+        let mut d = ContentHashDeduper::new();
+        let tiny = "small".to_string();
+        assert_eq!(d.admit(tiny.clone()), tiny);
+        assert_eq!(d.admit(tiny.clone()), tiny);
+        assert_eq!(d.dedup_count, 0);
+    }
+
+    #[test]
+    fn test_record_tool_result_dedups_and_preserves_history() {
+        let mut prompt = AgentPrompt::with_defaults();
+        prompt.set_system_prompt("sys");
+        let payload = "B".repeat(500);
+        prompt.record_tool_result(payload.clone());
+        prompt.record_tool_result(payload);
+        assert_eq!(prompt.dedup_count(), 1);
+        assert!(prompt.dedup_tokens_saved() > 0);
+        // First tool message stays full; only the second is stubbed.
+        let tool_msgs: Vec<_> = prompt.messages.iter().filter(|m| m.ephemeral).collect();
+        assert!(tool_msgs.len() >= 2);
+        assert!(tool_msgs[0].content.starts_with('B'));
+        assert!(tool_msgs[1].content.contains("duplicate content hash="));
+    }
+
+    #[test]
+    fn test_soft_nudge_injected_as_tail_reminder_only() {
+        let mut prompt = AgentPrompt::new(PromptConfig {
+            context_window: Some(1000),
+            max_effective_context_tokens: Some(1000),
+            soft_nudge_ratio: 0.55,
+            context_budget_prune: false,
+            ..Default::default()
+        });
+        prompt.set_system_prompt("stable system");
+        // Pad conversation so usage exceeds soft ratio but stays ≤ 80%.
+        // ~20 msgs × ~120 ASCII chars ≈ 600 tokens on a 1000 window (60%).
+        for i in 0..20 {
+            prompt.record_response(&format!("pad-{i}-{}", "x".repeat(120)));
+        }
+        let usage = prompt.total_estimated_tokens();
+        assert!(
+            usage > 550 && usage <= 800,
+            "precondition: soft band needs ~55–80% usage, got {usage}/1000"
+        );
+        let before_len = prompt.messages.len();
+        let _ = prompt.begin_turn("next", &[]);
+        let reminders: Vec<_> = prompt
+            .messages
+            .iter()
+            .filter(|m| m.role == Role::SystemReminder)
+            .collect();
+        assert!(
+            reminders.iter().any(|m| m.content.contains("context efficiency")),
+            "soft efficiency reminder should be injected (usage={usage})"
+        );
+        // System prompt still first and unchanged.
+        assert_eq!(prompt.messages[0].role, Role::System);
+        assert_eq!(prompt.messages[0].content, "stable system");
+        assert!(prompt.messages.len() > before_len);
+
+        // Next turn strips the previous reminder.
+        let _ = prompt.begin_turn("again", &[]);
+        let eff_count = prompt
+            .messages
+            .iter()
+            .filter(|m| m.content.contains("context efficiency"))
+            .count();
+        assert!(
+            eff_count <= 1,
+            "stale soft nudge must be stripped; at most one live reminder"
+        );
     }
 }

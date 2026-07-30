@@ -13,6 +13,8 @@ mod tests {
             max_tool_output_tokens: 10000,
             context_window: None,
             max_effective_context_tokens: None,
+            soft_nudge_ratio: 0.55,
+            content_hash_dedup: true,
         }
     }
 

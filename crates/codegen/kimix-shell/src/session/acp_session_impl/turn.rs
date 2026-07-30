@@ -573,8 +573,29 @@ impl SessionActor {
             })?
         };
         let prompt_text_for_hook = user_message.clone();
-        // ── Kimix: recall injection + prune tracking ────────────────────
-        crate::session::kimix_recall::inject_recall_context(&mut user_message);
+        // ── Kimix: recall + soft efficiency nudge (current message only) ─
+        let usage_hint = {
+            let estimated_tokens = self.chat_state_handle.get_estimated_total_tokens().await;
+            let sampling = self.chat_state_handle.get_sampling_config().await;
+            let context_window = sampling.as_ref().map(|c| c.context_window.get()).unwrap_or(0);
+            let max_effective = self
+                .rebuild_spec
+                .compaction_policy
+                .max_effective_context_tokens;
+            if context_window > 0 {
+                Some(crate::session::kimix_recall::ContextUsageHint {
+                    estimated_tokens,
+                    context_window,
+                    max_effective_context_tokens: max_effective,
+                })
+            } else {
+                None
+            }
+        };
+        crate::session::kimix_recall::inject_recall_context_with_usage(
+            &mut user_message,
+            usage_hint,
+        );
         crate::session::kimix_recall::index_user_message(&prompt_text_for_hook);
         // ─────────────────────────────────────────────────────────────────
         {

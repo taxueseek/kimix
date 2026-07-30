@@ -1,16 +1,39 @@
 //! Kimix recall + prune + cross-session search for session turns.
 //!
-//! Three integrated capabilities:
+//! Integrated capabilities:
 //! 1. **BM25 recall**: CJK bigram 3-tier memory, injected as system-reminder
 //! 2. **Context-budget prune**: Tracks tool-result tokens, reports savings
 //! 3. **Cross-session search**: BM25 search across all sessions
-use kimix_bridge::{KimixPromptAdapter, KimixRecallEngine, KimixSessionMemory};
+//! 4. **Soft efficiency nudge**: one-turn system-reminder on the current user
+//!    message only (never rewrites history — prompt-cache safe)
+//! 5. **Tool content-hash dedup**: ingress-only stub for duplicate large payloads
+use kimix_bridge::{
+    ContentHashDeduper, KimixPromptAdapter, KimixRecallEngine, KimixSessionMemory,
+    SOFT_EFFICIENCY_NUDGE, should_soft_efficiency_nudge,
+};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 static RECALL: std::sync::OnceLock<Mutex<KimixRecallEngine>> = std::sync::OnceLock::new();
 static PROMPT: std::sync::OnceLock<Mutex<KimixPromptAdapter>> = std::sync::OnceLock::new();
 static SESSION_MEMORY: std::sync::OnceLock<Mutex<KimixSessionMemory>> = std::sync::OnceLock::new();
+static TOOL_DEDUP: std::sync::OnceLock<Mutex<ContentHashDeduper>> = std::sync::OnceLock::new();
+
+/// Soft efficiency band lower bound (ratio of effective context window).
+const SOFT_NUDGE_RATIO: f64 = 0.55;
+
+/// Hint for soft efficiency nudge (real chat-state token estimate).
+#[derive(Debug, Clone, Copy)]
+pub struct ContextUsageHint {
+    pub estimated_tokens: u64,
+    pub context_window: u64,
+    /// `0` means no cap (use full `context_window`).
+    pub max_effective_context_tokens: u32,
+}
+
+fn tool_dedup() -> &'static Mutex<ContentHashDeduper> {
+    TOOL_DEDUP.get_or_init(|| Mutex::new(ContentHashDeduper::new()))
+}
 
 fn recall() -> &'static Mutex<KimixRecallEngine> {
     RECALL.get_or_init(|| Mutex::new(KimixRecallEngine::new()))
@@ -36,6 +59,16 @@ fn session_memory() -> &'static Mutex<KimixSessionMemory> {
 
 /// Inject recall context + prune stats into user message before sending to model.
 pub fn inject_recall_context(user_message: &mut String) {
+    inject_recall_context_with_usage(user_message, None);
+}
+
+/// Like [`inject_recall_context`], optionally injecting a soft efficiency nudge
+/// based on real chat-state token usage. Nudge text is only prepended to the
+/// **current** user message — historical messages are never rewritten.
+pub fn inject_recall_context_with_usage(
+    user_message: &mut String,
+    usage: Option<ContextUsageHint>,
+) {
     if user_message.len() < 10 {
         return;
     }
@@ -60,9 +93,59 @@ pub fn inject_recall_context(user_message: &mut String) {
             prunes, saved / 1000
         ));
     }
+    if let Some(u) = usage {
+        let effective = if u.max_effective_context_tokens > 0 {
+            u.context_window
+                .min(u64::from(u.max_effective_context_tokens))
+        } else {
+            u.context_window
+        };
+        if should_soft_efficiency_nudge(SOFT_NUDGE_RATIO, u.estimated_tokens, effective) {
+            tracing::debug!(
+                estimated_tokens = u.estimated_tokens,
+                effective_window = effective,
+                soft_nudge_ratio = SOFT_NUDGE_RATIO,
+                "soft_nudge: injecting efficiency reminder on current user message"
+            );
+            prefix.push_str(&format!(
+                "<system-reminder>\n{SOFT_EFFICIENCY_NUDGE}\n</system-reminder>\n"
+            ));
+        }
+    }
     if !prefix.is_empty() {
         *user_message = format!("{}\n{}", prefix, user_message);
     }
+}
+
+/// Admit a tool payload with session content-hash dedup.
+///
+/// Duplicate large payloads are replaced with a short stub **at insert time
+/// only** — prior history is never mutated (prompt-cache safe).
+pub fn admit_tool_payload(content: String) -> String {
+    match tool_dedup().lock() {
+        Ok(mut d) => {
+            let before = d.tokens_saved;
+            let out = d.admit(content);
+            let gained = d.tokens_saved.saturating_sub(before);
+            if gained > 0 {
+                tracing::debug!(
+                    omitted_tokens = gained,
+                    dedup_count = d.dedup_count,
+                    "tool content_dedup: suppressed duplicate payload"
+                );
+            }
+            out
+        }
+        Err(_) => content,
+    }
+}
+
+/// Cumulative tool content-hash dedup stats: `(dedup_count, tokens_saved)`.
+pub fn tool_dedup_stats() -> (usize, usize) {
+    tool_dedup()
+        .lock()
+        .map(|d| (d.dedup_count, d.tokens_saved))
+        .unwrap_or((0, 0))
 }
 
 /// Record assistant response for prune tracking + cross-session indexing.
@@ -146,6 +229,9 @@ pub fn reset_all() {
     }
     if let Some(p) = PROMPT.get() {
         let _ = p.lock().map(|mut a| *a = KimixPromptAdapter::new(""));
+    }
+    if let Some(d) = TOOL_DEDUP.get() {
+        let _ = d.lock().map(|mut x| *x = ContentHashDeduper::new());
     }
 }
 pub fn index_turn(user_msg: &str, assistant_msg: &str, is_compacted: bool) {
