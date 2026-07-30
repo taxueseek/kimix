@@ -2,7 +2,7 @@
 
 > 日期：2026-07-28
 > 方法：4 路 MECE 子代理并行审计（DeepSeek-V4-Pro x3 + Kimi-K3 x1）+ GLM-5.2 对抗性交叉验证 + 实测验证
-> 基线：v0.1.13-post-all-opt，117.5 万行自研 Rust，60+ crate
+> 基线：v0.1.13-post-all-opt，约 117.5 万行 Rust（含上游 fork 改进与移植，非全量从零自研），60+ crate
 
 ---
 
