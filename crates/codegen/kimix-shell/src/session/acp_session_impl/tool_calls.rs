@@ -1987,6 +1987,8 @@ impl SessionActor {
                 pdf.total_pages,
             );
         }
+        // Ingress-only content-hash dedup: never rewrites prior tool messages.
+        let prompt_text = crate::session::kimix_recall::admit_tool_payload(prompt_text);
         let tool_chat = if inline_images.is_empty() {
             ConversationItem::tool_result(call_id.to_string(), prompt_text)
         } else {

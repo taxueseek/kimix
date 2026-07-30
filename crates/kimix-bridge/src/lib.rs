@@ -26,6 +26,11 @@ use kimix_prompt::{AgentPrompt, PromptConfig, RecallInjection};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+// Re-exports for shell/runtime without a direct kimix-prompt dep.
+pub use kimix_prompt::{
+    ContentHashDeduper, SOFT_EFFICIENCY_NUDGE, should_soft_efficiency_nudge,
+};
+
 // ============================================================================
 // KimixRecallEngine — drop-in for Kimix-memory's search
 // ============================================================================
