@@ -153,6 +153,52 @@ pub fn resolve_max_effective_context_tokens(user_session: Option<u32>) -> u32 {
     user_session.unwrap_or(DEFAULT_MAX_EFFECTIVE_CONTEXT_TOKENS)
 }
 
+/// Default soft-efficiency nudge lower bound (ratio of effective window).
+pub const DEFAULT_SOFT_NUDGE_RATIO: f64 = 0.55;
+
+/// Env override for soft nudge ratio. Parsed as `f64`; `0` disables.
+pub(crate) const ENV_SOFT_NUDGE_RATIO: &str = "KIMIX_SOFT_NUDGE_RATIO";
+
+/// Env override for content-hash tool-result dedup (`0`/`false`/`off` / `1`/`true`/`on`).
+pub(crate) const ENV_CONTENT_HASH_DEDUP: &str = "KIMIX_CONTENT_HASH_DEDUP";
+
+/// Resolve soft efficiency nudge ratio.
+///
+/// Precedence: env `KIMIX_SOFT_NUDGE_RATIO` > user TOML
+/// `[session].soft_nudge_ratio` > [`DEFAULT_SOFT_NUDGE_RATIO`].
+/// Values `<= 0` disable; values `> 1` are clamped to `1.0`.
+pub fn resolve_soft_nudge_ratio(user_session: Option<f64>) -> f64 {
+    let raw = if let Ok(s) = std::env::var(ENV_SOFT_NUDGE_RATIO)
+        && let Ok(n) = s.trim().parse::<f64>()
+    {
+        n
+    } else {
+        user_session.unwrap_or(DEFAULT_SOFT_NUDGE_RATIO)
+    };
+    if raw <= 0.0 {
+        0.0
+    } else if raw > 1.0 {
+        1.0
+    } else {
+        raw
+    }
+}
+
+/// Resolve whether ingress content-hash dedup is enabled.
+///
+/// Precedence: env `KIMIX_CONTENT_HASH_DEDUP` > user TOML
+/// `[session].content_hash_dedup` > `true`.
+pub fn resolve_content_hash_dedup(user_session: Option<bool>) -> bool {
+    if let Ok(raw) = std::env::var(ENV_CONTENT_HASH_DEDUP) {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "0" | "false" | "off" | "no" => return false,
+            "1" | "true" | "on" | "yes" => return true,
+            _ => {}
+        }
+    }
+    user_session.unwrap_or(true)
+}
+
 #[cfg(test)]
 mod compaction_wall_clock_budget_tests {
     use super::resolve_compaction_wall_clock_budget_secs as resolve;
@@ -182,6 +228,33 @@ mod max_effective_context_tokens_tests {
             assert_eq!(resolve_max_effective_context_tokens(None), 200_000);
             assert_eq!(resolve_max_effective_context_tokens(Some(0)), 0);
             assert_eq!(resolve_max_effective_context_tokens(Some(150_000)), 150_000);
+        }
+    }
+}
+
+#[cfg(test)]
+mod soft_nudge_and_dedup_resolve_tests {
+    use super::{
+        DEFAULT_SOFT_NUDGE_RATIO, resolve_content_hash_dedup, resolve_soft_nudge_ratio,
+    };
+
+    #[test]
+    fn soft_nudge_defaults_and_clamps_when_env_unset() {
+        if std::env::var(super::ENV_SOFT_NUDGE_RATIO).is_err() {
+            assert!((resolve_soft_nudge_ratio(None) - DEFAULT_SOFT_NUDGE_RATIO).abs() < f64::EPSILON);
+            assert!((resolve_soft_nudge_ratio(Some(0.6)) - 0.6).abs() < f64::EPSILON);
+            assert_eq!(resolve_soft_nudge_ratio(Some(0.0)), 0.0);
+            assert_eq!(resolve_soft_nudge_ratio(Some(-1.0)), 0.0);
+            assert_eq!(resolve_soft_nudge_ratio(Some(2.0)), 1.0);
+        }
+    }
+
+    #[test]
+    fn content_hash_dedup_defaults_on_when_env_unset() {
+        if std::env::var(super::ENV_CONTENT_HASH_DEDUP).is_err() {
+            assert!(resolve_content_hash_dedup(None));
+            assert!(resolve_content_hash_dedup(Some(true)));
+            assert!(!resolve_content_hash_dedup(Some(false)));
         }
     }
 }

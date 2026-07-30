@@ -14,6 +14,9 @@ pub const DEFAULT_TOOL_OUTPUT_CHARS: usize = 20_000;
 /// Env override for bash/terminal tool output character budget.
 pub const ENV_MAX_TOOL_OUTPUT_CHARS: &str = "KIMIX_MAX_TOOL_OUTPUT_CHARS";
 
+/// Env override for generic tool output **byte** budget (grep, task_output, …).
+pub const ENV_MAX_TOOL_OUTPUT_BYTES: &str = "KIMIX_MAX_TOOL_OUTPUT_BYTES";
+
 /// Effective bash/terminal tool output character budget.
 ///
 /// Precedence: env `KIMIX_MAX_TOOL_OUTPUT_CHARS` (positive integer) >
@@ -26,6 +29,41 @@ pub fn tool_output_chars_limit() -> usize {
         .and_then(|s| s.trim().parse::<usize>().ok())
         .filter(|n| *n > 0)
         .unwrap_or(DEFAULT_TOOL_OUTPUT_CHARS)
+}
+
+/// Effective generic tool output **byte** budget.
+///
+/// Precedence: env `KIMIX_MAX_TOOL_OUTPUT_BYTES` (positive integer) >
+/// [`DEFAULT_TOOL_OUTPUT_BYTES`]. Call sites that used the constant as a
+/// fallback should prefer this so operators can cap token/memory without
+/// rebuilding (`0` is ignored → default).
+pub fn tool_output_bytes_limit() -> usize {
+    std::env::var(ENV_MAX_TOOL_OUTPUT_BYTES)
+        .ok()
+        .and_then(|s| s.trim().parse::<usize>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(DEFAULT_TOOL_OUTPUT_BYTES)
+}
+
+#[cfg(test)]
+mod tool_budget_tests {
+    use super::*;
+
+    #[test]
+    fn tool_output_bytes_limit_defaults_when_env_unset() {
+        // Do not mutate process env (parallel tests); only assert pure fallback
+        // when the var is absent or invalid is handled by the filter.
+        if std::env::var(ENV_MAX_TOOL_OUTPUT_BYTES).is_err() {
+            assert_eq!(tool_output_bytes_limit(), DEFAULT_TOOL_OUTPUT_BYTES);
+        }
+    }
+
+    #[test]
+    fn tool_output_chars_limit_defaults_when_env_unset() {
+        if std::env::var(ENV_MAX_TOOL_OUTPUT_CHARS).is_err() {
+            assert_eq!(tool_output_chars_limit(), DEFAULT_TOOL_OUTPUT_CHARS);
+        }
+    }
 }
 
 /// MCP inline tool-result cap (`MCP_MAX_OUTPUT_BYTES` and host/env helpers).

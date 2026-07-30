@@ -20,6 +20,7 @@ use crate::implementations::kimix::enter_plan_mode::EnterPlanModeInput;
 use crate::implementations::kimix::exit_plan_mode::ExitPlanModeInput;
 use crate::implementations::kimix::grep::GrepSearchInput;
 use crate::implementations::kimix::list_dir::ListDirInput;
+use crate::implementations::kimix::outline::OutlineInput;
 use crate::implementations::kimix::read_file::ReadFileInput;
 use crate::implementations::kimix::search_replace::SearchReplaceInput;
 use crate::implementations::kimix::todo::TodoWriteInput;
@@ -83,6 +84,7 @@ pub enum ToolInput {
     ExitPlanMode(ExitPlanModeInput),
     AskUserQuestion(AskUserQuestionInput),
     Lsp(LspToolInput),
+    Outline(OutlineInput),
     Monitor(crate::implementations::kimix::monitor::types::MonitorInput),
     SchedulerCreate(crate::implementations::kimix::scheduler::create::SchedulerCreateInput),
     SchedulerDelete(crate::implementations::kimix::scheduler::delete::SchedulerDeleteInput),

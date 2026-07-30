@@ -118,6 +118,43 @@
         );
     }
 
+    /// Live bug: stream decode failure → Retrying left partial answers painted,
+    /// then the next attempt streamed another full answer (stacked 3–6×).
+    #[test]
+    fn apply_retry_state_retrying_discards_partial_agent_message() {
+        use agent_client_protocol as acp;
+        use crate::acp::meta::NotificationMeta;
+
+        let mut session = make_session(Some("s1"));
+        let mut scrollback = ScrollbackState::new();
+        let meta = NotificationMeta::default();
+        let chunk = acp::SessionUpdate::AgentMessageChunk(acp::ContentChunk::new(
+            acp::ContentBlock::Text(acp::TextContent::new("## 数据从哪来\n第一版")),
+        ));
+        session
+            .tracker
+            .handle_update(chunk, &meta, &mut scrollback);
+        let before = scrollback.len();
+        assert!(before >= 1, "partial answer present");
+
+        apply_retry_state(
+            &RetryState::Retrying {
+                attempt: 2,
+                max_retries: 15,
+                reason: "reqwest error stream: Transport error: error decoding response body"
+                    .into(),
+            },
+            &mut session,
+            &mut scrollback,
+            false,
+        );
+        assert!(
+            scrollback.len() < before,
+            "Retrying must remove partial agent message (before={before}, after={})",
+            scrollback.len()
+        );
+    }
+
     #[test]
     fn retry_exhausted_rate_limited_sets_flag() {
         let mut session = make_session(Some("s1"));

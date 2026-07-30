@@ -88,7 +88,14 @@ pub(crate) async fn run_request_task(
             .idle_timeout_secs
             .unwrap_or(DEFAULT_IDLE_TIMEOUT_SECS),
     );
-    let max_retries = resolve_max_retries(config.max_retries.or(Some(retry_policy.max_retries)));
+    // Explicit `max_retries = 0` hard-disables retries (and doom-loop
+    // recovery). Do not let `KIMIX_MAX_RETRIES` env override that intent.
+    let configured_max_retries = config.max_retries.or(Some(retry_policy.max_retries));
+    let max_retries = if configured_max_retries == Some(0) {
+        0
+    } else {
+        resolve_max_retries(configured_max_retries)
+    };
 
     // Build the initial client. Configuration errors here are fatal
     // (no point retrying with the same broken config).
@@ -115,8 +122,10 @@ pub(crate) async fn run_request_task(
     let mut request = request;
     let mut retry_count: u32 = 0;
     // Doom-loop recovery keeps its own resample budget, independent of the
-    // transport/empty budget above.
-    let doom_policy = config.doom_loop_recovery;
+    // transport/empty budget above. Disabled entirely when retries are off.
+    let doom_policy = (max_retries > 0)
+        .then_some(config.doom_loop_recovery)
+        .flatten();
     let doom_max_retries = doom_policy.map_or(0, |p| p.max_retries);
     let mut doom_retry_count: u32 = 0;
 
@@ -605,6 +614,7 @@ fn synthesize_from_info(info: &SamplingErrorInfo) -> SamplingError {
                 message: info.message.clone(),
                 model_metadata: info.model_metadata.clone(),
                 retry_after_secs: info.retry_after_secs,
+                should_retry: None,
             }
         }
         SamplingErrorKind::EmptyResponse => {

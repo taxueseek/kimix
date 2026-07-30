@@ -837,6 +837,13 @@ impl AgentSession {
     pub fn set_retry_activity(&mut self, activity: Option<TurnActivity>) {
         self.tracker.set_retry_activity(activity);
     }
+    /// Drop partial stream UI for a failed model attempt before the sampler retries.
+    pub fn discard_failed_stream_attempt(
+        &mut self,
+        scrollback: &mut crate::scrollback::state::ScrollbackState,
+    ) {
+        self.tracker.discard_failed_stream_attempt(scrollback);
+    }
     /// Start a slash command (e.g., /compact).
     pub fn start_command(&mut self, command: AgentCommand) {
         self.state = AgentState::CommandRunning {

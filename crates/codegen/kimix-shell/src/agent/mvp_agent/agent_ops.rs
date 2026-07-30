@@ -2028,6 +2028,14 @@ impl MvpAgent {
                 cfg.session.max_effective_context_tokens,
             )
         };
+        // Context-economy: soft nudge + content-hash dedup (process-global statics).
+        {
+            let cfg = self.cfg.borrow();
+            let soft = crate::util::config::resolve_soft_nudge_ratio(cfg.session.soft_nudge_ratio);
+            let dedup =
+                crate::util::config::resolve_content_hash_dedup(cfg.session.content_hash_dedup);
+            crate::session::kimix_recall::configure_context_economy(soft, dedup);
+        }
         let system_prompt_label = {
             let cfg = self.cfg.borrow();
             let models = self.models_manager.models();

@@ -5,6 +5,34 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+## [0.1.15] - 2026-07-30
+
+### Added
+- 视频内存硬顶：ffmpeg 提取上限约 12s / 120 帧，长视频不再无界占内存
+- 空闲 TUI tick 退避：无动画时指数退避，上限 250ms，减少空转 CPU
+- 上下文与工具输出可配置：`[session].max_effective_context_tokens` 与 `KIMIX_MAX_EFFECTIVE_CONTEXT_TOKENS`（0=禁用 cap），工具输出上限 `KIMIX_MAX_TOOL_OUTPUT_CHARS`
+- 上下文用量 soft nudge：用量进入软区间时注入轻量效率提示（`soft_nudge_ratio` 可配，默认 ~0.55）
+- 工具 ingress content-hash 去重：相同内容不重复灌入上下文（`content_hash_dedup` 可关）
+- 新增 `outline` 工具（codebase-graph 单文件符号大纲，无需 LSP）
+- 流式重试 metrics 脚本：`scripts/analyze-retry-metrics.py`，可选门禁 M1 peak attempt
+
+### Fixed
+- 流式重试风暴：中流传输错误（EventStream/StreamError）重试上限从 15 收紧到 3（`STREAM_TRANSPORT_RETRY_THRESHOLD`）
+- 尊重响应头 `x-should-retry: false` → 立即 Fatal；`max_retries == 0` 硬关闭重试
+- TUI：失败 attempt 的流式半成品丢弃，避免「叠字」和多段重复答案
+
+### Changed
+- 有效上下文默认硬顶 200K tokens（可配置）；压缩阈值基于 `min(context_window, cap)`
+- headless 抽取为独立 crate `kimix-headless`（不依赖 ratatui/crossterm），便于无头编译
+- shell-base 类型解耦：纯数据类型下沉，shell 变更不再牵动整棵 TUI 类型重编译
+- 内存边界：prompt_texts / updates.jsonl / 粘贴图片等路径增加上限与更稳妥的加载策略
+- 渲染 cache：prepare_layout resize 容差 + 折叠组 header 缓存，大会话 resize 更轻
+- auto_compact 阈值与 intra-compaction 默认策略收紧
+- CI/clippy 与依赖审计门禁补全；清理无用 crate / 依赖链
+- Cargo.toml 版本升至 0.1.15
+
 ## [0.1.14] - 2026-07-29
 
 ### Added
@@ -21,8 +49,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - clippy 零警告：修复 fuzzy.rs unused_mut、session_lock.rs unused import
 - Cargo.toml 版本升至 0.1.14
-
-## [Unreleased]
 
 ## [0.1.13] - 2026-07-26
 

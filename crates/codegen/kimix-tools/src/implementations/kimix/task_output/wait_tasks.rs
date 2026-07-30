@@ -6,7 +6,7 @@
 //!
 //! `mode: wait_any` is still honored here for compatibility; the unified get
 //! tool only supports wait-all for multi-id waits.
-use crate::DEFAULT_TOOL_OUTPUT_BYTES;
+use crate::tool_output_bytes_limit;
 use crate::implementations::kimix::task::backend::SubagentBackendResource;
 use crate::implementations::kimix::task_output::{
     MAX_MULTI_WAIT_IDS, TaskOutputTool, resolve_tasks, wait_any_event_driven,
@@ -184,10 +184,10 @@ impl kimix_tool_runtime::Tool for WaitTasksTool {
                 .map(|cfg| {
                     cfg.0.max_output_bytes_for(
                         "wait_commands_or_subagents",
-                        DEFAULT_TOOL_OUTPUT_BYTES,
+                        tool_output_bytes_limit(),
                     )
                 })
-                .unwrap_or(DEFAULT_TOOL_OUTPUT_BYTES);
+                .unwrap_or_else(tool_output_bytes_limit);
             (terminal, backend, rfn, mob)
         };
 

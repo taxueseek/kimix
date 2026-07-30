@@ -8,7 +8,7 @@ use std::time::Duration;
 pub use terminal_command::GetTerminalCommandOutputTool;
 pub use wait_tasks::WaitTasksTool;
 
-use crate::DEFAULT_TOOL_OUTPUT_BYTES;
+use crate::tool_output_bytes_limit;
 use crate::implementations::BashTool;
 use crate::implementations::kimix::task::TaskTool;
 use crate::implementations::kimix::task::backend::SubagentBackendResource;
@@ -145,10 +145,10 @@ impl TaskOutputTool {
                 .map(|cfg| {
                     cfg.0.max_output_bytes_for(
                         "get_command_or_subagent_output",
-                        DEFAULT_TOOL_OUTPUT_BYTES,
+                        tool_output_bytes_limit(),
                     )
                 })
-                .unwrap_or(DEFAULT_TOOL_OUTPUT_BYTES);
+                .unwrap_or_else(tool_output_bytes_limit);
             return Ok(TaskOutputOutput::Result(snapshot_to_result(
                 snapshot,
                 &read_file_name,
@@ -222,9 +222,9 @@ impl TaskOutputTool {
                 .get::<TruncationCfg>()
                 .map(|cfg| {
                     cfg.0
-                        .max_output_bytes_for(tool_name_for_truncation, DEFAULT_TOOL_OUTPUT_BYTES)
+                        .max_output_bytes_for(tool_name_for_truncation, tool_output_bytes_limit())
                 })
-                .unwrap_or(DEFAULT_TOOL_OUTPUT_BYTES);
+                .unwrap_or_else(tool_output_bytes_limit);
             (terminal, backend, rfn, mob)
         };
 

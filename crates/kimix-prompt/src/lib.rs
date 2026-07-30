@@ -29,11 +29,9 @@ const MIN_DEDUP_CHARS: usize = 256;
 
 /// Soft efficiency-nudge text (one-turn system reminder only).
 ///
-/// Inspired by Active Context Pruning's soft growth nudge: efficiency signal,
-/// not an overflow alarm. Injected at message-list tail / current-user prefix so
-/// the stable history prefix stays byte-identical for prompt-cache reuse.
-///
-/// Ideas only — no AGPL code copied from opencode-acp.
+/// Efficiency signal (not an overflow alarm). Injected on the current user
+/// message only so the stable history prefix stays byte-identical for
+/// prompt-cache reuse.
 pub const SOFT_EFFICIENCY_NUDGE: &str = "\
 [context efficiency] Estimated context is past the soft working range. Prefer \
 concise tool outputs, avoid re-reading large files already seen this session, \

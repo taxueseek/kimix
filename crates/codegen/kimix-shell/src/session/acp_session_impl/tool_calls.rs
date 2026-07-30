@@ -316,8 +316,10 @@ impl SessionActor {
                         format!("Tool execution cancelled for tool `{}`", call.function.name)
                     }
                 };
-                self.chat_state_handle
-                    .push_tool_result(ConversationItem::tool_result(call.id.clone(), message));
+                crate::session::kimix_recall::push_admitted_tool_result(
+                    &self.chat_state_handle,
+                    ConversationItem::tool_result(call.id.clone(), message),
+                );
                 continue;
             }
             self.emit_event(crate::session::events::Event::ToolStarted {
@@ -1112,7 +1114,10 @@ impl SessionActor {
                         self.send_update(acp::SessionUpdate::ToolCallUpdate(tool_update), None)
                             .await;
                         let tool_chat = ConversationItem::tool_result(call.id.clone(), message);
-                        self.chat_state_handle.push_tool_result(tool_chat);
+                        crate::session::kimix_recall::push_admitted_tool_result(
+                            &self.chat_state_handle,
+                            tool_chat,
+                        );
                         return Ok(Err(ToolLoop::Continue));
                     }
                     PlanApprovalOutcome::Cancelled => {
@@ -1134,7 +1139,10 @@ impl SessionActor {
                         self.send_update(acp::SessionUpdate::ToolCallUpdate(tool_update), None)
                             .await;
                         let tool_chat = ConversationItem::tool_result(call.id.clone(), message);
-                        self.chat_state_handle.push_tool_result(tool_chat);
+                        crate::session::kimix_recall::push_admitted_tool_result(
+                            &self.chat_state_handle,
+                            tool_chat,
+                        );
                         return Ok(Err(ToolLoop::Continue));
                     }
                     PlanApprovalOutcome::Approved => {
@@ -1687,7 +1695,7 @@ impl SessionActor {
         )
         .await;
         let tool_chat = ConversationItem::tool_result(call_id.to_string(), message);
-        self.chat_state_handle.push_tool_result(tool_chat);
+        crate::session::kimix_recall::push_admitted_tool_result(&self.chat_state_handle, tool_chat);
         Ok(())
     }
     /// Sweep `pending_inputs` and `pending_notifications` for entries
@@ -1987,8 +1995,8 @@ impl SessionActor {
                 pdf.total_pages,
             );
         }
-        // Ingress-only content-hash dedup: never rewrites prior tool messages.
-        let prompt_text = crate::session::kimix_recall::admit_tool_payload(prompt_text);
+        // Ingress-only content-hash dedup via push_admitted_tool_result:
+        // never rewrites prior tool messages (prompt-cache safe).
         let tool_chat = if inline_images.is_empty() {
             ConversationItem::tool_result(call_id.to_string(), prompt_text)
         } else {
@@ -1998,7 +2006,7 @@ impl SessionActor {
                 inline_images,
             )
         };
-        self.chat_state_handle.push_tool_result(tool_chat);
+        crate::session::kimix_recall::push_admitted_tool_result(&self.chat_state_handle, tool_chat);
         let mut deferred_followups = Vec::new();
         if !extracted_images.is_empty() {
             let count = extracted_images.len();
@@ -2090,7 +2098,7 @@ impl SessionActor {
         )
         .await;
         let tool_chat = ConversationItem::tool_result(call_id.to_string(), message);
-        self.chat_state_handle.push_tool_result(tool_chat);
+        crate::session::kimix_recall::push_admitted_tool_result(&self.chat_state_handle, tool_chat);
         vec![]
     }
     async fn send_thought_chunk(&self, text: String, chunk_index: u64) {
@@ -2394,7 +2402,7 @@ impl SessionActor {
         self.send_update(acp::SessionUpdate::ToolCallUpdate(tool_update), None)
             .await;
         let tool_chat = ConversationItem::tool_result(model_call_id.to_owned(), reason);
-        self.chat_state_handle.push_tool_result(tool_chat);
+        crate::session::kimix_recall::push_admitted_tool_result(&self.chat_state_handle, tool_chat);
         Ok(())
     }
 }

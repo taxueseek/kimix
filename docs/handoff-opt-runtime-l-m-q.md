@@ -83,7 +83,7 @@ max_effective_context_tokens = 150000  # 更早压缩
 ## 未做（下一批）
 
 - 视频真正「按当前帧 + 预取 10」流式解码（本批为硬顶 MVP）
-- ~~哈希去重 / outline 工具~~ → **部分完成**：content-hash 工具 ingress 去重 + soft efficiency nudge（见 `docs/handoff-opt-acp-ideas-soft-nudge-dedup.md`、`docs/analysis-opencode-acp-for-kimix.md`；源调研 `opencode-acp`，非 LeanToken）
+- ~~哈希去重 / outline 工具~~ → **完成**：content-hash 工具 ingress 去重 + soft efficiency nudge + `outline`（见 `docs/handoff-opt-soft-nudge-dedup.md`）
 - 多代理单 call 批派发
 - Phase 3 feature gate / hakari
 - 全 workspace `just gate`

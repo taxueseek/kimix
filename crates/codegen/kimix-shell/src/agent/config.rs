@@ -1424,6 +1424,22 @@ pub struct SessionConfig {
     /// `KIMIX_MAX_EFFECTIVE_CONTEXT_TOKENS` (highest precedence).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_effective_context_tokens: Option<u32>,
+    /// Soft efficiency nudge lower bound as a fraction of the effective
+    /// context window (default `0.55`). Nudge is injected only on the current
+    /// user message when usage is in `(ratio, 0.8]`.
+    ///
+    /// `None` = resolver default. `Some(0.0)` disables. Override via env
+    /// `KIMIX_SOFT_NUDGE_RATIO` (highest precedence).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub soft_nudge_ratio: Option<f64>,
+    /// Ingress content-hash dedup for large tool payloads (default `true`).
+    /// Duplicate large results are stubbed at insert time only; history is
+    /// never rewritten (prompt-cache safe).
+    ///
+    /// `None` = enabled. Override via env `KIMIX_CONTENT_HASH_DEDUP`
+    /// (`0`/`false`/`off` disables; `1`/`true`/`on` enables).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_hash_dedup: Option<bool>,
     /// Whether to load environment variables from .envrc files.
     /// When enabled, the session will parse .envrc in the workspace directory
     /// and inject the environment variables into bash commands.

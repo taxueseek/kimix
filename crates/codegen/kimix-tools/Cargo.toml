@@ -16,6 +16,7 @@ educe = { workspace = true, features = ["Debug"] }
 async-openai = { workspace = true }
 kimix-tty-utils = { workspace = true }
 kimix-config = { path = "../kimix-config" }
+kimix-codebase-graph = { path = "../kimix-codebase-graph" }
 kimix-tools-api = { path = "../kimix-tools-api" }
 kimix-version = { workspace = true }
 kimix-token-estimation = { workspace = true }

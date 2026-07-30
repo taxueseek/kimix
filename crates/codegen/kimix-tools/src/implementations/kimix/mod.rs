@@ -19,6 +19,7 @@ pub mod kill_task;
 pub mod list_dir;
 pub mod lsp;
 pub mod monitor;
+pub mod outline;
 pub mod read_file;
 pub mod scheduler;
 pub mod search_replace;
@@ -39,6 +40,7 @@ pub use kill_task::{KillTaskTool, KillTerminalCommandTool};
 pub use list_dir::ListDirTool;
 pub use lsp::LspTool;
 pub use monitor::tool::MonitorTool;
+pub use outline::OutlineTool;
 pub use read_file::ReadFileTool;
 pub use scheduler::create::{
     SCHEDULER_CREATE_TOOL_NAME, SchedulerCreateTool, loop_schedule_instruction, loop_usage_message,

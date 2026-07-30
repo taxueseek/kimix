@@ -56,7 +56,19 @@ kimix 采用 Grok 4.5、Kimi K3 两个优秀模型构建，并在真实环境中
 
 ### 版本历程
 
-**v0.1.14**（当前）— 更安全、更流畅、更健壮
+**v0.1.15**（当前）— 重试不刷屏、视频不炸内存、上下文不浪费
+
+> 三个最烦人的问题一起处理了：「重试中」疯狂刷屏、拖长视频进去内存爆炸、窗口一长模型就开始胡说。外加一轮架构解耦和内存边界收紧。
+
+- **重试不再失控**：流式传输断了最多重试 3 次（以前 15 次），失败了也不往屏幕上堆半成品。服务端说「别重试了」（`x-should-retry: false`）就直接停；`max_retries=0` 可硬关重试。
+- **视频不撑爆**：ffmpeg 提取硬性卡在约 12s / 120 帧，长视频不会无界消耗内存。
+- **上下文更省**：有效上下文默认顶到 200K 就压缩（可配，0 关闭）；工具相同内容做 content-hash 去重；用量进入软区间（默认约 55%）时给一条轻量效率提示。
+- **结构更清**：`outline` 工具可先看单文件符号大纲再定点阅读；headless 独立 crate，shell / TUI 类型解耦，改 shell 不必整棵 TUI 类型重编。
+- **内存与渲染**：prompt_texts / 会话加载 / 粘贴图片等路径加边界；大会话 resize 与折叠组 header 做了缓存。
+
+---
+
+**v0.1.14** — 更安全、更流畅、更健壮
 
 > 一轮系统性的「性能+安全+正确性」深度优化，由 4 路子代理并行审计 + 对抗性交叉验证完成。
 
@@ -92,7 +104,7 @@ irm https://raw.githubusercontent.com/taxueseek/kimix/main/install.ps1 | iex
 ```
 
 ```sh
-kimix --version   # kimix 0.1.14 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.15 … unofficial Kimi Code CLI community build
 kimix login       # Kimi Code 订阅登录（设备码 OAuth 流程）
 kimix             # 启动全屏 TUI
 kimix -p "你好"    # 无头模式，直接提问
@@ -209,7 +221,19 @@ Use cases:
 </table>
 ### Release History
 
-**v0.1.14 (current)** — Safer, smoother, more robust
+**v0.1.15 (current)** — No more retry spam, no video OOM, smarter context economy
+
+> Three persistent annoyances addressed back-to-back: retries flooding the screen, long videos blowing up memory, and context windows growing past the point of diminishing returns — plus architectural decoupling and tighter memory bounds.
+
+- **Retry storm tamed**: stream transport retries tightened from 15 to 3. Server says don't retry (`x-should-retry: false`)? We stop. `max_retries=0` hard-disables retries. Partial output from a failed attempt is discarded — no more overlapping answers on screen.
+- **Video stays within bounds**: ffmpeg extraction hard-capped at ~12s / 120 frames. Long videos no longer consume unbounded memory.
+- **Context economy, configurable**: effective context hard-capped at 200K by default (0 to disable). Tool ingress deduplicates by content hash. A soft efficiency nudge fires in the ~55% utilization band (before auto-compact).
+- **Structure first**: new `outline` tool for single-file symbol outlines without reading the whole file. Headless extracted into its own crate; shell/TUI type decoupling reduces rebuild blast radius.
+- **Memory & render**: bounds on prompt_texts / session load / pasted images; large-session resize and folded-group headers use caches.
+
+---
+
+**v0.1.14** — Safer, smoother, more robust
 
 A systematic performance + security + correctness deep-dive, audited by 4 parallel agents with adversarial cross-validation.
 
@@ -245,7 +269,7 @@ irm https://raw.githubusercontent.com/taxueseek/kimix/main/install.ps1 | iex
 ```
 
 ```sh
-kimix --version   # kimix 0.1.14 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.15 … unofficial Kimi Code CLI community build
 kimix login       # sign in with your Kimi Code subscription (device-code OAuth)
 kimix             # start the TUI
 kimix -p "Hello"  # headless mode

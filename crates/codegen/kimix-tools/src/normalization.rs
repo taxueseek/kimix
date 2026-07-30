@@ -91,6 +91,7 @@ pub fn canonical_input(input: &ToolInput) -> Option<serde_json::Value> {
             (field::DESCRIPTION, req(&b.description)),
         ]),
         ToolInput::SearchReplace(s) => obj([(field::PATH, req(&s.file_path))]),
+        ToolInput::Outline(o) => obj([(field::PATH, req(&o.file_path))]),
         ToolInput::Write(w) => obj([(field::PATH, req(&w.file_path))]),
         ToolInput::ListDir(l) => obj([(field::DIRECTORY, req(&l.target_directory))]),
         ToolInput::Grep(g) => obj([
