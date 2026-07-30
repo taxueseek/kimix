@@ -20,7 +20,7 @@ use std::sync::Arc;
 use crate::computer::types::AsyncFileSystem;
 use crate::implementations::kimix::search_replace::CONTEXT_LINES;
 use crate::implementations::kimix::search_replace::helpers::{
-    build_edit_details, render_snippet, replace_using_positions,
+    build_edit_details, format_match_lines, render_snippet, replace_using_positions,
 };
 use crate::notification::types::FileWritten;
 
@@ -375,8 +375,9 @@ async fn handle_replacement(
             "${{ params.edit.replace_all }}",
         )
         .await?;
+        let line_hint = format_match_lines(&old_text, &positions);
         return Ok(SearchReplaceOutput::MultipleMatchesFound(format!(
-            "The string to replace was found multiple times in the file. Use {} to replace all occurrences, or include more context to only edit one occurrence.",
+            "The string to replace was found multiple times in the file (lines {line_hint}). Use {} to replace all occurrences, or include more context to only edit one occurrence.",
             replace_all_name
         )));
     }
@@ -778,11 +779,13 @@ mod tests {
 
         match result {
             SearchReplaceOutput::MultipleMatchesFound(msg) => {
-                assert_eq!(
-                    msg,
-                    "The string to replace was found multiple times in the file. \
-                     Use replaceEverything to replace all occurrences, \
-                     or include more context to only edit one occurrence."
+                assert!(
+                    msg.contains("replaceEverything"),
+                    "Should use mapped param name: {msg}"
+                );
+                assert!(
+                    msg.contains("lines "),
+                    "Should include match line numbers: {msg}"
                 );
             }
             other => panic!("Expected MultipleMatchesFound, got {:?}", other),

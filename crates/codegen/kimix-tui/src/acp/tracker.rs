@@ -218,6 +218,12 @@ pub struct AcpUpdateTracker {
     /// Entry currently receiving AgentThoughtChunk deltas.
     /// None when agent isn't thinking.
     current_thinking: Option<EntryId>,
+    /// Thinking block finished during the *current* stream attempt (e.g. when
+    /// the first agent chunk arrived and `finish_thinking` ran). Cleared on
+    /// stream-start boundary / successful turn end without removing the entry.
+    /// Removed by [`Self::discard_failed_stream_attempt`] so a dead attempt
+    /// does not leave a finished thought block above the next retry's answer.
+    last_finished_thinking: Option<EntryId>,
     /// Tool calls in flight, keyed by ACP tool call ID string.
     /// Stores the base ToolCall for field merging with ToolCallUpdate.
     pending_tools: HashMap<String, PendingTool>,
@@ -543,6 +549,38 @@ impl AcpUpdateTracker {
     pub fn set_retry_activity(&mut self, activity: Option<TurnActivity>) {
         self.retry_activity = activity;
     }
+    /// Drop in-flight stream UI from a failed sampling attempt before retry.
+    ///
+    /// Transport / decode retries re-run the whole model call. Chunks already
+    /// painted for the dead attempt must be removed, otherwise the user sees
+    /// the same answer re-streamed N times (each slightly different).
+    ///
+    /// Only drops entries still tracked as the current agent message / thinking
+    /// / pending tools — completed tool results from earlier steps of the turn
+    /// stay put.
+    pub fn discard_failed_stream_attempt(&mut self, scrollback: &mut ScrollbackState) {
+        if let Some(id) = self.current_agent_msg.take() {
+            scrollback.remove_entry(id);
+        }
+        if let Some(id) = self.current_thinking.take() {
+            scrollback.remove_entry(id);
+        }
+        if let Some(id) = self.last_finished_thinking.take() {
+            scrollback.remove_entry(id);
+        }
+        // Incomplete tool cards streamed mid-attempt (args not finished / not
+        // executed yet) belong to the discarded generation.
+        for (_, pending) in self.pending_tools.drain() {
+            if let Some(entry_id) = pending.entry_id {
+                scrollback.remove_entry(entry_id);
+            }
+        }
+        self.orphan_updates.clear();
+        self.last_thinking_elapsed_ms = None;
+        // Force the next chunk's stream_start_ms to be treated as a fresh stream
+        // without "finish_running" the entries we just removed.
+        self.last_stream_start_ms = None;
+    }
     /// Take pending ACP commands, if any. Returns `None` if no update arrived
     /// since the last drain.
     ///
@@ -773,6 +811,10 @@ impl AcpUpdateTracker {
                 if let Some(agent_id) = self.current_agent_msg.take() {
                     scrollback.finish_running(agent_id);
                 }
+                // Prior stream's finished thinking belongs to that stream, not
+                // the new attempt. Forget tracking so a later discard_failed
+                // cannot delete a legitimate completed thought block.
+                self.last_finished_thinking = None;
                 if !meta.is_replay
                     && self.current_thinking.is_none()
                     && self.activity_known_blocking_wait().is_none()
@@ -825,6 +867,8 @@ impl AcpUpdateTracker {
     /// Called when PromptResponse is received (turn complete).
     pub fn finish_turn(&mut self, scrollback: &mut ScrollbackState) {
         self.finish_thinking(scrollback);
+        // Successful turn: keep finished thinking, drop the discard hook.
+        self.last_finished_thinking = None;
         if let Some(agent_id) = self.current_agent_msg.take() {
             scrollback.finish_running(agent_id);
         }
@@ -864,6 +908,9 @@ impl AcpUpdateTracker {
                 scrollback.remove_entry(thinking_id);
             } else {
                 scrollback.finish_running_with_time(thinking_id, self.last_thinking_elapsed_ms);
+                // Remember for discard_failed_stream_attempt: if this stream
+                // dies mid-answer, the thought belongs to the failed attempt.
+                self.last_finished_thinking = Some(thinking_id);
             }
             self.last_thinking_elapsed_ms = None;
         }
@@ -2912,6 +2959,127 @@ mod tests {
         assert!(
             tracker.current_thinking.is_none(),
             "user_message should reset current_thinking"
+        );
+    }
+    /// Transport/decode retry must not leave previous attempt's answer in scrollback.
+    ///
+    /// Real session log pattern (2026-07-30): stream dies with "error decoding
+    /// response body", sampler retries up to 15×, each attempt re-emits a near-
+    /// full `agent_message_chunk` for the same user question — UI stacked 6
+    /// variants of "数据从哪来" without this discard.
+    #[test]
+    fn discard_failed_stream_attempt_drops_partial_answer_before_retry() {
+        let mut sb = ScrollbackState::new();
+        let mut tracker = AcpUpdateTracker::new();
+        tracker.handle_update(thought_chunk("planning answer..."), &meta(), &mut sb);
+        tracker.handle_update(agent_chunk("## 数据从哪来\n第一版"), &meta(), &mut sb);
+        let len_after_partial = sb.len();
+        assert!(len_after_partial >= 1);
+        assert!(tracker.current_agent_msg.is_some());
+
+        tracker.discard_failed_stream_attempt(&mut sb);
+        assert!(
+            tracker.current_agent_msg.is_none(),
+            "current_agent_msg cleared after discard"
+        );
+        assert!(
+            tracker.current_thinking.is_none(),
+            "current_thinking cleared after discard"
+        );
+        assert!(
+            sb.len() < len_after_partial,
+            "partial stream entries must be removed, got len {} (was {})",
+            sb.len(),
+            len_after_partial
+        );
+
+        // Successful retry paints a single final answer.
+        tracker.handle_update(agent_chunk("## 数据从哪来\n最终版"), &meta(), &mut sb);
+        tracker.finish_turn(&mut sb);
+
+        let agent_texts: Vec<String> = (0..sb.len())
+            .filter_map(|i| {
+                let e = sb.get(i)?;
+                match &e.block {
+                    RenderBlock::AgentMessage(m) => Some(m.text().to_string()),
+                    _ => None,
+                }
+            })
+            .collect();
+        assert_eq!(
+            agent_texts.len(),
+            1,
+            "exactly one agent message after retry, got {agent_texts:?}"
+        );
+        assert!(
+            agent_texts[0].contains("最终版"),
+            "kept final attempt: {:?}",
+            agent_texts[0]
+        );
+        assert!(
+            !agent_texts[0].contains("第一版"),
+            "failed attempt must not remain: {:?}",
+            agent_texts[0]
+        );
+    }
+    /// Thought finished when agent text starts must still be dropped on retry,
+    /// otherwise each failed attempt leaves a finished thinking block stacked.
+    #[test]
+    fn discard_failed_stream_attempt_drops_finished_thinking_from_same_stream() {
+        crate::appearance::cache::set_show_thinking_blocks(true);
+        let mut sb = ScrollbackState::new();
+        let mut tracker = AcpUpdateTracker::new();
+        tracker.handle_update(thought_chunk("planning..."), &meta(), &mut sb);
+        tracker.handle_update(agent_chunk("## 第一版"), &meta(), &mut sb);
+        assert!(
+            tracker.current_thinking.is_none(),
+            "agent chunk finishes thinking"
+        );
+        let len_before = sb.len();
+        assert!(len_before >= 2, "thinking + agent present");
+
+        tracker.discard_failed_stream_attempt(&mut sb);
+        assert_eq!(
+            sb.len(),
+            0,
+            "both finished thinking and partial agent must go, got len {}",
+            sb.len()
+        );
+
+        tracker.handle_update(thought_chunk("retry plan"), &meta(), &mut sb);
+        tracker.handle_update(agent_chunk("## 最终版"), &meta(), &mut sb);
+        tracker.finish_turn(&mut sb);
+
+        let thinking_n = (0..sb.len())
+            .filter(|&i| matches!(sb.get(i).unwrap().block, RenderBlock::Thinking(_)))
+            .count();
+        let agent_n = (0..sb.len())
+            .filter(|&i| matches!(sb.get(i).unwrap().block, RenderBlock::AgentMessage(_)))
+            .count();
+        assert_eq!(thinking_n, 1, "only final attempt thinking remains");
+        assert_eq!(agent_n, 1, "only final attempt agent remains");
+    }
+    /// Incomplete tool cards from a dead stream attempt are removed on discard.
+    #[test]
+    fn discard_failed_stream_attempt_drops_incomplete_tools() {
+        let mut sb = ScrollbackState::new();
+        let mut tracker = AcpUpdateTracker::new();
+        tracker.handle_update(
+            tool_call("tc-1", acp::ToolKind::Read, "read_file"),
+            &meta(),
+            &mut sb,
+        );
+        let len_with_tool = sb.len();
+        assert!(tracker.pending_tools.contains_key("tc-1") || len_with_tool >= 1);
+
+        tracker.discard_failed_stream_attempt(&mut sb);
+        assert!(
+            tracker.pending_tools.is_empty(),
+            "pending tools from failed attempt cleared"
+        );
+        assert!(
+            sb.len() < len_with_tool,
+            "incomplete tool entry removed"
         );
     }
     /// Regression test: exact real-world flow where send_prompt adds user entry

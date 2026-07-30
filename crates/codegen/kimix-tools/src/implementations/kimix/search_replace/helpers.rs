@@ -70,6 +70,45 @@ pub(crate) fn compute_line_range(text: &str, start_pos: usize, inserted_text: &s
     }
 }
 
+/// Format 1-based line numbers for match byte offsets (for multi-match errors).
+///
+/// Collapses same-line repeats as `N (×k)`. Caps display at 12 entries.
+pub(crate) fn format_match_lines(text: &str, positions: &[usize]) -> String {
+    if positions.is_empty() {
+        return String::new();
+    }
+    let mut lines: Vec<usize> = positions
+        .iter()
+        .map(|&pos| {
+            let pos = pos.min(text.len());
+            text[..pos].matches('\n').count() + 1
+        })
+        .collect();
+    lines.sort_unstable();
+    let mut parts: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
+        let mut count = 1usize;
+        while i + count < lines.len() && lines[i + count] == line {
+            count += 1;
+        }
+        if count == 1 {
+            parts.push(line.to_string());
+        } else {
+            parts.push(format!("{line} (×{count})"));
+        }
+        i += count;
+    }
+    const MAX_SHOWN: usize = 12;
+    if parts.len() > MAX_SHOWN {
+        let shown = parts[..MAX_SHOWN].join(", ");
+        format!("{shown}, … ({} distinct lines)", parts.len())
+    } else {
+        parts.join(", ")
+    }
+}
+
 /// Replace text at specific positions and return new text with new positions.
 pub(crate) fn replace_using_positions(
     text: &str,
@@ -527,5 +566,17 @@ mod tests {
         let matches = unwrap_matches(find_normalized_match_positions(text, "\"b--c d"));
         let (new_text, _) = replace_normalized_matches(text, &matches, "replaced");
         assert_eq!(new_text, "areplaced");
+    }
+
+    #[test]
+    fn format_match_lines_collapses_same_line_and_lists_distinct() {
+        let text = "aaa bbb aaa\nccc aaa\n";
+        let positions: Vec<usize> = text.match_indices("aaa").map(|(i, _)| i).collect();
+        assert_eq!(positions.len(), 3);
+        let s = format_match_lines(text, &positions);
+        assert!(
+            s.contains("1 (×2)") && s.contains('2'),
+            "expected collapsed line 1 and line 2, got: {s}"
+        );
     }
 }

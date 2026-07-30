@@ -6619,6 +6619,7 @@ dependencies = [
  "image",
  "indexmap",
  "infer 0.19.0",
+ "kimix-codebase-graph",
  "kimix-config",
  "kimix-env",
  "kimix-file-utils",

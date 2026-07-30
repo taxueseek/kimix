@@ -540,7 +540,7 @@ impl kimix_tool_runtime::Tool for ListDirTool {
                 .await
                 .get::<Params<ListDirParams>>()
                 .and_then(|p| p.0.max_output_chars)
-                .unwrap_or(crate::DEFAULT_TOOL_OUTPUT_BYTES);
+                .unwrap_or_else(crate::tool_output_bytes_limit);
             versions::legacy_0_4_10::render_legacy(&path, max_output_bytes)
         } else {
             let (max_output_chars, respect_gitignore, truncation_notice) = {

@@ -291,6 +291,7 @@ mod tests {
             message: "boom".into(),
             model_metadata: None,
             retry_after_secs: None,
+            should_retry: None,
         };
         let info = SamplingErrorInfo::from(&err);
         assert_eq!(info.kind, SamplingErrorKind::Api);
@@ -305,6 +306,7 @@ mod tests {
             message: "slow down".into(),
             model_metadata: None,
             retry_after_secs: Some(15),
+            should_retry: None,
         };
         let info = SamplingErrorInfo::from(&err);
         assert_eq!(info.kind, SamplingErrorKind::RateLimited);
@@ -323,6 +325,7 @@ mod tests {
                 ..Default::default()
             }),
             retry_after_secs: None,
+            should_retry: None,
         };
         let info = SamplingErrorInfo::from(&err);
         assert_eq!(info.kind, SamplingErrorKind::Api);

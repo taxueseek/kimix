@@ -743,6 +743,7 @@ mod classify_tests {
                 message: "test".into(),
                 model_metadata: None,
                 retry_after_secs: None,
+                should_retry: None,
             }))
         };
         assert!(det(StatusCode::BAD_REQUEST));
@@ -835,6 +836,7 @@ mod classify_tests {
                 .into(),
             model_metadata: None,
             retry_after_secs: None,
+            should_retry: None,
         })));
     }
     #[test]
@@ -864,6 +866,7 @@ mod classify_tests {
             message: "bad payload".into(),
             model_metadata: None,
             retry_after_secs: None,
+            should_retry: None,
         }) else {
             panic!("expected Deterministic for 400");
         };
@@ -875,6 +878,7 @@ mod classify_tests {
             message: "upstream blip".into(),
             model_metadata: None,
             retry_after_secs: None,
+            should_retry: None,
         }) else {
             panic!("expected Transient for 500");
         };

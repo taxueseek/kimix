@@ -314,12 +314,14 @@ impl SessionActor {
                     None => String::new(),
                 };
 
+                let economy = crate::session::kimix_recall::context_economy_summary();
                 let text = format!(
                     "{}**Session ID:** {}\n\n\
                      **Working directory:** {}\n\n\
                      {}{}\n\n\
                      **Turn:** {}\n\n\
-                     **Context:** {} / {} tokens ({:.0}%)",
+                     **Context:** {} / {} tokens ({:.0}%)\n\n\
+                     **{}**",
                     title_line,
                     self.session_info.id.0,
                     self.session_info.cwd,
@@ -329,6 +331,7 @@ impl SessionActor {
                     ctx.used,
                     ctx.total,
                     context_pct,
+                    economy,
                 );
                 self.send_slash_command_output(&text).await;
                 ok_end_turn(0, None)

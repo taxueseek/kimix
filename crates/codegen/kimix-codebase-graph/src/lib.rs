@@ -92,6 +92,7 @@ pub mod interner;
 pub mod languages;
 pub mod manager;
 pub mod navigation;
+pub mod outline;
 pub mod scope_graph;
 pub mod types;
 
@@ -107,6 +108,10 @@ pub use manager::{
     load_index, save_index, save_index_async, try_lock,
 };
 pub use navigation::{Location, NavigationError, NavigationResult, Navigator};
+pub use outline::{
+    MAX_OUTLINE_ENTRIES, OutlineEntry, OutlineError, format_outline, language_label_for_path,
+    outline_file, outline_source,
+};
 pub use scope_graph::{
     LocalDef, LocalImport, LocalScope, NodeKind, QueryVersion, Reference, ScopeGraph,
     ScopeGraphIndex, ScopeGraphResult, Symbol, SymbolId, build_scope_graph, extract_symbols_fast,

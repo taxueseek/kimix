@@ -1212,6 +1212,10 @@ pub(super) fn apply_retry_state(
             max_retries,
             reason,
         } => {
+            // Sampler will re-run the same inference. Clear partial agent /
+            // thought / incomplete tool cards so retries don't stack N near-
+            // identical answers in scrollback (live + session replay).
+            session.discard_failed_stream_attempt(scrollback);
             session.set_retry_activity(Some(TurnActivity::Retrying {
                 attempt: *attempt,
                 max_retries: *max_retries,
@@ -1223,6 +1227,9 @@ pub(super) fn apply_retry_state(
             reason,
             is_rate_limited: rate_limited,
         } => {
+            // Drop the last attempt's half-stream so the error card is not
+            // preceded by a truncated near-answer that will never continue.
+            session.discard_failed_stream_attempt(scrollback);
             session.set_retry_activity(None);
             session.rate_limited = *rate_limited;
 
@@ -1245,6 +1252,7 @@ pub(super) fn apply_retry_state(
             error_type,
             message,
         } => {
+            session.discard_failed_stream_attempt(scrollback);
             session.set_retry_activity(None);
             if error_type == "encrypted_content_mismatch" {
                 session.model_incompatible = true;

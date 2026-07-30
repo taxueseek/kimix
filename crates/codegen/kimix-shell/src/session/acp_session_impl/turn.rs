@@ -1411,11 +1411,13 @@ impl SessionActor {
                 .iter()
                 .filter(|tc| tc.name == STRUCTURED_OUTPUT_TOOL)
             {
-                self.chat_state_handle
-                    .push_tool_result(ConversationItem::tool_result(
+                crate::session::kimix_recall::push_admitted_tool_result(
+                    &self.chat_state_handle,
+                    ConversationItem::tool_result(
                         tc.id.as_ref().to_owned(),
                         "Call StructuredOutput alone, exactly once, after all other tools finish.",
-                    ));
+                    ),
+                );
             }
             tool_calls.retain(|tc| tc.name != STRUCTURED_OUTPUT_TOOL);
             return StructuredOutputStep::Proceed;
@@ -1426,21 +1428,25 @@ impl SessionActor {
             && *retries < STRUCTURED_OUTPUT_MAX_RETRIES
         {
             *retries += 1;
-            self.chat_state_handle
-                .push_tool_result(ConversationItem::tool_result(
+            crate::session::kimix_recall::push_admitted_tool_result(
+                &self.chat_state_handle,
+                ConversationItem::tool_result(
                     call_id,
                     format!("{err}\nFix the arguments and call StructuredOutput again."),
-                ));
+                ),
+            );
             return StructuredOutputStep::Retry;
         }
-        self.chat_state_handle
-            .push_tool_result(ConversationItem::tool_result(
+        crate::session::kimix_recall::push_admitted_tool_result(
+            &self.chat_state_handle,
+            ConversationItem::tool_result(
                 call_id,
                 match &validated {
                     Ok(_) => "Structured output accepted.".to_string(),
                     Err(err) => err.clone(),
                 },
-            ));
+            ),
+        );
         StructuredOutputStep::Complete(validated)
     }
     /// Shared turn-completion bookkeeping (plan cleanup, signals snapshot +
@@ -1820,7 +1826,10 @@ impl SessionActor {
                         self.record_assistant_response(item).await;
                     }
                     _ => {
-                        self.chat_state_handle.push_tool_result(item);
+                        crate::session::kimix_recall::push_admitted_tool_result(
+                            &self.chat_state_handle,
+                            item,
+                        );
                     }
                 }
             }

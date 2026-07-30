@@ -352,6 +352,7 @@ mod tests {
             message: "Rate limit exceeded".into(),
             model_metadata: None,
             retry_after_secs: None,
+            should_retry: None,
         };
         let acp_err = map_sampling_err_to_acp(err);
         assert_eq!(acp_err.code, acp::ErrorCode::from(RATE_LIMITED_ERROR_CODE));
@@ -369,6 +370,7 @@ mod tests {
             message: "Rate limit exceeded".into(),
             model_metadata: None,
             retry_after_secs: Some(60),
+            should_retry: None,
         };
         assert_eq!(err.retry_after(), Some(60));
         let acp_err = map_sampling_err_to_acp(err);
@@ -383,12 +385,14 @@ mod tests {
             message: "limited".into(),
             model_metadata: None,
             retry_after_secs: None,
+            should_retry: None,
         };
         let server_err = SamplingError::Api {
             status: StatusCode::INTERNAL_SERVER_ERROR,
             message: "oops".into(),
             model_metadata: None,
             retry_after_secs: None,
+            should_retry: None,
         };
         let rate_acp = map_sampling_err_to_acp(rate_err);
         let server_acp = map_sampling_err_to_acp(server_err);
@@ -405,6 +409,7 @@ mod tests {
             message: "bad token".into(),
             model_metadata: None,
             retry_after_secs: None,
+            should_retry: None,
         };
         let acp_err = map_sampling_err_to_acp(err);
         assert_eq!(acp_err.code, acp::Error::auth_required().code);
@@ -426,6 +431,7 @@ mod tests {
                     .into(),
             model_metadata: None,
             retry_after_secs: None,
+            should_retry: None,
         };
         let acp_err = map_sampling_err_to_acp(err);
         assert_ne!(
@@ -481,6 +487,7 @@ mod tests {
                 message: "The model 'kimix' requires a Kimix subscription.".into(),
                 model_metadata: None,
                 retry_after_secs: None,
+                should_retry: None,
             };
             let acp_err = map_sampling_err_to_acp(err);
             let data = acp_err.data.unwrap();
@@ -505,6 +512,7 @@ mod tests {
                 message: "The model 'kimix' requires a Kimix subscription.".into(),
                 model_metadata: None,
                 retry_after_secs: None,
+                should_retry: None,
             };
             let acp_err = map_sampling_err_to_acp(err);
             let data = acp_err.data.unwrap();
@@ -525,6 +533,7 @@ mod tests {
                 message: "Content violates usage guidelines.".into(),
                 model_metadata: None,
                 retry_after_secs: None,
+                should_retry: None,
             };
             let acp_err = map_sampling_err_to_acp(err);
             let data = acp_err.data.unwrap();

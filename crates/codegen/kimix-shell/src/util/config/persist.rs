@@ -533,6 +533,8 @@ mod tests {
         let cfg = crate::agent::config::SessionConfig {
             auto_compact_threshold_percent: Some(70),
             max_effective_context_tokens: None,
+            soft_nudge_ratio: None,
+            content_hash_dedup: None,
             load_envrc: None,
         };
         merge_section(&mut table, "session", &cfg);
@@ -1091,6 +1093,8 @@ auto_update = true
             load_envrc: Some(true),
             auto_compact_threshold_percent: None,
             max_effective_context_tokens: None,
+            soft_nudge_ratio: None,
+            content_hash_dedup: None,
         };
         merge_section(&mut table, "session", &cfg);
         let s = table.get("session").unwrap().as_table().unwrap();

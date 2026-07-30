@@ -8,11 +8,17 @@
 //! **Retried** (up to [`DEFAULT_MAX_RETRIES`] = 15, ~6 min with 30s backoff cap):
 //! - 500, 502, 503, 504, 520 (server errors)
 //! - Connection errors (timeout, refused, reset)
-//! - `EventStreamError` / `StreamError` (mid-stream failures)
 //! - `EmptyResponse` (model returned no content/tool calls)
 //!
 //! **Retried with lower cap** ([`RATE_LIMIT_RETRY_THRESHOLD`] = 2):
 //! - 429 (rate limited) — avoids burning long waits
+//!
+//! **Retried with lower cap** ([`STREAM_TRANSPORT_RETRY_THRESHOLD`] = 3):
+//! - `EventStreamError` / `StreamError` (mid-stream decode / reset)
+//!   Mid-stream failures on flaky proxies (e.g. Grok `error decoding response
+//!   body`) rarely heal after HTTP/1.1 rebuild; burning the full 15-retry
+//!   budget re-streams near-identical answers and paints "Retrying…" for
+//!   minutes.
 //!
 //! **Special handling** (not counted against retry budget):
 //! - 413 / image processing errors → strip images and retry once
@@ -23,11 +29,14 @@
 //! - `IdleTimeout` (model stuck, retry would stall again)
 //! - `Serialization` (response parsing failure)
 //! - `MaxTokensTruncation` (by design)
+//! - `max_retries == 0` (hard disable of the retry budget)
+//!
+//! **Server hint** (`x-should-retry` header, OpenAI/CCP style):
+//! - `false` → Fatal immediately, regardless of status code
+//! - `true` / absent → falls through to status-code logic above
 //!
 //! 429 handling honors the standard `Retry-After` response header when
-//! present (delta-seconds; see `client::extract_retry_after`), matching
-//! the Kimi/Moonshot API. The old xAI proxy's `x-should-retry` hint
-//! header was removed with the proxy.
+//! present (delta-seconds; see `client::extract_retry_after`).
 use std::time::Duration;
 
 use kimix_sampling_types::SamplingError;
@@ -37,10 +46,20 @@ use kimix_sampling_types::SamplingError;
 /// no point burning a long backoff just to be rate-limited again.
 pub const RATE_LIMIT_RETRY_THRESHOLD: u32 = 2;
 
+/// After this many mid-stream transport failures, stop retrying.
+///
+/// Attempt 1 still rebuilds the HTTP client (HTTP/2 → HTTP/1.1); attempts
+/// 2–3 back off briefly. Beyond that, further retries almost never fix
+/// `error decoding response body` / reset mid-SSE and only stack UI noise.
+pub const STREAM_TRANSPORT_RETRY_THRESHOLD: u32 = 3;
+
 /// Default max retries when no env or model override is set.
 /// With 30s backoff cap this gives ~6 min of retry budget:
 /// retries 1-4 are exponential (2s+4s+8s+16s ≈ 30s), retries
 /// 5-15 are flat at ~30s each (≈ 5.5 min).
+///
+/// Mid-stream transport errors use [`STREAM_TRANSPORT_RETRY_THRESHOLD`]
+/// instead of this full budget.
 pub const DEFAULT_MAX_RETRIES: u32 = 15;
 
 /// Resolve max API retries from an optional env override, model config,
@@ -141,6 +160,9 @@ pub fn classify_error(
     if err.is_encrypted_content_error() {
         return RetryDecision::EmitToSession(clone_error(err));
     }
+    if max_retries == 0 {
+        return RetryDecision::Fatal(clone_error(err));
+    }
 
     // 413 Payload Too Large: strip inline images and try once. The
     // caller checks if there are images left after the strip; if not,
@@ -153,6 +175,22 @@ pub fn classify_error(
     // images and retry, same recovery as 413.
     if err.is_image_processing_error() {
         return RetryDecision::RetryWithImageStrip;
+    }
+
+    // Server explicitly said don't retry (x-should-retry: false).
+    // Trust the server — it knows if the error is request-content-caused
+    // (e.g. malformed tool call in conversation history) vs transient.
+    //
+    // x-should-retry: true is intentionally NOT handled here — we only
+    // use the header to suppress retries (false), not to force them
+    // (true). Forcing retries on non-retryable status codes could
+    // amplify failures. true falls through to existing status-code logic.
+    //
+    // Checked AFTER image-strip guards: image stripping changes the
+    // request payload, so a server "don't retry" on the original
+    // request doesn't apply to the stripped request.
+    if let Some(false) = err.should_retry_header() {
+        return RetryDecision::Fatal(clone_error(err));
     }
 
     // Context-window / size overflow is deterministic — re-sending the same (or
@@ -178,6 +216,9 @@ pub fn classify_error(
     if err.is_rate_limited() {
         let next_attempt = retry_count + 1;
         let effective_cap = max_retries.min(rate_limit_threshold);
+        if effective_cap == 0 {
+            return RetryDecision::Fatal(clone_error(err));
+        }
         if next_attempt >= effective_cap {
             return RetryDecision::Fatal(clone_error(err));
         }
@@ -191,12 +232,43 @@ pub fn classify_error(
         };
     }
 
+    // Mid-stream transport (SSE decode / stream reset): tighter budget.
+    // Full DEFAULT_MAX_RETRIES here produced multi-minute "Retrying…"
+    // storms on flaky proxies without improving success rate.
+    if matches!(
+        err,
+        SamplingError::EventStreamError(_) | SamplingError::StreamError { .. }
+    ) {
+        let next_attempt = retry_count + 1;
+        let effective_cap = max_retries.min(STREAM_TRANSPORT_RETRY_THRESHOLD);
+        if next_attempt >= effective_cap {
+            return RetryDecision::Fatal(clone_error(err));
+        }
+        let backoff = err
+            .retry_after()
+            .map(Duration::from_secs)
+            .unwrap_or_else(|| retry_backoff_with_jitter(next_attempt));
+        if next_attempt == 1 {
+            return RetryDecision::RetryWithClientRebuild { backoff };
+        }
+        return RetryDecision::Retry { backoff };
+    }
+
     // Generic retryable transport / 5xx errors. First retry rebuilds
     // the HTTP client with HTTP/1.1 to escape poisoned HTTP/2 pools;
     // later retries just back off.
+    //
+    // Pre-stream HTTP transport (connect / send failures) uses the same
+    // tight budget as mid-stream errors — flaky proxies rarely recover
+    // after a few attempts. True 5xx API errors keep the full budget.
     if err.is_retryable() {
         let next_attempt = retry_count + 1;
-        if next_attempt >= max_retries {
+        let effective_cap = if matches!(err, SamplingError::Http(_)) {
+            max_retries.min(STREAM_TRANSPORT_RETRY_THRESHOLD)
+        } else {
+            max_retries
+        };
+        if next_attempt >= effective_cap {
             return RetryDecision::Fatal(clone_error(err));
         }
         let backoff = err
@@ -370,11 +442,13 @@ pub(crate) fn clone_error(err: &SamplingError) -> SamplingError {
             message,
             model_metadata,
             retry_after_secs,
+            should_retry,
         } => SamplingError::Api {
             status: *status,
             message: message.clone(),
             model_metadata: model_metadata.clone(),
             retry_after_secs: *retry_after_secs,
+            should_retry: *should_retry,
         },
         SamplingError::EventStreamError(msg) => SamplingError::EventStreamError(msg.clone()),
         SamplingError::StreamError {
@@ -412,6 +486,7 @@ mod tests {
             message: message.to_string(),
             model_metadata: None,
             retry_after_secs: None,
+            should_retry: None,
         }
     }
 
@@ -421,6 +496,7 @@ mod tests {
             message: "x".to_string(),
             model_metadata: None,
             retry_after_secs: Some(retry_after),
+            should_retry: None,
         }
     }
 
@@ -625,6 +701,25 @@ mod tests {
     }
 
     #[test]
+    fn classify_event_stream_error_exhausted_at_stream_threshold() {
+        let err = SamplingError::EventStreamError(
+            "reqwest error stream: Transport error: error decoding response body".into(),
+        );
+        // STREAM_TRANSPORT_RETRY_THRESHOLD = 3 → fatal when retry_count+1 >= 3
+        match classify_error(&err, 2, 15, RATE_LIMIT_RETRY_THRESHOLD) {
+            RetryDecision::Fatal(SamplingError::EventStreamError(msg)) => {
+                assert!(msg.contains("decoding response body"));
+            }
+            other => panic!("expected Fatal at stream threshold, got {other:?}"),
+        }
+        // Still retries under the cap
+        match classify_error(&err, 1, 15, RATE_LIMIT_RETRY_THRESHOLD) {
+            RetryDecision::Retry { .. } => {}
+            other => panic!("expected Retry under stream threshold, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn classify_stream_error_is_retryable() {
         let err = SamplingError::StreamError {
             error_type: "transient".into(),
@@ -633,6 +728,18 @@ mod tests {
         match classify_error(&err, 0, 5, RATE_LIMIT_RETRY_THRESHOLD) {
             RetryDecision::RetryWithClientRebuild { .. } => {}
             other => panic!("expected RetryWithClientRebuild for StreamError, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_stream_error_exhausted_at_stream_threshold() {
+        let err = SamplingError::StreamError {
+            error_type: "transport".into(),
+            message: "decode failed".into(),
+        };
+        match classify_error(&err, 2, 15, RATE_LIMIT_RETRY_THRESHOLD) {
+            RetryDecision::Fatal(SamplingError::StreamError { .. }) => {}
+            other => panic!("expected Fatal at stream threshold, got {other:?}"),
         }
     }
 
@@ -723,17 +830,95 @@ mod tests {
     }
 
     #[test]
+    fn should_retry_false_overrides_retryable_status() {
+        let err = SamplingError::Api {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: "boom".into(),
+            model_metadata: None,
+            retry_after_secs: None,
+            should_retry: Some(false),
+        };
+        assert!(matches!(
+            classify_error(&err, 0, 15, RATE_LIMIT_RETRY_THRESHOLD),
+            RetryDecision::Fatal(_)
+        ));
+    }
+
+    #[test]
     fn context_length_overflow_is_fatal_even_as_500() {
-        // The backend streams a size overflow as a ResponseError that becomes a 500;
-        // without the context-length check it would retry the full budget.
+        // The backend streams a size overflow as a ResponseError that becomes a 500
+        // with no should_retry hint; without the context-length check it would
+        // retry the full budget.
         let err = SamplingError::Api {
             status: StatusCode::INTERNAL_SERVER_ERROR,
             message: "none: The prompt is too long for this model's context window.".into(),
             model_metadata: None,
             retry_after_secs: None,
+            should_retry: None,
         };
         assert!(matches!(
             classify_error(&err, 0, 15, RATE_LIMIT_RETRY_THRESHOLD),
+            RetryDecision::Fatal(_)
+        ));
+    }
+
+    #[test]
+    fn should_retry_true_falls_through_to_existing_logic() {
+        let err = SamplingError::Api {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: "boom".into(),
+            model_metadata: None,
+            retry_after_secs: None,
+            should_retry: Some(true),
+        };
+        assert!(matches!(
+            classify_error(&err, 0, 15, RATE_LIMIT_RETRY_THRESHOLD),
+            RetryDecision::RetryWithClientRebuild { .. }
+        ));
+    }
+
+    #[test]
+    fn should_retry_absent_falls_through() {
+        let err = SamplingError::Api {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: "boom".into(),
+            model_metadata: None,
+            retry_after_secs: None,
+            should_retry: None,
+        };
+        assert!(matches!(
+            classify_error(&err, 0, 15, RATE_LIMIT_RETRY_THRESHOLD),
+            RetryDecision::RetryWithClientRebuild { .. }
+        ));
+    }
+
+    #[test]
+    fn should_retry_false_on_429_is_fatal() {
+        // Server says don't retry, even though 429 is normally retryable.
+        // should_retry check runs before rate-limit check.
+        let err = SamplingError::Api {
+            status: StatusCode::TOO_MANY_REQUESTS,
+            message: "rate limited".into(),
+            model_metadata: None,
+            retry_after_secs: Some(10),
+            should_retry: Some(false),
+        };
+        assert!(matches!(
+            classify_error(&err, 0, 15, RATE_LIMIT_RETRY_THRESHOLD),
+            RetryDecision::Fatal(_)
+        ));
+    }
+
+    #[test]
+    fn max_retries_zero_is_fatal_even_for_retryable() {
+        let err = api_err(StatusCode::INTERNAL_SERVER_ERROR, "boom");
+        assert!(matches!(
+            classify_error(&err, 0, 0, RATE_LIMIT_RETRY_THRESHOLD),
+            RetryDecision::Fatal(_)
+        ));
+        let stream = SamplingError::EventStreamError("decode".into());
+        assert!(matches!(
+            classify_error(&stream, 0, 0, RATE_LIMIT_RETRY_THRESHOLD),
             RetryDecision::Fatal(_)
         ));
     }
@@ -745,6 +930,7 @@ mod tests {
             message: "boom".into(),
             model_metadata: None,
             retry_after_secs: None,
+            should_retry: None,
         };
         assert!(matches!(
             classify_error(&err, 0, 15, RATE_LIMIT_RETRY_THRESHOLD),

@@ -30,7 +30,7 @@ use crate::util::truncate_str_with_marker;
 use crate::{notification::types::ToolNotificationHandle, register_resource};
 use helpers::{
     NormalizedMatchResult, build_edit_details, find_normalized_match_positions,
-    replace_normalized_matches, replace_using_positions,
+    format_match_lines, replace_normalized_matches, replace_using_positions,
 };
 pub(crate) const CONTEXT_LINES: usize = 3;
 /// Internal version discriminant for search_replace.
@@ -575,9 +575,16 @@ async fn handle_replacement(
                         let replace_all_name =
                             TemplateRenderer::resolve(&resources, "${{ params.edit.replace_all }}")
                                 .await?;
+                        let line_hint = format_match_lines(
+                            &match_text,
+                            &normalized_matches
+                                .iter()
+                                .map(|m| m.original_start)
+                                .collect::<Vec<_>>(),
+                        );
                         return Ok(SearchReplaceOutput::MultipleMatchesFound(format!(
                             "The string to replace was found multiple times in the file \
-                             (via Unicode normalization). Use {} to replace all occurrences, \
+                             (via Unicode normalization, lines {line_hint}). Use {} to replace all occurrences, \
                              or include more context to only edit one occurrence.",
                             replace_all_name
                         )));
@@ -655,8 +662,9 @@ async fn handle_replacement(
     if positions.len() > 1 && !input.replace_all {
         let replace_all_name =
             TemplateRenderer::resolve(&resources, "${{ params.edit.replace_all }}").await?;
+        let line_hint = format_match_lines(&match_text, &positions);
         return Ok(SearchReplaceOutput::MultipleMatchesFound(format!(
-            "The string to replace was found multiple times in the file. Use {} to replace all occurrences, or include more context to only edit one occurrence.",
+            "The string to replace was found multiple times in the file (lines {line_hint}). Use {} to replace all occurrences, or include more context to only edit one occurrence.",
             replace_all_name
         )));
     }
@@ -1146,6 +1154,11 @@ mod tests {
                     "Should mention replace_all: {}",
                     msg
                 );
+                assert!(
+                    msg.contains("lines ") && msg.contains('1'),
+                    "Should include match line numbers: {}",
+                    msg
+                );
             }
             other => panic!("Expected MultipleMatchesFound, got {:?}", other),
         }
@@ -1419,11 +1432,17 @@ mod tests {
             .unwrap();
         match result {
             SearchReplaceOutput::MultipleMatchesFound(msg) => {
-                assert_eq!(
-                    msg,
-                    "The string to replace was found multiple times in the file. \
-                     Use replaceEverything to replace all occurrences, \
-                     or include more context to only edit one occurrence."
+                assert!(
+                    msg.contains("replaceEverything"),
+                    "Should use mapped param name 'replaceEverything': {msg}"
+                );
+                assert!(
+                    msg.contains("lines "),
+                    "Should include match line numbers: {msg}"
+                );
+                assert!(
+                    msg.contains("multiple times"),
+                    "Should still explain multi-match: {msg}"
                 );
             }
             other => panic!("Expected MultipleMatchesFound, got {:?}", other),

@@ -12,7 +12,7 @@ use std::time::Duration;
 use tokio::io::AsyncReadExt;
 use tokio::process::{Child, ChildStderr, ChildStdout, Command};
 
-use crate::DEFAULT_TOOL_OUTPUT_BYTES;
+use crate::tool_output_bytes_limit;
 use crate::types::output::{GrepFileMatch, GrepLineMatch, GrepSearchOutput};
 #[allow(unused_imports)]
 use crate::types::resources::{
@@ -861,7 +861,7 @@ async fn prepare_grep(
     let max_output_bytes = params
         .0
         .max_output_bytes
-        .unwrap_or(DEFAULT_TOOL_OUTPUT_BYTES);
+        .unwrap_or_else(tool_output_bytes_limit);
 
     Ok(GrepStep::Ready(GrepReady {
         child,
@@ -1467,6 +1467,7 @@ pub fn format_count_output(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::DEFAULT_TOOL_OUTPUT_BYTES;
     use crate::types::tool_metadata::test_ctx;
 
     use crate::types::resources::Resources;

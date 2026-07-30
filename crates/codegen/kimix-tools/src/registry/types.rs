@@ -662,6 +662,8 @@ impl ToolRegistryBuilder {
         b.register::<kimix::WebSearchTool>();
         b.register_with_params::<kimix::WebFetchTool, kimix::web_fetch::WebFetchParams>();
         b.register::<kimix::LspTool>();
+        // After Lsp so by_kind.lsp first-wins stays on the lsp tool name.
+        b.register::<kimix::OutlineTool>();
         b.register::<kimix::EnterPlanModeTool>();
         b.register::<kimix::ExitPlanModeTool>();
         b.register_with_params::<
@@ -759,6 +761,8 @@ impl ToolRegistryBuilder {
         b.register::<opencode::OpenCodeWriteTool>();
         // Optional LSP — only injected into tool_config when a backend is present.
         b.register::<kimix::LspTool>();
+        // Tree-sitter outline (no LSP required); after Lsp so by_kind.lsp first-wins.
+        b.register::<kimix::OutlineTool>();
         // Reminders
         b.register_reminder(crate::reminders::LspDiagnosticsReminder);
         b.register_reminder(crate::reminders::TaskCompletionReminder);
@@ -1115,7 +1119,7 @@ impl ToolRegistryBuilder {
                 definition.function.description = Some(truncation_config.interpolate_description(
                     desc,
                     &client_name,
-                    crate::DEFAULT_TOOL_OUTPUT_BYTES,
+                    crate::tool_output_bytes_limit(),
                 ));
             }
             renderer.render_schema_descriptions(&mut definition.function.parameters);
@@ -2482,11 +2486,11 @@ mod tests {
             .expect("call should not return ToolError");
         match &result.output {
             ToolOutput::SearchReplace(SearchReplaceOutput::MultipleMatchesFound(msg)) => {
-                assert_eq!(
-                    msg,
-                    "The string to replace was found multiple times in the file. \
-                     Use replace_all to replace all occurrences, \
-                     or include more context to only edit one occurrence.",
+                assert!(
+                    msg.contains("lines ")
+                        && msg.contains("replace_all")
+                        && msg.contains("multiple times"),
+                    "multi-match error should include line numbers: {msg}"
                 );
             }
             other => {

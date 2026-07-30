@@ -181,6 +181,26 @@ fn extract_retry_after(headers: &reqwest::header::HeaderMap) -> Option<u64> {
         .map(|s| s.min(120))
 }
 
+/// Parse the OpenAI/CCP-style `x-should-retry` response header.
+///
+/// - `true` / `TRUE` → `Some(true)`
+/// - `false` / `FALSE` → `Some(false)`
+/// - absent / unknown value → `None` (fall through to status-code logic)
+fn extract_should_retry(headers: &reqwest::header::HeaderMap) -> Option<bool> {
+    headers
+        .get("x-should-retry")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| {
+            if s.eq_ignore_ascii_case("true") {
+                Some(true)
+            } else if s.eq_ignore_ascii_case("false") {
+                Some(false)
+            } else {
+                None // unknown value — treat as absent
+            }
+        })
+}
+
 fn extract_model_metadata(headers: &reqwest::header::HeaderMap) -> Option<ResponseModelMetadata> {
     let context_window = headers
         .get("x-kimix-context-window")
@@ -721,6 +741,8 @@ impl SamplingClient {
         let status = response.status();
         let model_metadata = extract_model_metadata(response.headers());
         let retry_after_secs = extract_retry_after(response.headers());
+
+        let should_retry = extract_should_retry(response.headers());
         let bytes = response.bytes().await?;
 
         if !status.is_success() {
@@ -737,6 +759,7 @@ impl SamplingClient {
                 message,
                 model_metadata,
                 retry_after_secs,
+                should_retry,
             });
         }
 
@@ -867,6 +890,8 @@ impl SamplingClient {
         span.record("success", status.is_success());
         let model_metadata = extract_model_metadata(response.headers());
         let retry_after_secs = extract_retry_after(response.headers());
+
+        let should_retry = extract_should_retry(response.headers());
         if !status.is_success() {
             if status == reqwest::StatusCode::UNAUTHORIZED {
                 span.record("error", "unauthorized (401)");
@@ -905,6 +930,7 @@ impl SamplingClient {
                 message,
                 model_metadata,
                 retry_after_secs,
+                should_retry,
             });
         }
 
@@ -1061,6 +1087,8 @@ impl SamplingClient {
         let status = response.status();
         let model_metadata = extract_model_metadata(response.headers());
         let retry_after_secs = extract_retry_after(response.headers());
+
+        let should_retry = extract_should_retry(response.headers());
         let bytes = response.bytes().await?;
 
         if !status.is_success() {
@@ -1094,6 +1122,7 @@ impl SamplingClient {
                 message,
                 model_metadata,
                 retry_after_secs,
+                should_retry,
             });
         }
 
@@ -1228,6 +1257,8 @@ impl SamplingClient {
             }
             let model_metadata = extract_model_metadata(response.headers());
             let retry_after_secs = extract_retry_after(response.headers());
+
+            let should_retry = extract_should_retry(response.headers());
             let req_headers = self.format_request_headers(true);
             let resp_headers = Self::format_response_headers(&response);
             let bytes = response.bytes().await?;
@@ -1253,6 +1284,7 @@ impl SamplingClient {
                 message,
                 model_metadata,
                 retry_after_secs,
+                should_retry,
             });
         }
 
@@ -1393,6 +1425,8 @@ impl SamplingClient {
         let status = response.status();
         let model_metadata = extract_model_metadata(response.headers());
         let retry_after_secs = extract_retry_after(response.headers());
+
+        let should_retry = extract_should_retry(response.headers());
         let bytes = response.bytes().await?;
 
         if !status.is_success() {
@@ -1426,6 +1460,7 @@ impl SamplingClient {
                 message,
                 model_metadata,
                 retry_after_secs,
+                should_retry,
             });
         }
 
@@ -1525,6 +1560,8 @@ impl SamplingClient {
             }
             let model_metadata = extract_model_metadata(response.headers());
             let retry_after_secs = extract_retry_after(response.headers());
+
+            let should_retry = extract_should_retry(response.headers());
             let req_headers = self.format_request_headers(true);
             let resp_headers = Self::format_response_headers(&response);
             let bytes = response.bytes().await?;
@@ -1550,6 +1587,7 @@ impl SamplingClient {
                 message,
                 model_metadata,
                 retry_after_secs,
+                should_retry,
             });
         }
 
@@ -1869,6 +1907,7 @@ impl SamplingClient {
                 message: info.message,
                 model_metadata: info.model_metadata,
                 retry_after_secs: info.retry_after_secs,
+                should_retry: None,
             })
     }
 }
@@ -1969,6 +2008,40 @@ mod tests {
 
         assert!(obj.get("max_tokens").is_none());
         assert!(obj.get("tools").is_none());
+    }
+
+    #[test]
+    fn extract_should_retry_true() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("x-should-retry", "true".parse().unwrap());
+        assert_eq!(extract_should_retry(&headers), Some(true));
+    }
+
+    #[test]
+    fn extract_should_retry_true_case_insensitive() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("x-should-retry", "TRUE".parse().unwrap());
+        assert_eq!(extract_should_retry(&headers), Some(true));
+    }
+
+    #[test]
+    fn extract_should_retry_false() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("x-should-retry", "false".parse().unwrap());
+        assert_eq!(extract_should_retry(&headers), Some(false));
+    }
+
+    #[test]
+    fn extract_should_retry_unknown_value_is_none() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("x-should-retry", "banana".parse().unwrap());
+        assert_eq!(extract_should_retry(&headers), None);
+    }
+
+    #[test]
+    fn extract_should_retry_absent_is_none() {
+        let headers = reqwest::header::HeaderMap::new();
+        assert_eq!(extract_should_retry(&headers), None);
     }
 
     #[test]
