@@ -300,15 +300,23 @@ fn compaction_no_prefix_passes_through() {
 }
 #[test]
 fn resumable_source_returns_none_for_unknown_id() {
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     assert!(
         coordinator.resumable_source_for("unknown", "parent", Path::new("/tmp"))
         .is_none()
     );
 }
 #[test]
+fn coordinator_concurrency_configured_and_unlimited() {
+    assert_eq!(SubagentCoordinator::new(4).max_concurrency(), 4);
+    assert_eq!(SubagentCoordinator::new(0).max_concurrency(), 0);
+    // Unlimited still creates a semaphore (permits = 1) but the spawn path
+    // skips acquiring when `max_concurrency == 0`, so no artificial limit.
+    assert_eq!(SubagentCoordinator::new(0).concurrency_semaphore().available_permits(), 1);
+}
+#[test]
 fn resumable_source_returns_none_for_active_subagent() {
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     assert!(! coordinator.is_active("active-id"));
     assert!(
         coordinator.resumable_source_for("active-id", "parent", Path::new("/tmp"))
@@ -317,7 +325,7 @@ fn resumable_source_returns_none_for_active_subagent() {
 }
 #[test]
 fn resumable_source_returns_info_for_completed_subagent() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .completed
         .insert(
@@ -360,7 +368,7 @@ fn resumable_source_returns_info_for_completed_subagent() {
 }
 #[test]
 fn resumable_source_survives_move_to_completed_with_metadata() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .move_to_completed(
             "sub-moved",
@@ -581,7 +589,7 @@ fn snapshot_ref_write_promotes_nonterminal_status_to_terminal() {
 /// completed entry so `resume_from` can rehydrate before TTL eviction.
 #[tokio::test]
 async fn set_completed_snapshot_ref_updates_in_memory_entry() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator.insert(dummy_tracker("sa-mem", "session-A", "explore", "task"));
     coordinator
         .move_to_completed(
@@ -609,7 +617,7 @@ async fn set_completed_snapshot_ref_updates_in_memory_entry() {
 /// Unknown id is a no-op (entry already TTL-evicted; meta.json still holds it).
 #[test]
 fn set_completed_snapshot_ref_unknown_id_is_noop() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator.set_completed_snapshot_ref("ghost", "refs/kimix/subagents/ghost".into());
     assert!(
         coordinator.resumable_source_for("ghost", "session-A", Path::new("/tmp"))
@@ -676,7 +684,7 @@ fn subagent_tool_params_carry_ask_user_question_timeouts() {
 }
 /// Seed a coordinator with one completed subagent owned by `session-A`.
 fn coordinator_with_completed(id: &str) -> SubagentCoordinator {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator.insert(dummy_tracker(id, "session-A", "explore", "task"));
     coordinator
         .move_to_completed(
@@ -745,7 +753,7 @@ async fn completion_snapshot_sequence_persists_ref_then_removes_worktree() {
 #[tokio::test]
 async fn gate_on_completion_clears_model_facing_worktree_path_but_resume_retains_it() {
     let wt = PathBuf::from("/tmp/kimix-wt/subagent-disp-1");
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     let mut tracker = dummy_tracker("disp-1", "session-A", "explore", "task");
     tracker.worktree_path = Some(wt.clone());
     coordinator.insert(tracker);
@@ -777,7 +785,7 @@ async fn gate_on_completion_clears_model_facing_worktree_path_but_resume_retains
 #[tokio::test]
 async fn gate_on_completion_retains_worktree_path_when_not_removed() {
     let wt = PathBuf::from("/tmp/kimix-wt/subagent-keep-1");
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator.insert(dummy_tracker("keep-1", "session-A", "explore", "task"));
     let mut result = SubagentResult {
         success: true,
@@ -815,7 +823,7 @@ async fn disposal_completes_before_subagent_is_observable() {
     std::fs::write(wt.join("tracked.txt"), "edited").unwrap();
     let meta_dir = temp.path().join("meta");
     write_subagent_meta(&meta_dir, &snapshot_test_meta("order-1"));
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator.insert(dummy_tracker("order-1", "session-A", "explore", "task"));
     let ref_name = "refs/kimix/subagents/order-1";
     let snapshot_ref = crate::session::worktree::snapshot_subagent_worktree(
@@ -1023,7 +1031,7 @@ fn select_override_cwd_fresh_spawn_uses_request_cwd() {
 }
 #[test]
 fn resumable_source_rejects_cross_session_lookup() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .completed
         .insert(
@@ -1274,7 +1282,7 @@ fn reconcile_orphan_flips_running_meta_to_cancelled() {
     let id = "sa-orphan";
     let sub_dir = session_dir.path().join("subagents").join(id);
     write_subagent_meta(&sub_dir, &running_test_meta(id, "parent-x"));
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     reconcile_orphaned_subagents(
         &[],
         &coordinator,
@@ -1298,7 +1306,7 @@ async fn reconcile_orphan_skips_ids_in_live_registry() {
     let id = "sa-live";
     let sub_dir = session_dir.path().join("subagents").join(id);
     write_subagent_meta(&sub_dir, &running_test_meta(id, "parent-x"));
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator.insert(dummy_tracker(id, "parent-x", "explore", "task"));
     reconcile_orphaned_subagents(
         &[],
@@ -1318,7 +1326,7 @@ fn reconcile_orphan_skips_pending_ids_in_live_registry() {
     let id = "sa-pending";
     let sub_dir = session_dir.path().join("subagents").join(id);
     write_subagent_meta(&sub_dir, &running_test_meta(id, "parent-x"));
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .insert_pending(PendingSubagent {
             subagent_id: id.to_string(),
@@ -1359,7 +1367,7 @@ fn reconcile_orphan_idempotent_on_terminal_meta() {
     meta.completed_at = Some(chrono::Utc::now());
     meta.error = Some("interrupted by process restart".into());
     write_subagent_meta(&sub_dir, &meta);
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     let (gateway, mut gateway_rx) = test_gateway_with_receiver();
     let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
     reconcile_orphaned_subagents(
@@ -1382,7 +1390,7 @@ fn reconcile_orphan_ignores_other_parent_session() {
     let id = "sa-other";
     let sub_dir = session_dir.path().join("subagents").join(id);
     write_subagent_meta(&sub_dir, &running_test_meta(id, "other-parent"));
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     reconcile_orphaned_subagents(
         &[],
         &coordinator,
@@ -1401,7 +1409,7 @@ fn reconcile_orphan_skips_malformed_meta() {
     let sub_dir = session_dir.path().join("subagents").join("sa-bad");
     std::fs::create_dir_all(&sub_dir).unwrap();
     std::fs::write(sub_dir.join("meta.json"), "{not valid json").unwrap();
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
     reconcile_orphaned_subagents(
         &[],
@@ -1419,7 +1427,7 @@ fn reconcile_orphan_skips_malformed_meta() {
 #[test]
 fn reconcile_orphan_noop_on_missing_subagents_dir() {
     let session_dir = tempfile::TempDir::new().unwrap();
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
     reconcile_orphaned_subagents(
         &[],
@@ -1434,7 +1442,7 @@ fn reconcile_orphan_noop_on_missing_subagents_dir() {
 #[test]
 fn reconcile_replayed_orphan_emits_finish_for_inherited_orphan() {
     let session_dir = tempfile::TempDir::new().unwrap();
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
     let unfinished = vec![("sa-inherited".to_string(), "child-inherited".to_string())];
     reconcile_orphaned_subagents(
@@ -1455,7 +1463,7 @@ fn reconcile_replayed_orphan_uses_real_terminal_status_from_meta() {
     meta.status = "completed".into();
     meta.tool_calls = Some(7);
     write_subagent_meta(&sub_dir, &meta);
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
     let unfinished = vec![("sa-done".to_string(), "child-sa-done".to_string())];
     reconcile_orphaned_subagents(
@@ -1490,7 +1498,7 @@ async fn reconcile_reemits_rewound_finish_even_when_id_still_in_completed_regist
     meta.status = "completed".into();
     meta.tool_calls = Some(7);
     write_subagent_meta(&sub_dir, &meta);
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator.insert(dummy_tracker(id, "parent-x", "explore", "task"));
     coordinator
         .move_to_completed(
@@ -1532,7 +1540,7 @@ async fn reconcile_reemits_real_outcome_for_completed_with_running_meta() {
     let id = "sa-raced";
     let sub_dir = session_dir.path().join("subagents").join(id);
     write_subagent_meta(&sub_dir, &running_test_meta(id, "parent-x"));
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator.insert(dummy_tracker(id, "parent-x", "explore", "task"));
     coordinator
         .move_to_completed(
@@ -1580,7 +1588,7 @@ fn reconcile_dedups_orphan_present_in_both_sources() {
     let session_dir = tempfile::TempDir::new().unwrap();
     let sub_dir = session_dir.path().join("subagents").join("sa-crash");
     write_subagent_meta(&sub_dir, &running_test_meta("sa-crash", "parent-x"));
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
     let unfinished = vec![("sa-crash".to_string(), "child-sa-crash".to_string())];
     reconcile_orphaned_subagents(
@@ -1603,7 +1611,7 @@ fn reconcile_orphan_persists_subagent_finished_via_cmd_tx() {
     let id = "sa-emit";
     let sub_dir = session_dir.path().join("subagents").join(id);
     write_subagent_meta(&sub_dir, &running_test_meta(id, "parent-x"));
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     let (gateway, mut gateway_rx) = test_gateway_with_receiver();
     let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
     reconcile_orphaned_subagents(
@@ -1811,7 +1819,7 @@ fn notification_subagent_spawned_includes_resumed_from() {
 }
 #[tokio::test]
 async fn completion_notify_fires_on_move_to_completed() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     let notify = coordinator.completion_notify();
     let notified = notify.notified();
     coordinator
@@ -1836,7 +1844,7 @@ async fn completion_notify_fires_on_move_to_completed() {
 }
 #[test]
 fn drain_pending_completions_returns_and_clears() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .move_to_completed(
             "sub-d1",
@@ -1884,7 +1892,7 @@ fn drain_pending_completions_returns_and_clears() {
 }
 #[test]
 fn drain_pending_completions_cancelled_is_not_success() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .move_to_completed(
             "sub-c1",
@@ -1907,7 +1915,7 @@ fn drain_pending_completions_cancelled_is_not_success() {
 }
 #[tokio::test]
 async fn outstanding_for_prompt_includes_pending_and_active() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .insert_pending(PendingSubagent {
             subagent_id: "sub-p1".to_string(),
@@ -1935,7 +1943,7 @@ async fn outstanding_for_prompt_includes_pending_and_active() {
 }
 #[tokio::test]
 async fn outstanding_for_prompt_excludes_completed() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     let mut tracker = dummy_tracker("sub-done", "session-1", "explore", "done for X");
     tracker.parent_prompt_id = Some("prompt-X".to_string());
     coordinator.insert(tracker);
@@ -1959,7 +1967,7 @@ async fn outstanding_for_prompt_excludes_completed() {
 }
 #[test]
 fn outstanding_for_prompt_returns_empty_for_unknown_prompt() {
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     let outstanding = coordinator.outstanding_for_prompt("nonexistent");
     assert!(outstanding.is_empty());
 }
@@ -1968,7 +1976,7 @@ fn outstanding_for_prompt_returns_empty_for_unknown_prompt() {
 /// instead, including a foreground child auto-backgrounded mid-turn.
 #[tokio::test]
 async fn background_children_do_not_gate_the_drain() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     let mut bg = dummy_tracker("sub-bg", "session-1", "explore", "background");
     bg.parent_prompt_id = Some("prompt-X".to_string());
     bg.run_in_background = true;
@@ -1988,7 +1996,7 @@ async fn background_children_do_not_gate_the_drain() {
 }
 #[tokio::test]
 async fn subagent_usage_not_applied_sticky_after_completion_and_is_prompt_scoped() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     let mut tracker = dummy_tracker("sub-1", "session-1", "explore", "task");
     tracker.parent_prompt_id = Some("p-1".to_string());
     coordinator.insert(tracker);
@@ -2017,7 +2025,7 @@ async fn subagent_usage_not_applied_sticky_after_completion_and_is_prompt_scoped
 }
 #[test]
 fn outstanding_for_prompt_returns_sorted_ids() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .insert_pending(PendingSubagent {
             subagent_id: "zzz".to_string(),
@@ -2051,12 +2059,12 @@ fn outstanding_for_prompt_returns_sorted_ids() {
 }
 #[test]
 fn turn_active_flag_defaults_to_false() {
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     assert!(! coordinator.is_turn_active());
 }
 #[test]
 fn turn_active_flag_shared_via_arc() {
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     let flag = coordinator.turn_active_flag();
     assert!(! flag.load(std::sync::atomic::Ordering::Relaxed));
     flag.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -2066,7 +2074,7 @@ fn turn_active_flag_shared_via_arc() {
 }
 #[test]
 fn completions_buffered_while_turn_inactive_drained_later() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     assert!(! coordinator.is_turn_active());
     coordinator
         .move_to_completed(

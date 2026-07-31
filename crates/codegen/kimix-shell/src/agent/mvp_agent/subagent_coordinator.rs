@@ -27,7 +27,32 @@ impl MvpAgent {
                         SubagentEvent::Spawn(boxed) => {
                             let request = *boxed;
                             let agent_ref = agent_ref.clone();
+                            // Bounded worker pool: acquire a permit before
+                            // launching. Requests beyond `max_concurrency`
+                            // queue on the semaphore until a running worker
+                            // finishes; the queued gauge is observable via
+                            // the coordinator's counters.
+                            let semaphore = agent_ref
+                                .get()
+                                .subagent_coordinator
+                                .borrow()
+                                .concurrency_semaphore();
+                            let queued_gauge = agent_ref
+                                .get()
+                                .subagent_coordinator
+                                .borrow()
+                                .queued_count_arc();
+                            let max_concurrency = agent_ref
+                                .get()
+                                .subagent_coordinator
+                                .borrow()
+                                .max_concurrency();
                             tokio::task::spawn_local(async move {
+                                if max_concurrency > 0 {
+                                    queued_gauge.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    let _permit = semaphore.acquire_owned().await;
+                                    queued_gauge.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                                }
                                 let this = agent_ref.get();
                                 let parent_sid = request.parent_session_id.clone();
                                 let mut ctx = this.build_subagent_spawn_context(&parent_sid);

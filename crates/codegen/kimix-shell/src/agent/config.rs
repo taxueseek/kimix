@@ -1226,6 +1226,10 @@ pub struct Config {
     /// Not remotely gated.
     #[serde(skip)]
     pub subagents_enabled: bool,
+    /// Maximum concurrent subagents (`[subagents] max_concurrency`; default 4,
+    /// `0` = unlimited). Used by the coordinator to bound the worker pool.
+    #[serde(skip)]
+    pub subagent_max_concurrency: usize,
     /// Per-subagent model ID overrides from `[subagents.models]` in config.toml.
     /// Keys are agent names, values are model IDs. Set alongside `subagents_enabled`
     /// from `SubagentsConfig::resolve()`.
@@ -1539,6 +1543,7 @@ impl Default for Config {
             cli_agents: Vec::new(),
             cli_agent_overrides: CliAgentOverrides::default(),
             subagents_enabled: true,
+            subagent_max_concurrency: 4,
             subagent_model_overrides: std::collections::HashMap::new(),
             subagent_toggle: std::collections::HashMap::new(),
             subagent_roles: std::collections::HashMap::new(),
@@ -1660,6 +1665,7 @@ impl Config {
     ) {
         let sa = crate::config::SubagentsConfig::resolve(cli_flag, raw_config, cwd);
         self.subagents_enabled = sa.enabled;
+        self.subagent_max_concurrency = sa.max_concurrency.unwrap_or(4);
         self.subagent_model_overrides = sa.models;
         self.subagent_toggle = sa.toggle;
         self.subagent_roles = sa.roles;
