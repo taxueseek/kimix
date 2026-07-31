@@ -969,7 +969,7 @@ impl ScrollbackState {
             // Replace output entirely — kimix-shell sends full accumulated buffer each tick.
             // The shell now sends clean output (no ANSI codes) when the client sets
             // Kimix/bashOutputNoColor: true, so no stripping is needed.
-            exec.output = Some(output.to_string());
+            exec.replace_output(output);
             entry.invalidate_cache();
             self.dirty_heights.insert(id);
             self.bump_content_generation();

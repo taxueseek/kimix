@@ -33,6 +33,70 @@ fn create_test_notification() -> acp::SessionNotification {
 fn create_test_plan_state() -> TodoState {
     TodoState::default()
 }
+
+fn test_tool_update(status: acp::ToolCallStatus, text: String) -> acp::SessionNotification {
+    acp::SessionNotification::new(
+        acp::SessionId::new("test-session-123"),
+        acp::SessionUpdate::ToolCallUpdate(acp::ToolCallUpdate::new(
+            acp::ToolCallId::new("call-1"),
+            acp::ToolCallUpdateFields::new()
+                .status(status)
+                .content(vec![acp::ToolCallContent::from(acp::ContentBlock::Text(
+                    acp::TextContent::new(text),
+                ))]),
+        )),
+    )
+}
+
+#[test]
+fn slim_intermediate_tool_update_truncates_heavy_in_progress_frames() {
+    let adapter = JsonlStorageAdapter::with_root(std::env::temp_dir());
+    let big_text = "y".repeat(20_000);
+    let notification = test_tool_update(acp::ToolCallStatus::InProgress, big_text);
+    let slim = adapter
+        .slim_intermediate_tool_update(&notification)
+        .expect("heavy in-progress frame should be slimmed");
+    match &slim.update {
+        acp::SessionUpdate::ToolCallUpdate(tcu) => {
+            let text = match &tcu.fields.content.as_ref().expect("content present")[0] {
+                acp::ToolCallContent::Content(content) => match &content.content {
+                    acp::ContentBlock::Text(text) => text.text.as_str(),
+                    _ => "",
+                },
+                _ => "",
+            };
+            assert!(text.contains("omitted"), "marker must be explicit");
+            assert!(
+                text.len() < 10_000,
+                "text should be bounded, got {}",
+                text.len()
+            );
+            assert!(tcu.fields.raw_output.is_none(), "raw_output dropped");
+        }
+        other => panic!("expected ToolCallUpdate, got {other:?}"),
+    }
+}
+
+#[test]
+fn slim_intermediate_tool_update_keeps_terminal_frames_untouched() {
+    let adapter = JsonlStorageAdapter::with_root(std::env::temp_dir());
+    let notification = test_tool_update(acp::ToolCallStatus::Completed, "z".repeat(20_000));
+    assert!(
+        adapter.slim_intermediate_tool_update(&notification).is_none(),
+        "completed frames must persist untouched"
+    );
+}
+
+#[test]
+fn slim_intermediate_tool_update_skips_small_frames() {
+    let adapter = JsonlStorageAdapter::with_root(std::env::temp_dir());
+    let notification = test_tool_update(acp::ToolCallStatus::InProgress, "small".to_string());
+    assert!(
+        adapter.slim_intermediate_tool_update(&notification).is_none(),
+        "small frames persist unchanged"
+    );
+}
+
 #[tokio::test]
 async fn write_compaction_segment_numbers_and_indexes_resume_safely() {
     use crate::extensions::notification::CompactionSegmentFile;

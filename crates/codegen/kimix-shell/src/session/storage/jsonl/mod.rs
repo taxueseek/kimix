@@ -16,6 +16,54 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
+
+/// Bytes kept from the head and tail of an in-progress tool frame's text when
+/// writing `updates.jsonl`. Intermediate frames only drive the live stream;
+/// keeping a bounded head/tail preserves a readable replay while stopping the
+/// file from growing with megabytes of in-flight output per tick.
+const INTERMEDIATE_FRAME_HEAD_BYTES: usize = 4096;
+const INTERMEDIATE_FRAME_TAIL_BYTES: usize = 4096;
+
+/// Take the first `max` bytes of `s`, truncated at a UTF-8 boundary.
+fn utf8_head(s: &str, max: usize) -> &str {
+    if s.len() <= max {
+        return s;
+    }
+    let mut end = max;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
+/// Take the last `max` bytes of `s`, truncated at a UTF-8 boundary.
+fn utf8_tail(s: &str, max: usize) -> &str {
+    if s.len() <= max {
+        return s;
+    }
+    let mut start = s.len() - max;
+    while start < s.len() && !s.is_char_boundary(start) {
+        start += 1;
+    }
+    &s[start..]
+}
+
+/// Keep a bounded head + tail of `text`, inserting an explicit omission marker
+/// so replay readers know the middle was dropped (never a silent truncation).
+fn truncate_head_tail(text: &str, head: usize, tail: usize) -> String {
+    if text.len() <= head + tail {
+        return text.to_owned();
+    }
+    let omitted = text.len() - head - tail;
+    let mut out = String::with_capacity(head + tail + 64);
+    out.push_str(utf8_head(text, head));
+    out.push_str(&format!(
+        "\n… [{omitted} bytes of in-flight output omitted in persisted replay]\n"
+    ));
+    out.push_str(utf8_tail(text, tail));
+    out
+}
+
 /// How the adapter resolves the session directory on disk.
 ///
 /// - `FromRoot` (default): computes `{root}/sessions/{urlencoded(cwd)}/{session_id}/`
@@ -361,12 +409,92 @@ impl JsonlStorageAdapter {
         path: PathBuf,
         update: &super::SessionUpdate,
     ) -> io::Result<()> {
-        let envelope = SessionUpdateEnvelope::from_update(update)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        // Persistence-only slimming of in-progress tool frames: intermediate
+        // `ToolCallUpdate(InProgress)` payloads are streamed to the TUI, but
+        // only the final `Completed` frame carries the full result that ever
+        // enters the conversation / prompt. Persisting the full in-flight
+        // output on every tick is what makes `updates.jsonl` balloon (a real
+        // session grew to 75MB where ~99% of the bytes were in-progress
+        // frames). Live forwarding is untouched — this only affects the disk
+        // copy. Rewind still works: conversation reconstruction is driven by
+        // `Completed` tool frames, never by intermediate progress frames.
+        let envelope = match update {
+            super::SessionUpdate::Acp(notification) => {
+                match self.slim_intermediate_tool_update(notification) {
+                    Some(slim) => {
+                        let slimmed = super::SessionUpdate::Acp(Box::new(slim));
+                        SessionUpdateEnvelope::from_update(&slimmed)
+                    }
+                    None => SessionUpdateEnvelope::from_update(update),
+                }
+            }
+            _ => SessionUpdateEnvelope::from_update(update),
+        }
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         let mut line = serde_json::to_vec(&envelope)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         line.push(b'\n');
         self.append_jsonl_line(path, line).await
+    }
+
+    /// Persistence-only slimming of an in-progress tool-call frame.
+    ///
+    /// See `append_update_to_file` for the rationale. Returns `None` when the
+    /// frame is terminal or already small enough to persist unchanged, so the
+    /// hot path pays no clone cost.
+    fn slim_intermediate_tool_update(
+        &self,
+        notification: &acp::SessionNotification,
+    ) -> Option<acp::SessionNotification> {
+        let acp::SessionUpdate::ToolCallUpdate(tcu) = &notification.update else {
+            return None;
+        };
+        let is_terminal = matches!(
+            tcu.fields.status,
+            Some(acp::ToolCallStatus::Completed | acp::ToolCallStatus::Failed)
+        );
+        if is_terminal {
+            return None;
+        }
+        let is_heavy = tcu.fields.raw_output.is_some()
+            || tcu.fields.content.as_ref().is_some_and(|content| {
+                content.iter().any(|part| {
+                    matches!(
+                        part,
+                        acp::ToolCallContent::Content(content)
+                            if matches!(&content.content, acp::ContentBlock::Text(t)
+                                if t.text.len()
+                                    > INTERMEDIATE_FRAME_HEAD_BYTES + INTERMEDIATE_FRAME_TAIL_BYTES)
+                    )
+                })
+            });
+        if !is_heavy {
+            return None;
+        }
+
+        let mut slim = tcu.clone();
+        if let Some(content) = slim.fields.content.as_mut() {
+            for part in content.iter_mut() {
+                if let acp::ToolCallContent::Content(content) = part
+                    && let acp::ContentBlock::Text(text) = &mut content.content
+                {
+                    text.text = truncate_head_tail(
+                        &text.text,
+                        INTERMEDIATE_FRAME_HEAD_BYTES,
+                        INTERMEDIATE_FRAME_TAIL_BYTES,
+                    );
+                }
+            }
+        }
+        // The full output structure (BashOutput: output / output_for_prompt /
+        // delta) is only useful to the live stream; the terminal frame carries
+        // the authoritative result. Dropping it here avoids persisting the
+        // full buffer on every tick.
+        slim.fields.raw_output = None;
+
+        let mut slim_notification = notification.clone();
+        slim_notification.update = acp::SessionUpdate::ToolCallUpdate(slim);
+        Some(slim_notification)
     }
     /// Read session updates from an updates.jsonl file, handling both envelope and legacy formats.
     ///
