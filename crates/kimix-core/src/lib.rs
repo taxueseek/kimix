@@ -56,4 +56,4 @@ pub use scorer::BM25Scorer;
 pub use searcher::{MMRReranker, SearchResult, Searcher};
 pub use subagent::{AgentRole, CapabilityMode, SubagentConfig, SubagentResult};
 pub use tokenizer::Tokenizer;
-pub use vector::VectorIndex;
+pub use vector::{LOCAL_EMBED_DIM, VectorIndex, local_embedding};

@@ -15,6 +15,7 @@ mod tests {
             max_effective_context_tokens: None,
             soft_nudge_ratio: 0.55,
             content_hash_dedup: true,
+            ephemeral_preview_chars: 120,
         }
     }
 

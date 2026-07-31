@@ -309,6 +309,8 @@ struct TodoUpdateArgs {
     content: Option<String>,
     #[serde(default)]
     status: Option<TodoStatus>,
+    #[serde(default)]
+    priority: Option<TodoPriority>,
 }
 
 /// `merge=false`: replace the state entirely. Mirrors production's
@@ -326,7 +328,7 @@ fn apply_replace(state: &mut TodoState, updates: Vec<TodoUpdateArgs>) {
 /// the update omits `content`. (F29)
 fn apply_merge(state: &mut TodoState, updates: Vec<TodoUpdateArgs>) {
     for u in updates {
-        if state.update(&u.id, u.content.as_deref(), u.status) {
+        if state.update(&u.id, u.content.as_deref(), u.status, u.priority) {
             continue;
         }
         push_new(state, u);
@@ -338,6 +340,7 @@ fn push_new(state: &mut TodoState, u: TodoUpdateArgs) {
         id,
         content,
         status,
+        priority,
     } = u;
     let content = content
         .filter(|c| !c.is_empty())
@@ -347,7 +350,7 @@ fn push_new(state: &mut TodoState, u: TodoUpdateArgs) {
         id,
         TodoItem {
             content,
-            priority: TodoPriority::default(),
+            priority: priority.unwrap_or_default(),
             status,
             meta: None,
         },

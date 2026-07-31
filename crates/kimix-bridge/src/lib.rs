@@ -18,7 +18,10 @@
 //!         │
 //!         └── Kimix-tools / Kimix-shell (unchanged)
 //! ```
-use kimix_core::{RecallConfig, RecallEngine, RecallTier};
+use kimix_core::{
+    BM25Scorer, HybridSearcher, LOCAL_EMBED_DIM, RecallConfig, RecallEngine, RecallTier, Searcher,
+    Tokenizer, VectorIndex, local_embedding,
+};
 #[cfg(test)]
 mod tests;
 use kimix_agent_memory::MemoryManager;
@@ -45,30 +48,38 @@ pub struct KimixRecallEngine {
 
 impl KimixRecallEngine {
     pub fn new() -> Self {
-        Self {
-            engine: RecallEngine::new(RecallConfig {
-                history_threshold: 5.0,
-                working_memory_threshold: 5.0,
-                recency_threshold: 4.0,
-                recency_weight: 1.0,
-                max_injections_per_turn: 3,
-                max_tokens_per_turn: 2000,
-                recent_turns_excluded: 2,
-                max_candidates_per_tier: 3,
-                decay_lambda: 0.01,
-            }),
-        }
+        let mut engine = RecallEngine::new(RecallConfig {
+            history_threshold: 5.0,
+            working_memory_threshold: 5.0,
+            recency_threshold: 4.0,
+            recency_weight: 1.0,
+            max_injections_per_turn: 3,
+            max_tokens_per_turn: 2000,
+            recent_turns_excluded: 2,
+            max_candidates_per_tier: 3,
+            decay_lambda: 0.01,
+        });
+        // 接入本地哈希 embedding 的 hybrid 检索（BM25 + 向量融合，无外部 API 依赖）。
+        // embedding 不可用时 HybridSearcher 自动回退纯 BM25。
+        let tokenizer = Tokenizer::new(2);
+        let scorer = BM25Scorer::default();
+        let searcher = Searcher::new(tokenizer.clone(), scorer);
+        let vector_index = VectorIndex::new(LOCAL_EMBED_DIM);
+        engine.set_hybrid_searcher(HybridSearcher::new(searcher, vector_index));
+        Self { engine }
     }
 
-    /// Add a conversation turn to the recall index.
+    /// Add a conversation turn to the recall index (with local embedding for hybrid retrieval).
     pub fn add_turn(&mut self, role: &str, content: &str, is_compacted: bool, turn_number: usize) {
+        let embedding = local_embedding(content, LOCAL_EMBED_DIM);
         self.engine
-            .add_turn(role, content, is_compacted, turn_number);
+            .add_turn_with_embedding(role, content, is_compacted, turn_number, Some(&embedding));
     }
 
     /// Run 3-tier recall for a query. Returns formatted text for prompt injection.
     pub fn recall_and_format(&mut self, query: &str, max_chars: usize) -> String {
-        let results = self.engine.recall(query);
+        let query_embedding = local_embedding(query, LOCAL_EMBED_DIM);
+        let results = self.engine.recall_with_embedding(query, Some(&query_embedding));
         if results.is_empty() {
             return String::new();
         }
