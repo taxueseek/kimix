@@ -56,7 +56,19 @@ kimix 采用 Grok 4.5、Kimi K3 两个优秀模型构建，采用 GLM 5.2进行�
 
 ### 版本历程
 
-**v0.1.15**（当前）— 重试不刷屏、视频不炸内存、上下文不浪费
+**v0.1.16**（当前）— 缓存省钱、长输出不卡、子代理有秩序
+
+> 这版把「缓存」从玄学变成可查的数字：每次请求命中多少都记账；上下文压缩完还会自动预热，下一轮不用重付全价。长输出和长会话的内存也收紧了，子代理加了并发控制，还能一次开多路只读探索。
+
+- **缓存命中看得见**：每次请求的缓存命中率落到 `~/.kimix/metrics/cache_hit-<日期>.jsonl`，退出时汇总本次会话的窗口命中率，下次启动还能看到上一进程的成绩。
+- **压缩后自动预热**：上下文压缩完，先发一个 1 token 的空请求把新前缀写进服务端缓存，下一轮直接命中，不白等。
+- **长输出不再卡**：bash 长输出先截头尾再排版，10 万行日志不再逐帧全量处理；流式中途也不再反复生成全量文本。
+- **会话文件不再膨胀**：工具执行的中间过程只存头尾摘要，最终结果完整保留——实测某会话 75MB 里约 99% 是中间过程，现在这部分大幅缩水。
+- **子代理有秩序**：默认最多 4 个同时跑（`[subagents] max_concurrency` 可调，0 不限），超出的排队等空位；批量并行探索一次开 N 路只读 worker，查完合并汇总。
+
+---
+
+**v0.1.15** — 重试不刷屏、视频不炸内存、上下文不浪费
 
 > 三个最烦人的问题一起处理了：「重试中」疯狂刷屏、拖长视频进去内存爆炸、窗口一长模型就开始胡说。外加一轮架构解耦和内存边界收紧。
 
@@ -104,7 +116,7 @@ irm https://raw.githubusercontent.com/taxueseek/kimix/main/install.ps1 | iex
 ```
 
 ```sh
-kimix --version   # kimix 0.1.15 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.16 … unofficial Kimi Code CLI community build
 kimix login       # Kimi Code 订阅登录（设备码 OAuth 流程）
 kimix             # 启动全屏 TUI
 kimix -p "你好"    # 无头模式，直接提问
@@ -221,7 +233,19 @@ Use cases:
 </table>
 ### Release History
 
-**v0.1.15 (current)** — No more retry spam, no video OOM, smarter context economy
+**v0.1.16 (current)** — Cache savings you can measure, smoother long output, orderly subagents
+
+> This release turns "cache" from folklore into numbers you can check: every request's cache-hit rate is recorded, and after a compaction the new prefix is pre-warmed so the next turn pays full price again. Long output and long sessions get tighter memory bounds, subagents gain concurrency control, and you can fan out multiple read-only explorers at once.
+
+- **Cache hits are now observable**: every response's hit rate lands in `~/.kimix/metrics/cache_hit-<date>.jsonl`, a window summary is printed at exit, and the next launch shows the previous process's numbers.
+- **Post-compaction pre-warm**: after a compaction replaces the conversation, a 1-token request pre-caches the new prefix server-side, so the next turn hits instead of missing.
+- **Long output stops stalling**: bash output is truncated to head/tail before word-wrap, so a 100k-line log is no longer processed in full on every tick; streaming frames no longer rebuild the full prompt text mid-stream.
+- **Session files stop ballooning**: in-progress tool frames persist as a bounded head/tail summary while the final result stays complete — one real session's 75MB was ~99% in-progress frames, and that overhead is now largely gone.
+- **Orderly subagents**: `[subagents] max_concurrency` (default 4, 0 = unlimited) queues excess spawns instead of flooding; a `count` parameter fans out N read-only explorer workers and merges their summaries.
+
+---
+
+**v0.1.15** — No more retry spam, no video OOM, smarter context economy
 
 > Three persistent annoyances addressed back-to-back: retries flooding the screen, long videos blowing up memory, and context windows growing past the point of diminishing returns — plus architectural decoupling and tighter memory bounds.
 
@@ -269,7 +293,7 @@ irm https://raw.githubusercontent.com/taxueseek/kimix/main/install.ps1 | iex
 ```
 
 ```sh
-kimix --version   # kimix 0.1.15 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.16 … unofficial Kimi Code CLI community build
 kimix login       # sign in with your Kimi Code subscription (device-code OAuth)
 kimix             # start the TUI
 kimix -p "Hello"  # headless mode
