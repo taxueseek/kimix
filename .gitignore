@@ -8,3 +8,6 @@ releases/kigi-v*
 
 # personal analysis docs, not for the public repo
 竞品对比分析_KIGI_KIMIX_DIM_CLAUDE_CODE.md
+
+# bench artifacts (regenerable, kept on disk only)
+docs/bench-results/

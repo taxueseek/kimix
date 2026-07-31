@@ -21,8 +21,8 @@ use std::collections::VecDeque;
 
 use unicode_normalization::UnicodeNormalization;
 
-/// Cache key 版本前缀，与 kimix 发布版本对齐。
-const CACHE_KEY_VERSION: &str = "kimix:v0.1.11";
+/// Cache key 版本前缀，与 kimix 发布版本对齐（编译期跟随 Cargo 版本）。
+const CACHE_KEY_VERSION: &str = concat!("kimix:", env!("CARGO_PKG_VERSION"));
 
 /// Tier 3 保留的最大条目数（最近 N 轮工具结果）。
 const MAX_VOLATILE_ENTRIES: usize = 1;
@@ -333,7 +333,7 @@ pub fn canonicalize(content: &str) -> String {
 /// use kimix_core::cache_engine::cache_key;
 ///
 /// let key = cache_key("hello world");
-/// assert!(key.starts_with("kimix:v0.1.11:"));
+/// assert!(key.starts_with("kimix:"));
 /// // 相同内容 → 相同 key
 /// assert_eq!(cache_key("hello world"), key);
 /// // 行尾空白差异在归一化后消失
@@ -345,11 +345,40 @@ pub fn cache_key(content: &str) -> String {
     format!("{CACHE_KEY_VERSION}:{}", hash.to_hex())
 }
 
-/// 简单 tokenizer（基于空白分割）。
+/// 简单 tokenizer（CJK 逐字符 + 空白分词）。
 ///
 /// 生产环境应使用模型特定的 tokenizer；此处仅用于命中率估算。
+/// CJK 字符逐字计数（中文每个字约 1 token，空白分词会严重低估），
+/// 其余文本按空白分词。
 fn tokenize(text: &str) -> Vec<&str> {
-    text.split_whitespace().collect()
+    let mut tokens = Vec::new();
+    let mut start = 0usize;
+    for (i, c) in text.char_indices() {
+        if is_cjk(c) {
+            if i > start {
+                tokens.extend(text[start..i].split_whitespace());
+            }
+            tokens.push(&text[i..i + c.len_utf8()]);
+            start = i + c.len_utf8();
+        }
+    }
+    if start < text.len() {
+        tokens.extend(text[start..].split_whitespace());
+    }
+    tokens
+}
+
+/// CJK 统一表意文字、假名、谚文、全角字符范围检测。
+fn is_cjk(c: char) -> bool {
+    matches!(c as u32,
+        0x3400..=0x4DBF  // CJK Extension A
+        | 0x4E00..=0x9FFF  // CJK Unified Ideographs
+        | 0xF900..=0xFAFF  // CJK Compatibility Ideographs
+        | 0x3040..=0x30FF  // Hiragana + Katakana
+        | 0xAC00..=0xD7AF  // Hangul Syllables
+        | 0xFF00..=0xFFEF  // Fullwidth Forms
+        | 0x20000..=0x2A6DF // CJK Extension B
+    )
 }
 
 #[cfg(test)]
@@ -464,7 +493,7 @@ mod tests {
         let c = cache_key("hello world  "); // 行尾空白归一化后相同
         assert_eq!(a, b);
         assert_eq!(a, c);
-        assert!(a.starts_with("kimix:v0.1.11:"));
+        assert!(a.starts_with(concat!("kimix:", env!("CARGO_PKG_VERSION"), ":")));
         assert_ne!(cache_key("hello world"), cache_key("hello other"));
     }
 
@@ -475,5 +504,26 @@ mod tests {
         ctx.push_volatile("six seven".to_string());
         ctx.tier4_ephemeral = "eight".to_string();
         assert_eq!(ctx.total_tokens(), base + 2 + 1);
+    }
+
+    #[test]
+    fn test_tokenize_counts_cjk_per_char() {
+        // 纯 CJK：逐字符计数（原空白分词会把整段计为 1 token）
+        // 异 步 HTTP 客 户 端 = 2 + 1 + 3 = 6
+        assert_eq!(tokenize("异步HTTP客户端").len(), 6);
+        // 混合：CJK 逐字符 + ASCII 空白分词
+        // 使 用 rust 重 构 = 2 + 1 + 2 = 5
+        assert_eq!(tokenize("使用 rust 重构").len(), 5);
+        // 空串
+        assert!(tokenize("").is_empty());
+        // 纯空白
+        assert!(tokenize("   \n\t ").is_empty());
+    }
+
+    #[test]
+    fn test_tokenize_ascii_unchanged() {
+        // ASCII 行为与 split_whitespace 一致（向后兼容）
+        let text = "one two  three";
+        assert_eq!(tokenize(text), vec!["one", "two", "three"]);
     }
 }

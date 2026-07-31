@@ -243,6 +243,12 @@ impl Message {
             cjk_count + ascii_count / 4
         })
     }
+
+    /// Invalidate the cached token estimate after mutating `content`.
+    /// Required because the estimate is lazily cached in a `OnceCell`.
+    pub fn reset_token_estimate(&mut self) {
+        self.cached_tokens = Self::new_empty();
+    }
 }
 
 /// Configuration for prompt construction and cache management.
@@ -288,6 +294,9 @@ pub struct PromptConfig {
     /// Identical large payloads are replaced with a short stub on second
     /// insert only (never mutates prior messages). Default: true.
     pub content_hash_dedup: bool,
+    /// Preview length kept in prune placeholders (`0` disables preview entirely,
+    /// keeping only the omission marker — safe default for sensitive tool output).
+    pub ephemeral_preview_chars: usize,
 }
 
 impl Default for PromptConfig {
@@ -304,6 +313,7 @@ impl Default for PromptConfig {
             max_effective_context_tokens: None,
             soft_nudge_ratio: 0.55,
             content_hash_dedup: true,
+            ephemeral_preview_chars: 120,
         }
     }
 }
@@ -526,7 +536,8 @@ impl AgentPrompt {
         self.messages.retain(|m| !m.role.is_system_reminder());
     }
 
-    /// Context-budget prune: remove consumed ephemeral messages.
+    /// Context-budget prune: replace consumed ephemeral messages with
+    /// placeholders (retaining the message slot).
     ///
     /// This is Maka's key optimization: tool outputs are intermediate artifacts.
     /// After the model reads them and produces the next action, they're "consumed"
@@ -534,24 +545,16 @@ impl AgentPrompt {
     /// losing essential context.
     ///
     /// Strategy:
-    /// - Keep the most recent `max_ephemeral_kept` ephemeral messages
-    /// - Remove older ephemeral messages that have been consumed
-    /// - Never remove non-ephemeral messages (user queries, assistant responses)
+    /// - Keep the most recent `max_ephemeral_kept` ephemeral messages intact
+    /// - Replace older ephemeral messages' content with a short placeholder
+    ///   (message slot is retained — removing messages invalidates KV-cache
+    ///   prefixes for everything after them; a placeholder keeps the structure
+    ///   signal that a tool result existed here)
+    /// - Never touch non-ephemeral messages (user queries, assistant responses)
     /// - Track token savings for diagnostics
     fn prune_consumed_ephemera(&mut self) {
         let max_kept = self.config.max_ephemeral_kept;
-        if max_kept == 0 {
-            // Prune all ephemera
-            let before = self.messages.len();
-            self.messages.retain(|m| !m.ephemeral);
-            let removed = before - self.messages.len();
-            self.tokens_saved += removed * 50; // rough estimate per ephemeral msg
-            self.stats.record_prune_savings(removed * 50);
-            self.prune_count += 1;
-            return;
-        }
 
-        // Find ephemeral messages beyond the keep threshold
         let ephemeral_indices: Vec<usize> = self
             .messages
             .iter()
@@ -560,34 +563,72 @@ impl AgentPrompt {
             .map(|(i, _)| i)
             .collect();
 
+        if max_kept == 0 {
+            // Placeholder-ify ALL ephemera (keep slots, drop content)
+            let saved: usize = ephemeral_indices
+                .iter()
+                .map(|&i| self.messages[i].estimated_tokens())
+                .sum();
+            for &i in &ephemeral_indices {
+                self.placeholder_message(i);
+            }
+            if saved > 0 {
+                self.tokens_saved += saved;
+                self.stats.record_prune_savings(saved);
+                self.prune_count += 1;
+            }
+            return;
+        }
+
         if ephemeral_indices.len() <= max_kept {
             return; // Nothing to prune
         }
 
-        // Keep the last max_kept ephemeral messages, prune the rest
+        // Keep the last max_kept ephemeral messages intact, placeholder the rest
         let keep_from = ephemeral_indices[ephemeral_indices.len() - max_kept];
-
-        // Collect indices to remove (ephemeral messages before keep_from)
-        let to_remove: Vec<usize> = ephemeral_indices
+        let to_placeholder: Vec<usize> = ephemeral_indices
             .iter()
             .filter(|&&i| i < keep_from)
             .copied()
             .collect();
 
-        // Count tokens saved
-        let saved: usize = to_remove
+        let saved: usize = to_placeholder
             .iter()
             .map(|&i| self.messages[i].estimated_tokens())
             .sum();
 
-        // Remove in reverse order to keep indices valid
-        for &i in to_remove.iter().rev() {
-            self.messages.remove(i);
+        for &i in &to_placeholder {
+            self.placeholder_message(i);
         }
 
         self.tokens_saved += saved;
         self.stats.record_prune_savings(saved);
         self.prune_count += 1;
+    }
+
+    /// Replace message `i`'s content with a short placeholder retaining a
+    /// preview, and mark it non-ephemeral so it is never pruned again.
+    ///
+    /// The preview is gated by `ephemeral_preview_chars` (`0` = no preview)
+    /// and dropped entirely when it looks sensitive (URLs, token-shaped
+    /// secrets) — never leak credentials into the model context.
+    fn placeholder_message(&mut self, i: usize) {
+        let msg = &mut self.messages[i];
+        if !msg.content.is_empty() {
+            let total = msg.content.chars().count();
+            let max_preview = self.config.ephemeral_preview_chars;
+            let preview: String = msg.content.chars().take(max_preview).collect();
+            let preview = if max_preview == 0 || looks_sensitive(&preview) {
+                String::new()
+            } else {
+                format!("; preview: {preview}…")
+            };
+            msg.content = format!(
+                "[tool result omitted (context budget): ~{total} chars{preview}]"
+            );
+        }
+        msg.ephemeral = false;
+        msg.reset_token_estimate();
     }
 
     /// Cap injections to config limits (max count + max tokens).
@@ -652,6 +693,30 @@ impl AgentPrompt {
     pub fn dedup_count(&self) -> usize {
         self.content_deduper.dedup_count
     }
+}
+
+/// Heuristic guard for prune placeholders: drop the preview entirely when it
+/// looks like it could leak credentials (URLs with query params, common
+/// token/secret shapes). Placeholders must never feed secrets back into the
+/// model context.
+fn looks_sensitive(preview: &str) -> bool {
+    let lower = preview.to_ascii_lowercase();
+    if lower.contains("://") {
+        return true; // URLs (query params may carry tokens)
+    }
+    const TOKEN_PREFIXES: &[&str] = &[
+        "ghp_", "gho_", "ghu_", "ghs_", "sk-", "sk_", "xai-", "ak_", "eyj", "asak", "akia",
+    ];
+    for prefix in TOKEN_PREFIXES {
+        if lower.contains(prefix) {
+            return true;
+        }
+    }
+    // JSON-ish access_token / api_key / password fields
+    if lower.contains("access_token") || lower.contains("api_key") || lower.contains("password") {
+        return true;
+    }
+    false
 }
 
 /// Stable FNV-1a 64-bit fingerprint for session-scoped content dedup.
@@ -982,6 +1047,120 @@ mod tests {
             prompt.prune_count > 0,
             "Should have executed at least one prune"
         );
+    }
+
+    #[test]
+    fn test_prune_placeholder_preserves_slot_and_preview() {
+        let mut prompt = AgentPrompt::with_defaults();
+        prompt.set_system_prompt("Test");
+
+        prompt.begin_turn("Q1", &[]);
+        prompt.messages.push(Message::tool_result("first tool result"));
+        prompt.record_response("R1");
+
+        prompt.begin_turn("Q2", &[]);
+        prompt.messages.push(Message::tool_result("second tool result"));
+        prompt.record_response("R2");
+
+        prompt.begin_turn("Q3", &[]);
+        prompt.record_response("R3");
+
+        // max_ephemeral_kept=3：本轮只有 2 条 ephemeral，未到阈值，不 prune
+        // 手动推到阈值：再多 2 条
+        prompt.messages.push(Message::tool_result("third tool result"));
+        prompt.messages.push(Message::tool_result("fourth tool result"));
+        prompt.begin_turn("Q4", &[]);
+
+        // 消息槽位保留（不删除），占位符保留 preview
+        let placeholders: Vec<&str> = prompt
+            .messages
+            .iter()
+            .filter(|m| m.content.contains("tool result omitted"))
+            .map(|m| m.content.as_str())
+            .collect();
+        assert!(
+            !placeholders.is_empty(),
+            "older ephemera should be placeholder-ified"
+        );
+        assert!(
+            placeholders.iter().all(|p| p.contains("preview:")),
+            "preview should be retained for non-sensitive content: {placeholders:?}"
+        );
+        // 槽位保留：消息总数不减
+        assert!(prompt.messages.len() >= 10, "slots must be preserved");
+    }
+
+    #[test]
+    fn test_prune_placeholder_drops_sensitive_preview() {
+        let config = PromptConfig {
+            max_ephemeral_kept: 0, // placeholder-ify ALL ephemera
+            ..Default::default()
+        };
+        let mut prompt = AgentPrompt::new(config);
+        prompt.set_system_prompt("Test");
+
+        prompt.begin_turn("Q", &[]);
+        prompt.messages.push(Message::tool_result(
+            "https://api.example.com/v1/users?token=ghp_abcdefghijklmnop",
+        ));
+        prompt.record_response("R");
+
+        // 下一轮触发 prune
+        prompt.begin_turn("Q2", &[]);
+
+        let placeholder = prompt
+            .messages
+            .iter()
+            .find(|m| m.content.contains("tool result omitted"))
+            .expect("placeholder must exist");
+        assert!(
+            !placeholder.content.contains("ghp_"),
+            "token must never leak into placeholder: {}",
+            placeholder.content
+        );
+        assert!(
+            !placeholder.content.contains("https://"),
+            "URL preview must be dropped: {}",
+            placeholder.content
+        );
+    }
+
+    #[test]
+    fn test_prune_placeholder_max_kept_zero() {
+        let config = PromptConfig {
+            max_ephemeral_kept: 0,
+            ephemeral_preview_chars: 0,
+            ..Default::default()
+        };
+        let mut prompt = AgentPrompt::new(config);
+        prompt.set_system_prompt("Test");
+
+        prompt.begin_turn("Q", &[]);
+        prompt.messages.push(Message::tool_result("some output"));
+        prompt.record_response("R");
+        prompt.begin_turn("Q2", &[]);
+
+        let placeholder = prompt
+            .messages
+            .iter()
+            .find(|m| m.content.contains("tool result omitted"))
+            .expect("placeholder must exist");
+        assert!(
+            !placeholder.content.contains("preview"),
+            "preview disabled via ephemeral_preview_chars=0: {}",
+            placeholder.content
+        );
+        assert!(prompt.tokens_saved > 0);
+    }
+
+    #[test]
+    fn looks_sensitive_detects_secrets() {
+        assert!(looks_sensitive("https://api.example.com?token=abc"));
+        assert!(looks_sensitive("key: ghp_abcdefghijklmnop"));
+        assert!(looks_sensitive(r#"{"access_token": "eyJhbGci"}"#));
+        assert!(looks_sensitive("api_key: sk-123456"));
+        assert!(!looks_sensitive("tests passed: 5, coverage: 85%"));
+        assert!(!looks_sensitive("异步HTTP客户端连接池"));
     }
 
     #[test]

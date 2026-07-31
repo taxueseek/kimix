@@ -5,6 +5,93 @@
 //! can be upgraded to HNSW for larger scale.
 use std::collections::HashMap;
 
+/// Default dimension for [`local_embedding`] output.
+pub const LOCAL_EMBED_DIM: usize = 256;
+
+/// Local, deterministic, dependency-free embedding for a text span.
+///
+/// Uses feature hashing (hashing trick) over CJK bigrams + ASCII words,
+/// projected into a fixed-dimension bag-of-features vector. Not a learned
+/// embedding — it captures token overlap only, but that is exactly the
+/// signal BM25 already sees, and it lets the hybrid searcher run with zero
+/// network/API dependency. Deterministic across calls (blake3, fixed keys),
+/// so turn embeddings and query embeddings are comparable.
+pub fn local_embedding(text: &str, dim: usize) -> Vec<f32> {
+    let mut vec = vec![0.0f32; dim];
+
+    let chars: Vec<char> = text.chars().collect();
+    let n = chars.len();
+    let mut i = 0usize;
+    while i < n {
+        let c = chars[i];
+        if is_cjk(c) {
+            if i + 1 < n && is_cjk(chars[i + 1]) {
+                // 重叠 bigram：本字符 + 下一个 CJK
+                let mut s = String::with_capacity(6);
+                s.push(c);
+                s.push(chars[i + 1]);
+                add_feature(&mut vec, dim, &s);
+                i += 1;
+            } else {
+                // 孤立 CJK（后邻非 CJK，如「端」+ASCII 词）
+                let mut s = String::with_capacity(4);
+                s.push(c);
+                add_feature(&mut vec, dim, &s);
+                i += 1;
+            }
+        } else if c.is_alphanumeric() || c == '_' {
+            // 连续 ASCII 词（字母/数字/下划线），在 CJK 边界处自然切分
+            let start = i;
+            while i < n {
+                let ch = chars[i];
+                if ch.is_alphanumeric() || ch == '_' {
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+            let word: String = chars[start..i].iter().collect();
+            if !word.is_empty() {
+                add_feature(&mut vec, dim, &word);
+            }
+        } else {
+            // 空白/标点：跳过
+            i += 1;
+        }
+    }
+
+    // L2 normalize for stable cosine similarity
+    let norm: f32 = vec.iter().map(|v| v * v).sum::<f32>().sqrt();
+    if norm > 0.0 {
+        for v in &mut vec {
+            *v /= norm;
+        }
+    }
+    vec
+}
+
+/// Hash one feature into the vector (count-based, deterministic).
+fn add_feature(vec: &mut [f32], dim: usize, feature: &str) {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(feature.as_bytes());
+    let out = hasher.finalize();
+    let h = u64::from_le_bytes(out.as_bytes()[..8].try_into().expect("8 bytes")) as usize;
+    vec[h % dim] += 1.0;
+}
+
+/// CJK 统一表意文字、假名、谚文、全角字符范围检测（与 cache_engine 一致）。
+fn is_cjk(c: char) -> bool {
+    matches!(c as u32,
+        0x3400..=0x4DBF  // CJK Extension A
+        | 0x4E00..=0x9FFF  // CJK Unified Ideographs
+        | 0xF900..=0xFAFF  // CJK Compatibility Ideographs
+        | 0x3040..=0x30FF  // Hiragana + Katakana
+        | 0xAC00..=0xD7AF  // Hangul Syllables
+        | 0xFF00..=0xFFEF  // Fullwidth Forms
+        | 0x20000..=0x2A6DF // CJK Extension B
+    )
+}
+
 /// A brute-force vector index with cosine similarity.
 pub struct VectorIndex {
     /// doc_id → embedding vector
@@ -159,5 +246,57 @@ mod tests {
     fn test_dimension_mismatch_search() {
         let idx = VectorIndex::new(3);
         idx.search(&[1.0, 0.0], 5); // 2 ≠ 3
+    }
+
+    #[test]
+    fn test_local_embedding_deterministic() {
+        let a = local_embedding("异步HTTP客户端连接池", 64);
+        let b = local_embedding("异步HTTP客户端连接池", 64);
+        assert_eq!(a, b, "same text must produce identical embeddings");
+    }
+
+    #[test]
+    fn test_local_embedding_dimension() {
+        let e = local_embedding("Rust TUI 状态栏", LOCAL_EMBED_DIM);
+        assert_eq!(e.len(), LOCAL_EMBED_DIM);
+    }
+
+    #[test]
+    fn test_local_embedding_similar_texts_closer() {
+        // 共享 CJK bigram 的两段文本应比完全不相关的文本更接近
+        let dim = 256usize;
+        let a = local_embedding("异步HTTP客户端连接池", dim);
+        let b = local_embedding("Python 的异步 HTTP 客户端", dim);
+        let c = local_embedding("花园里开满了鲜花", dim);
+        let sim_ab = cosine_similarity(&a, &b);
+        let sim_ac = cosine_similarity(&a, &c);
+        assert!(
+            sim_ab > sim_ac,
+            "similar texts should be closer (ab={sim_ab}, ac={sim_ac})"
+        );
+    }
+
+    #[test]
+    fn test_local_embedding_nonzero() {
+        let e = local_embedding("你好世界", 32);
+        assert!(e.iter().any(|v| *v != 0.0), "embedding must be non-zero");
+    }
+
+    #[test]
+    fn test_local_embedding_keeps_ascii_in_mixed_text() {
+        // 审计回归：CJK+ASCII 混合无空白时，ASCII 词必须进入特征（原实现会丢失）
+        // 对比：仅含 CJK bigram 的 embedding vs 含 HTTP 的 embedding，特征必须不同
+        let dim = 256usize;
+        let no_ascii = local_embedding("异步客户端", dim);
+        let with_http = local_embedding("异步HTTP客户端", dim);
+        assert_ne!(
+            no_ascii, with_http,
+            "ASCII 词 'HTTP' 必须被捕获为独立特征"
+        );
+        // HTTP 出现在两端文本共享的 CJK 之外，cosine 相似度应 < 1（有差异特征）
+        assert!(
+            cosine_similarity(&no_ascii, &with_http) < 1.0,
+            "混合 ASCII 词后向量必须与纯 CJK 版本不同"
+        );
     }
 }

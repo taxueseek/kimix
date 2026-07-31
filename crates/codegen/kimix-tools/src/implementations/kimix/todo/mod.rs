@@ -52,7 +52,7 @@ pub(crate) fn apply_replace(
             u.id.clone(),
             TodoItem {
                 content,
-                priority: TodoPriority::default(),
+                priority: u.priority.unwrap_or_default(),
                 status,
                 meta: None,
             },
@@ -70,7 +70,7 @@ pub(crate) fn apply_replace(
 ///   makes the tool resilient to state being lost between calls.
 pub(crate) fn apply_merge(state: &mut TodoState, updates: &[TodoUpdate]) -> Result<(), TodoError> {
     for u in updates {
-        if state.update(&u.id, u.content.as_deref(), u.status) {
+        if state.update(&u.id, u.content.as_deref(), u.status, u.priority) {
             // Existing item – partial update succeeded, content was optional.
             continue;
         }
@@ -84,7 +84,7 @@ pub(crate) fn apply_merge(state: &mut TodoState, updates: &[TodoUpdate]) -> Resu
             u.id.clone(),
             TodoItem {
                 content,
-                priority: TodoPriority::default(),
+                priority: u.priority.unwrap_or_default(),
                 status,
                 meta: None,
             },
@@ -173,6 +173,7 @@ impl TodoState {
         id: &TodoId,
         content: Option<&str>,
         status: Option<TodoStatus>,
+        priority: Option<TodoPriority>,
     ) -> bool {
         let Some(todo) = self.todos.get_mut(id) else {
             return false;
@@ -184,6 +185,9 @@ impl TodoState {
         }
         if let Some(status) = status {
             todo.status = status;
+        }
+        if let Some(priority) = priority {
+            todo.priority = priority;
         }
         true
     }
@@ -218,6 +222,10 @@ pub struct TodoUpdate {
         description = "The status of the todo item: pending, in_progress, completed, or cancelled"
     )]
     pub status: Option<TodoStatus>,
+
+    #[schemars(description = "Optional priority of the todo item: high, medium, or low")]
+    #[serde(default)]
+    pub priority: Option<TodoPriority>,
 }
 
 impl TodoUpdate {
@@ -374,6 +382,7 @@ mod tests {
             id: id.to_owned(),
             content: content.map(str::to_owned),
             status,
+            priority: None,
         }
     }
 
