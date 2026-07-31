@@ -323,6 +323,11 @@ pub fn stream_chat_completions<'a>(
                 },
                 "prompt cache usage"
             );
+            crate::cache_metrics::record(
+                &request_id,
+                u.prompt_tokens,
+                u.cached_prompt_tokens,
+            );
         }
 
         let response = ConversationResponse {
