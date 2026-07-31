@@ -165,11 +165,22 @@ async fn handle_notification(
                 (chunk.base.output.clone(), None)
             };
 
+            // Incremental mode: intermediate `InProgress` frames only carry the
+            // output delta for the TUI renderer. The model-facing
+            // `output_for_prompt` (ANSI-strip + soft-wrap over the FULL buffer)
+            // is only consumed on the completed tool-call frame built by the
+            // tool dispatch path, so rebuilding it on every tick is pure waste
+            // for long-running output. Non-incremental mode keeps the legacy
+            // behavior (full buffer + full prompt text each tick).
+            let output_for_prompt = if config.incremental_bash_output {
+                String::new()
+            } else {
+                BashOutput::make_output_for_prompt(&String::from_utf8_lossy(&chunk.base.output))
+            };
+
             // Build a ToolOutput::Bash from the chunk for the TUI to parse
             let bash_output = ToolOutput::Bash(BashOutput {
-                output_for_prompt: BashOutput::make_output_for_prompt(&String::from_utf8_lossy(
-                    &chunk.base.output,
-                )),
+                output_for_prompt,
                 output,
                 exit_code: 0,
                 command: chunk.base.command.clone(),

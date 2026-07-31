@@ -12,6 +12,45 @@ use crate::scrollback::types::{
 };
 use crate::theme::Theme;
 
+/// Memory guardrail for a single execute block's raw output. Streaming a
+/// multi-hundred-MB log into scrollback would pin that memory for the whole
+/// session (scrollback keeps every entry until evicted by the 8192-entry cap).
+/// Once the guardrail trips, only a bounded head plus a rolling trailing
+/// window are retained in memory, with an explicit omission marker; the full
+/// output remains available on disk via the tool's `output_file`. Selection,
+/// search and expand all operate on the retained portion and show the marker.
+pub(crate) const EXECUTE_OUTPUT_MAX_BYTES: usize = 4 * 1024 * 1024;
+pub(crate) const EXECUTE_OUTPUT_KEEP_HEAD_BYTES: usize = 256 * 1024;
+pub(crate) const EXECUTE_OUTPUT_KEEP_TAIL_BYTES: usize = 64 * 1024;
+
+fn utf8_head(s: &str, max: usize) -> &str {
+    if s.len() <= max {
+        return s;
+    }
+    let mut end = max;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
+fn utf8_tail(s: &str, max: usize) -> &str {
+    if s.len() <= max {
+        return s;
+    }
+    let mut start = s.len() - max;
+    while start < s.len() && !s.is_char_boundary(start) {
+        start += 1;
+    }
+    &s[start..]
+}
+
+fn guardrail_omission_marker(omitted: usize) -> String {
+    format!(
+        "\n… [{omitted} bytes omitted in memory; full output on disk via the tool output file]\n"
+    )
+}
+
 const EXECUTE_STDOUT_RANGE_BASE: u16 = 1;
 
 /// Execute tool call - runs a shell command.
@@ -34,6 +73,14 @@ pub struct ExecuteToolCallBlock {
     pub bash_mode: bool,
     /// Peeled display form for the header; `command` stays the full source of truth.
     pub header_display: Option<String>,
+    /// Total raw bytes appended so far. Drives the memory guardrail; when it
+    /// trips, `output` stops being the full stream (see module docs).
+    output_total_bytes: usize,
+    /// True once the guardrail tripped: `output` holds head + marker + rolling
+    /// tail window, and `output_tail_start` is the tail window's offset.
+    output_guarded: bool,
+    /// Byte offset of the rolling tail window inside `output` when guarded.
+    output_tail_start: usize,
 }
 impl ExecuteToolCallBlock {
     /// Create a new execute block.
@@ -51,6 +98,9 @@ impl ExecuteToolCallBlock {
             elapsed_ms: None,
             bash_mode: false,
             header_display: None,
+            output_total_bytes: 0,
+            output_guarded: false,
+            output_tail_start: 0,
         }
     }
 
@@ -68,16 +118,82 @@ impl ExecuteToolCallBlock {
 
     /// Set output.
     pub fn with_output(mut self, output: impl Into<String>) -> Self {
-        self.output = Some(output.into());
+        let output = output.into();
+        self.replace_output(&output);
         self
     }
 
     /// Push streaming output chunk.
     pub fn push_output(&mut self, chunk: &str) {
-        match &mut self.output {
-            Some(o) => o.push_str(chunk),
-            None => self.output = Some(chunk.to_string()),
+        self.output_total_bytes = self.output_total_bytes.saturating_add(chunk.len());
+        if self.output_guarded {
+            // Keep the rolling tail window bounded; the head + marker prefix
+            // is already fixed in place before `output_tail_start`.
+            let mut out = self.output.take().unwrap_or_default();
+            out.push_str(chunk);
+            let tail_len = out.len() - self.output_tail_start;
+            if tail_len > EXECUTE_OUTPUT_KEEP_TAIL_BYTES {
+                let drop = tail_len - EXECUTE_OUTPUT_KEEP_TAIL_BYTES;
+                let mut drop_end = self.output_tail_start + drop;
+                while drop_end < out.len() && !out.is_char_boundary(drop_end) {
+                    drop_end += 1;
+                }
+                out.drain(self.output_tail_start..drop_end);
+            }
+            self.output = Some(out);
+            return;
         }
+        if self.output_total_bytes <= EXECUTE_OUTPUT_MAX_BYTES {
+            match &mut self.output {
+                Some(o) => o.push_str(chunk),
+                None => self.output = Some(chunk.to_string()),
+            }
+            return;
+        }
+        // Trip the guardrail: collapse the accumulated buffer to head +
+        // marker + tail window, then keep the tail rolling from here on.
+        self.output_guarded = true;
+        let full = self.output.take().unwrap_or_default();
+        let head = utf8_head(&full, EXECUTE_OUTPUT_KEEP_HEAD_BYTES);
+        let omitted = self
+            .output_total_bytes
+            .saturating_sub(head.len() + EXECUTE_OUTPUT_KEEP_TAIL_BYTES);
+        let mut tail = utf8_tail(&full, EXECUTE_OUTPUT_KEEP_TAIL_BYTES).to_owned();
+        tail.push_str(chunk);
+        if tail.len() > EXECUTE_OUTPUT_KEEP_TAIL_BYTES {
+            tail = utf8_tail(&tail, EXECUTE_OUTPUT_KEEP_TAIL_BYTES).to_owned();
+        }
+        let mut out = String::with_capacity(head.len() + tail.len() + 96);
+        out.push_str(head);
+        out.push_str(&guardrail_omission_marker(omitted));
+        self.output_tail_start = out.len();
+        out.push_str(&tail);
+        self.output = Some(out);
+    }
+
+    /// Replace the output wholesale (non-incremental streaming path: the shell
+    /// sends the full accumulated buffer each tick). Applies the same memory
+    /// guardrail as [`Self::push_output`].
+    pub fn replace_output(&mut self, output: &str) {
+        self.output_total_bytes = output.len();
+        if output.len() <= EXECUTE_OUTPUT_MAX_BYTES {
+            self.output_guarded = false;
+            self.output_tail_start = 0;
+            self.output = Some(output.to_owned());
+            return;
+        }
+        self.output_guarded = true;
+        let head = utf8_head(output, EXECUTE_OUTPUT_KEEP_HEAD_BYTES);
+        let omitted = output
+            .len()
+            .saturating_sub(head.len() + EXECUTE_OUTPUT_KEEP_TAIL_BYTES);
+        let tail = utf8_tail(output, EXECUTE_OUTPUT_KEEP_TAIL_BYTES);
+        let mut out = String::with_capacity(head.len() + tail.len() + 96);
+        out.push_str(head);
+        out.push_str(&guardrail_omission_marker(omitted));
+        self.output_tail_start = out.len();
+        out.push_str(tail);
+        self.output = Some(out);
     }
 
     /// Finalize elapsed time from `started_at`.
@@ -562,14 +678,44 @@ impl ExecuteToolCallBlock {
                     .map(|rl| rl.line)
                     .collect();
 
+            // Source-line pre-truncation: the truncated display only ever shows
+            // `first` leading and `last` trailing WRAPPED lines, and the first
+            // `first` wrapped lines can never need more than the first `first`
+            // source lines (each source line produces >= 1 wrapped line; same
+            // for the tail). When the source has far more lines than the
+            // display budget, word-wrapping every line is pure waste: a
+            // 100k-line build log would otherwise be soft-wrapped in full on
+            // every streaming tick just to show 5 lines. We wrap only the
+            // head/tail source lines and let the wrapped-level truncation
+            // below keep the exact same visual semantics (a still-oversized
+            // single source line is handled by the wrapped budget).
+            let mut middle_skipped = false;
+            let lines_for_wrap = match truncate {
+                Some((first, last)) if styled_lines.len() > first + last => {
+                    middle_skipped = true;
+                    let head_end = first.min(styled_lines.len());
+                    let tail_start = styled_lines.len().saturating_sub(last);
+                    // `len > first + last` guarantees tail_start > head_end,
+                    // so head/tail never overlap and ordering is preserved.
+                    let mut kept = Vec::with_capacity(head_end + last);
+                    kept.extend(styled_lines[..head_end].iter().cloned());
+                    kept.extend(styled_lines[tail_start..].iter().cloned());
+                    kept
+                }
+                _ => styled_lines,
+            };
+
             let (wrapped, joiners) =
-                word_wrap_lines_with_joiners(styled_lines, width.saturating_sub(2).max(20));
+                word_wrap_lines_with_joiners(lines_for_wrap, width.saturating_sub(2).max(20));
             let total = wrapped.len();
 
             // Apply truncation if specified and content exceeds limits
             if let Some((first, last)) = truncate {
                 let threshold = first + last;
-                if total > threshold {
+                // `middle_skipped` forces the ellipsis path: the source was
+                // pre-trimmed, so an ellipsis must tell the user lines were
+                // omitted even when the wrapped total fits the budget.
+                if total > threshold || middle_skipped {
                     // First N lines: stdout range base
                     for (wrapped_line, joiner) in wrapped.iter().zip(joiners.iter()).take(first) {
                         lines.push(
@@ -585,8 +731,10 @@ impl ExecuteToolCallBlock {
                             .with_panel_background(theme.bg_dark),
                     );
                     // Last M lines: range base + 1 (distinct from first chunk)
-                    for (wrapped_line, joiner) in
-                        wrapped.iter().zip(joiners.iter()).skip(total - last)
+                    for (wrapped_line, joiner) in wrapped
+                        .iter()
+                        .zip(joiners.iter())
+                        .skip(total.saturating_sub(last))
                     {
                         lines.push(
                             BlockLine::styled(wrapped_line.clone())
@@ -1054,6 +1202,58 @@ mod tests {
         block.push_output("e\n");
         block.finish();
         assert_eq!(block.output, Some("Compiling crate\n".to_string()));
+    }
+
+    #[test]
+    fn push_output_guardrail_collapses_and_keeps_head_tail() {
+        let mut block = ExecuteToolCallBlock::new("cmd");
+        let head = "h".repeat(EXECUTE_OUTPUT_KEEP_HEAD_BYTES);
+        let body = "m".repeat(EXECUTE_OUTPUT_MAX_BYTES);
+        let tail = "t".repeat(EXECUTE_OUTPUT_KEEP_TAIL_BYTES);
+        block.push_output(&head);
+        block.push_output(&body);
+        block.push_output(&tail);
+        let out = block.output.as_deref().expect("output present");
+        assert!(out.starts_with('h'));
+        assert!(out.ends_with('t'));
+        assert!(out.contains("omitted in memory"));
+        assert!(out.len() < EXECUTE_OUTPUT_KEEP_HEAD_BYTES + EXECUTE_OUTPUT_KEEP_TAIL_BYTES + 256);
+    }
+
+    #[test]
+    fn push_output_guardrail_keeps_tail_window_rolling() {
+        let mut block = ExecuteToolCallBlock::new("cmd");
+        let big = "x".repeat(EXECUTE_OUTPUT_MAX_BYTES + 1);
+        block.push_output(&big);
+        assert!(
+            block
+                .output
+                .as_deref()
+                .unwrap()
+                .contains("omitted in memory")
+        );
+        // Continue streaming after the guardrail trips: the tail window must
+        // stay bounded while still tracking the latest bytes.
+        let more = "y".repeat(EXECUTE_OUTPUT_KEEP_TAIL_BYTES * 2);
+        block.push_output(&more);
+        let out = block.output.as_deref().unwrap();
+        assert!(out.ends_with('y'));
+        assert!(out.len() < EXECUTE_OUTPUT_KEEP_HEAD_BYTES + EXECUTE_OUTPUT_KEEP_TAIL_BYTES + 512);
+    }
+
+    #[test]
+    fn replace_output_guardrail_applies_for_full_buffer_path() {
+        let mut block = ExecuteToolCallBlock::new("cmd");
+        let big = "z".repeat(EXECUTE_OUTPUT_MAX_BYTES + 10);
+        block.replace_output(&big);
+        let out = block.output.as_deref().unwrap();
+        assert!(out.contains("omitted in memory"));
+        assert!(out.starts_with('z'));
+        assert!(out.ends_with('z'));
+        assert!(out.len() < EXECUTE_OUTPUT_MAX_BYTES / 2);
+        // Small outputs pass through untouched.
+        block.replace_output("small");
+        assert_eq!(block.output.as_deref(), Some("small"));
     }
 
     #[test]
