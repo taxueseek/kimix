@@ -7,6 +7,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-07-31
+
+### Added
+- 缓存命中率持续指标：每次采样响应落盘 `<kimix-home>/metrics/cache_hit-<日期>.jsonl`
+  （按天分文件），进程退出输出窗口摘要并追加 `process_summary`，下次启动输出
+  上一进程命中率；`KIMIX_CACHE_METRICS=0` 关闭，`KIMIX_METRICS_DIR` 覆盖目录
+- 压缩后前缀预热：压缩替换 conversation 后，用新前缀 + 相同工具集发 1-token
+  空请求，下一轮直接命中服务端缓存（`KIMIX_COMPACTION_PREWARM=0` 关闭）
+- 子代理并发上限：`[subagents] max_concurrency`（默认 4，0=不限），超限请求
+  在信号量上排队，队列计数可观测
+- 批量并行 explore：`task` 工具新增 `count` 参数（1-16），同一 prompt 并行
+  启动 N 个只读探索 worker 并按路合并摘要
+- 前缀稳定性回归测试：相同工作流两次构建断言序列化字节级一致（含 prune 占位符路径）
+
+### Changed
+- 流式中间帧不再每 tick 重建全量 `output_for_prompt`（增量模式下由完成帧构建）
+- bash truncated 渲染先按源行裁剪头尾预算再 word-wrap，长输出不再每 tick 全量 wrap
+- `updates.jsonl` 中间帧（InProgress）持久化瘦身为头尾 4K + 显式省略标记，
+  已完成帧保持全量；rewind 重建不受影响（实测某会话 75MB 中 ~99% 是中间帧）
+- scrollback 单条内存护栏：Execute 块输出超 4MB 后仅保留 256K 头 + 64K 滚动尾窗
+  + 省略标记，全量输出仍在工具 output_file 落盘
+
+## [0.1.15] - 2026-07-30
+
 ## [0.1.15] - 2026-07-30
 
 ### Added
