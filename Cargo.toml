@@ -77,7 +77,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.15"
+version = "0.1.16"
 edition = "2024"
 license = "Apache-2.0"
 
@@ -373,4 +373,3 @@ too_many_arguments = "allow"  # TODO: reduce once merge queue is enabled
 # these violations slip through and break the build for everyone.
 # TODO: -> "deny" once/if merge queue enabled
 uninlined_format_args = "allow"
-
