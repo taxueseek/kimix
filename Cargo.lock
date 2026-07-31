@@ -5598,6 +5598,7 @@ dependencies = [
  "kimix-crash-handler",
  "kimix-log",
  "kimix-pager-minimal",
+ "kimix-sampler",
  "kimix-sandbox",
  "kimix-shell",
  "kimix-tty-utils",

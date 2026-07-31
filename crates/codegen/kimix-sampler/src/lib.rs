@@ -21,6 +21,7 @@
 //! and the actor with its per-request task tie these layers together.
 pub mod actor;
 pub mod attribution;
+pub mod cache_metrics;
 pub mod client;
 pub mod commands;
 pub mod config;
@@ -50,8 +51,8 @@ pub use events::{SamplingChannel, SamplingErrorInfo, SamplingErrorKind, Sampling
 pub use handle::SamplerHandle;
 pub use metrics::{InferenceLatencyStats, compute_percentiles};
 pub use retry::{
-    DEFAULT_MAX_RETRIES, RATE_LIMIT_RETRY_THRESHOLD, STREAM_TRANSPORT_RETRY_THRESHOLD,
-    RetryDecision, classify_error, format_sampling_error, resolve_max_retries,
+    DEFAULT_MAX_RETRIES, RATE_LIMIT_RETRY_THRESHOLD, RetryDecision,
+    STREAM_TRANSPORT_RETRY_THRESHOLD, classify_error, format_sampling_error, resolve_max_retries,
     retry_backoff_with_jitter,
 };
 pub use sampling_log::AuthInfo;

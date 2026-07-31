@@ -32,6 +32,60 @@ use kimix_chat_state::compaction_utils::{
 use kimix_sampling_types::{ApiBackend, ConversationItem};
 use std::sync::Arc;
 
+/// After a successful compaction the conversation prefix changes, which would
+/// normally cost the next turn a full cache miss. Fire a background 1-token
+/// request with the NEW conversation so the provider's KV-cache stores the new
+/// prefix; the next real turn then hits it directly. Fire-and-forget: failures
+/// (offline, auth, quota) only log at debug and never affect the session.
+/// Disable with `KIMIX_COMPACTION_PREWARM=0`.
+fn spawn_compaction_prewarm(
+    client: kimix_sampler::SamplingClient,
+    config: kimix_sampler::SamplerConfig,
+    items: Vec<ConversationItem>,
+    tools: Vec<kimix_sampling_types::ToolSpec>,
+) {
+    if std::env::var("KIMIX_COMPACTION_PREWARM").ok().as_deref() == Some("0") {
+        return;
+    }
+    tokio::spawn(async move {
+        let request = kimix_sampling_types::ConversationRequest {
+            items,
+            tools,
+            hosted_tools: Vec::new(),
+            tool_choice: None,
+            model: Some(config.model.clone()),
+            temperature: None,
+            max_output_tokens: Some(1),
+            top_p: None,
+            x_kimix_conv_id: None,
+            x_kimix_req_id: None,
+            x_kimix_session_id: None,
+            x_kimix_turn_idx: None,
+            x_kimix_agent_id: None,
+            x_kimix_deployment_id: None,
+            x_kimix_user_id: None,
+            trace: None,
+            reasoning_effort: config.reasoning_effort,
+            json_schema: None,
+        };
+        match client.conversation(request).await {
+            Ok(_) => {
+                tracing::debug!(
+                    target: "kimix_sampler::prompt_cache",
+                    "compaction prefix prewarm ok (1-token)"
+                );
+            }
+            Err(error) => {
+                tracing::debug!(
+                    target: "kimix_sampler::prompt_cache",
+                    error = %error,
+                    "compaction prefix prewarm skipped (fire-and-forget)"
+                );
+            }
+        }
+    });
+}
+
 /// What initiated a compaction: the user (`/compact`) or the auto-compaction
 /// threshold. Drives span labels, the `PreCompact` hook `source`, and the
 /// persisted request artifact.
@@ -999,6 +1053,9 @@ impl SessionActor {
             .borrow()
             .compaction_policy()
             .wall_clock_budget_secs;
+        // Clone for the post-compaction prefix prewarm (the original is moved
+        // into the compaction sampler below; the client is cheap to clone).
+        let prewarm_client = sampling_client.clone();
         let sampler = crate::session::helpers::full_replace_compaction::ShellCompactionSampler::new(
             use_short_prompt,
             user_context.clone(),
@@ -1143,6 +1200,16 @@ impl SessionActor {
             }
         }
         let telemetry = observer.into_telemetry();
+        // Copy of the tool set for the post-compaction prefix prewarm: the
+        // conversation is replaced further down, and the next real turn sends
+        // this same tool set, so prewarming with it yields a byte-identical
+        // prefix for the provider's KV-cache. `None` when the two-pass path
+        // consumed the tools instead.
+        let prewarm_tools = if two_pass_output.is_none() {
+            Some(compaction_tools.clone())
+        } else {
+            None
+        };
         if two_pass_output.is_none() {
             let request_chat_history = build_compaction_chat_history(
                 request_turns,
@@ -1695,6 +1762,19 @@ impl SessionActor {
             if let Some(ms) = compact_output.itl_max_ms {
                 span.record("compaction_itl_max_ms", ms as i64);
             }
+        }
+        // Prefix prewarm: the compaction replaced the conversation, so the
+        // next turn would start from a cache miss. Fire a background 1-token
+        // request with the new prefix so the provider caches it before the
+        // next real turn (fire-and-forget; failures only log at debug).
+        if let Some(prewarm_tools) = prewarm_tools {
+            let prewarm_items = self.chat_state_handle.get_conversation().await;
+            spawn_compaction_prewarm(
+                prewarm_client,
+                sampling_config.clone(),
+                prewarm_items,
+                prewarm_tools,
+            );
         }
         Ok(())
     }

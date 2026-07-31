@@ -2,6 +2,24 @@
 mod tests {
     use crate::{AgentPrompt, Message, PromptConfig, RecallInjection, Role, truncate_tool_output};
 
+    const FIXED_SYSTEM_PROMPT: &str = "You are a coding agent. (fixed content, no timestamps)";
+
+    /// Run the same multi-turn workflow (system + 8 user/assistant/tool rounds)
+    /// so the context-budget prune replaces old tool results with placeholders.
+    /// Two independent runs MUST serialize identically — this is the KV-cache
+    /// prefix stability contract: any nondeterminism (timestamps, ordering,
+    /// hash seeds, iteration order) here would break prompt-cache hits.
+    fn run_same_workflow() -> AgentPrompt {
+        let mut p = AgentPrompt::new(default_config());
+        p.set_system_prompt(FIXED_SYSTEM_PROMPT);
+        for turn in 0..8 {
+            p.begin_turn(&format!("user question {turn}"), &[]);
+            p.record_response(&format!("assistant answer {turn}"));
+            p.record_tool_result(&format!("tool output {turn} {}", "x".repeat(300)));
+        }
+        p
+    }
+
     fn default_config() -> PromptConfig {
         PromptConfig {
             max_system_prompt_tokens: 4000,
@@ -38,6 +56,47 @@ mod tests {
         assert_eq!(Message::assistant("a").role, Role::Assistant);
         // system_reminder is NOT ephemeral by default
         assert!(Message::tool_result("t").ephemeral);
+    }
+
+    #[test]
+    fn prefix_serialization_byte_stable_across_rebuilds() {
+        let a = run_same_workflow();
+        let b = run_same_workflow();
+        let sa = serde_json::to_vec(a.visible_messages()).unwrap();
+        let sb = serde_json::to_vec(b.visible_messages()).unwrap();
+        assert_eq!(sa, sb, "identical workflow must serialize byte-identically");
+
+        // 8 tool results with max_ephemeral_kept=5 must have produced prune
+        // placeholders (deterministic text), proving the prune path is stable.
+        let placeholders = a
+            .visible_messages()
+            .iter()
+            .filter(|m| m.content.contains("[tool result omitted (context budget)"))
+            .count();
+        assert!(
+            placeholders >= 2,
+            "expected pruned placeholders, got {placeholders}"
+        );
+    }
+
+    #[test]
+    fn stable_prefix_is_fixed_after_rebuild() {
+        let mut a = AgentPrompt::new(default_config());
+        let mut b = AgentPrompt::new(default_config());
+        a.set_system_prompt(FIXED_SYSTEM_PROMPT);
+        b.set_system_prompt(FIXED_SYSTEM_PROMPT);
+        a.begin_turn("q1", &[]);
+        b.begin_turn("q1", &[]);
+        a.record_response("r1");
+        b.record_response("r1");
+
+        let prefix_a = serde_json::to_vec(a.stable_prefix()).unwrap();
+        let prefix_b = serde_json::to_vec(b.stable_prefix()).unwrap();
+        assert_eq!(prefix_a, prefix_b);
+        assert!(
+            !prefix_a.is_empty(),
+            "stable prefix should anchor the cache after a turn"
+        );
     }
     #[test]
     fn message_serde_roundtrip() {

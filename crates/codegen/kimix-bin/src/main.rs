@@ -1180,6 +1180,7 @@ fn main() {
         std::process::exit(code);
     }
     kimix_tui::memory_trace::start(kimix_shell::util::kimix_home::kimix_home().join("memtrace"));
+    kimix_sampler::cache_metrics::init();
     raise_fd_limit();
     if let Err(e) = kimix_config::validate_requirements() {
         eprintln!("Couldn't start Kimix: {e}");
@@ -1235,6 +1236,7 @@ fn main() {
     }
     let result = run_and_shutdown(runtime, async_main(), RUNTIME_SHUTDOWN_GRACE);
     kimix_log::debug_log::flush();
+    kimix_sampler::cache_metrics::print_summary();
     if let Err(e) = result {
         kimix_tty_utils::restore_native_stderr();
         eprintln!("Error: {e:#}");

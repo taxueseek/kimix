@@ -481,6 +481,13 @@ pub fn stream_messages<'a>(
         } else {
             None
         };
+        if let Some(ref u) = usage {
+            crate::cache_metrics::record(
+                &request_id,
+                u.prompt_tokens,
+                u.cached_prompt_tokens,
+            );
+        }
 
         let stop_reason = if !assistant_tool_calls.is_empty() {
             // Completed tool_use blocks win even over Refusal: the calls are

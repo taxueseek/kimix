@@ -470,6 +470,11 @@ pub fn stream_responses<'a>(
                 },
                 "prompt cache usage"
             );
+            crate::cache_metrics::record(
+                &request_id,
+                u.prompt_tokens,
+                u.cached_prompt_tokens,
+            );
         }
 
         let status = response.status.clone();

@@ -31,6 +31,7 @@ kimix-log = { workspace = true }
 kimix-workspace = { workspace = true }
 kimix-crash-handler = { path = "../kimix-crash-handler" }
 kimix-acp-lib = { workspace = true }
+kimix-sampler = { workspace = true }
 
 # Async runtime + misc.
 tokio = { workspace = true, features = [
