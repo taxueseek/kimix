@@ -32,6 +32,48 @@ use kimix_tool_types::{SubagentCompletedOutput, SubagentIsolationMode, TaskToolI
 /// the first subagent is depth 1. Subagents cannot spawn further subagents.
 pub const MAX_SUBAGENT_DEPTH: u32 = 1;
 
+/// Build a `SubagentRequest` for a model-issued `task` spawn. Shared by the
+/// single-spawn path and the parallel fan-out (`count > 1`) path so both keep
+/// identical semantics (independent id + fresh result channel per worker).
+fn build_subagent_request(
+    input: &TaskToolInput,
+    id: String,
+    parent_session_id: String,
+    parent_prompt_id: Option<String>,
+    resume_from: Option<String>,
+    cwd: Option<String>,
+    model: Option<String>,
+    result_tx: tokio::sync::oneshot::Sender<SubagentResult>,
+) -> SubagentRequest {
+    SubagentRequest {
+        id,
+        prompt: input.prompt.clone(),
+        description: input.description.clone(),
+        subagent_type: input.subagent_type.clone(),
+        parent_session_id,
+        parent_prompt_id,
+        resume_from,
+        cwd,
+        runtime_overrides: SubagentRuntimeOverrides {
+            model,
+            model_override_provenance: ModelOverrideProvenance::Tool,
+            reasoning_effort: None,
+            persona: None,
+            capability_mode: input.capability_mode,
+            isolation: input.isolation,
+            // Model-issued `task` spawns never override the harness; the
+            // parent agent decides the flavor (the `/goal` harness override
+            // is set only by the harness-internal role spawners).
+            harness_agent_type: None,
+        },
+        run_in_background: input.run_in_background,
+        // Model-spawned subagents must still appear in the idle reminder.
+        surface_completion: true,
+        fork_context: false,
+        result_tx,
+    }
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Tool implementation
 // ───────────────────────────────────────────────────────────────────────────
@@ -178,13 +220,13 @@ impl kimix_tool_runtime::Tool for TaskTool {
         }
 
         // Treat blank/empty/"null" resume_from as absent (models sometimes emit these).
-        let resume_from = input.resume_from.and_then(|s| {
+        let resume_from = input.resume_from.clone().and_then(|s| {
             let trimmed = s.trim();
             is_valid_resume_id(trimmed).then(|| trimmed.to_string())
         });
 
         // Model overrides are soft-ignored on resume (source model is always pinned).
-        let model = kimix_tool_types::sanitize_optional_arg(input.model);
+        let model = kimix_tool_types::sanitize_optional_arg(input.model.clone());
         let model = if resume_from.is_some() {
             if let Some(ref ignored) = model {
                 tracing::debug!(
@@ -300,42 +342,101 @@ impl kimix_tool_runtime::Tool for TaskTool {
             }
         }
 
-        // 3. Build the subagent request
+        // 3. Parallel fan-out (`count`): launch N independent read-only
+        //    explorers with the same prompt and merge their summaries.
+        //    Kept deliberately narrow (explore + blocking + no resume) so
+        //    parallel writes can never race the shared workspace.
+        let count = input.count.unwrap_or(1).clamp(1, 16);
+        if count > 1 {
+            if input.run_in_background {
+                return Err(kimix_tool_runtime::ToolError::invalid_arguments(
+                    "count > 1 is not supported with run_in_background: launch each \
+                     explorer separately instead",
+                ));
+            }
+            if input.resume_from.is_some() {
+                return Err(kimix_tool_runtime::ToolError::invalid_arguments(
+                    "count > 1 is not supported with resume_from",
+                ));
+            }
+            if input.subagent_type != "explore" {
+                return Err(kimix_tool_runtime::ToolError::invalid_arguments(
+                    "count > 1 is only allowed for the read-only 'explore' type",
+                ));
+            }
+            let base_id = input
+                .task_id
+                .clone()
+                .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+            let mut futures = Vec::with_capacity(count as usize);
+            for i in 0..count {
+                let (result_tx, _result_rx) = tokio::sync::oneshot::channel();
+                let request = build_subagent_request(
+                    &input,
+                    format!("{base_id}-{i}"),
+                    parent_session_id.clone(),
+                    parent_prompt_id.clone(),
+                    resume_from.clone(),
+                    cwd.clone(),
+                    model.clone(),
+                    result_tx,
+                );
+                futures.push(backend.backend().spawn(request));
+            }
+            let results = futures::future::join_all(futures).await;
+            let mut merged = String::new();
+            let mut ok = 0usize;
+            for (i, result) in results.into_iter().enumerate() {
+                match result {
+                    Ok(r) if r.success => {
+                        ok += 1;
+                        merged.push_str(&format!(
+                            "\n===== explorer {}/{} ({}) =====\n{}\n",
+                            i + 1,
+                            count,
+                            r.subagent_id,
+                            r.output,
+                        ));
+                    }
+                    Ok(r) => {
+                        merged.push_str(&format!(
+                            "\n===== explorer {}/{} FAILED =====\n{}\n",
+                            i + 1,
+                            count,
+                            r.error.unwrap_or_else(|| "unknown error".to_string()),
+                        ));
+                    }
+                    Err(e) => {
+                        merged.push_str(&format!(
+                            "\n===== explorer {}/{} TRANSPORT ERROR =====\n{e:#}\n",
+                            i + 1,
+                            count,
+                        ));
+                    }
+                }
+            }
+            return Ok(ToolOutput::Text(
+                format!("Launched {count} parallel explore subagents ({ok} succeeded):{merged}")
+                    .into(),
+            ));
+        }
+
+        // 3b. Single spawn: build the request (id + fresh result channel).
         let id = input
             .task_id
             .clone()
             .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
-
-        // Placeholder; `ChannelBackend::spawn` replaces it with a fresh one.
         let (result_tx, _) = tokio::sync::oneshot::channel();
-
-        let request = SubagentRequest {
-            id: id.clone(),
-            prompt: input.prompt.clone(),
-            description: input.description.clone(),
-            subagent_type: input.subagent_type.clone(),
+        let request = build_subagent_request(
+            &input,
+            id.clone(),
             parent_session_id,
             parent_prompt_id,
             resume_from,
             cwd,
-            runtime_overrides: SubagentRuntimeOverrides {
-                model,
-                model_override_provenance: ModelOverrideProvenance::Tool,
-                reasoning_effort: None,
-                persona: None,
-                capability_mode: input.capability_mode,
-                isolation: input.isolation,
-                // Model-issued `task` spawns never override the harness; the
-                // parent agent decides the flavor (the `/goal` harness override
-                // is set only by the harness-internal role spawners).
-                harness_agent_type: None,
-            },
-            run_in_background: input.run_in_background,
-            // Model-spawned subagents must still appear in the idle reminder.
-            surface_completion: true,
-            fork_context: false,
+            model,
             result_tx,
-        };
+        );
 
         // 4. Background mode: fire-and-forget via backend.spawn().
         // Coordinator stores the result for TaskOutputTool polling.
@@ -533,6 +634,7 @@ mod tests {
                 cwd: None,
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await;
@@ -565,6 +667,7 @@ mod tests {
                 cwd: None,
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await;
@@ -596,6 +699,7 @@ mod tests {
                 cwd: None,
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await;
@@ -655,6 +759,7 @@ mod tests {
                 cwd: None,
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await
@@ -712,6 +817,7 @@ mod tests {
                 cwd: None,
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await;
@@ -755,6 +861,7 @@ mod tests {
                 cwd: None,
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await;
@@ -839,6 +946,7 @@ mod tests {
             cwd: None,
             model: None,
             task_id: None,
+            count: None,
         }
     }
 
@@ -1214,6 +1322,7 @@ mod tests {
             cwd: None,
             model: Some("test-model".into()),
             task_id: Some("task-123".into()),
+            count: None,
         };
         let json = serde_json::to_string(&input).unwrap();
         let parsed: TaskToolInput = serde_json::from_str(&json).unwrap();
@@ -1484,6 +1593,7 @@ mod tests {
             cwd: None,
             model: None,
             task_id: None,
+            count: None,
         })
         .unwrap();
         assert!(
@@ -1534,10 +1644,132 @@ mod tests {
                 cwd: None,
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await
         .unwrap();
+        handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn parallel_count_rejects_non_explore_and_background() {
+        let (backend, _rx) = make_backend();
+        let mut resources = Resources::new();
+        resources.insert(backend);
+        resources.insert(SubagentDepthCounter(0));
+        resources.insert(SessionIdResource("parent".to_string()));
+        resources.insert(CurrentPromptIdResource("prompt-1".to_string()));
+        let shared = resources.into_shared();
+
+        // count > 1 with a write-capable type is rejected.
+        let err = kimix_tool_runtime::Tool::run(
+            &TaskTool,
+            test_ctx(shared.clone()),
+            TaskToolInput {
+                description: "d".into(),
+                prompt: "p".into(),
+                subagent_type: "general-purpose".into(),
+                run_in_background: false,
+                capability_mode: None,
+                isolation: None,
+                resume_from: None,
+                cwd: None,
+                model: None,
+                task_id: None,
+                count: Some(2),
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("only allowed for the read-only 'explore'"),
+            "error: {err}"
+        );
+
+        // count > 1 in background mode is rejected.
+        let err = kimix_tool_runtime::Tool::run(
+            &TaskTool,
+            test_ctx(shared),
+            TaskToolInput {
+                description: "d".into(),
+                prompt: "p".into(),
+                subagent_type: "explore".into(),
+                run_in_background: true,
+                capability_mode: Some(SubagentCapabilityMode::ReadOnly),
+                isolation: None,
+                resume_from: None,
+                cwd: None,
+                model: None,
+                task_id: None,
+                count: Some(2),
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("not supported with run_in_background"),
+            "error: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn parallel_count_spawns_n_explorers_and_merges() {
+        let (backend, mut rx) = make_backend();
+        let mut resources = Resources::new();
+        resources.insert(backend);
+        resources.insert(SubagentDepthCounter(0));
+        resources.insert(SessionIdResource("parent".to_string()));
+        resources.insert(CurrentPromptIdResource("prompt-1".to_string()));
+        let shared = resources.into_shared();
+
+        let handle = tokio::spawn(async move {
+            for i in 0..2 {
+                let request = unwrap_spawn(rx.recv().await.unwrap());
+                assert_eq!(request.subagent_type, "explore");
+                request
+                    .result_tx
+                    .send(SubagentResult {
+                        success: true,
+                        output: format!("explorer summary {i}").into(),
+                        subagent_id: request.id.clone(),
+                        child_session_id: request.id.clone(),
+                        ..Default::default()
+                    })
+                    .unwrap();
+            }
+        });
+
+        let out = kimix_tool_runtime::Tool::run(
+            &TaskTool,
+            test_ctx(shared),
+            TaskToolInput {
+                description: "d".into(),
+                prompt: "p".into(),
+                subagent_type: "explore".into(),
+                run_in_background: false,
+                capability_mode: Some(SubagentCapabilityMode::ReadOnly),
+                isolation: None,
+                resume_from: None,
+                cwd: None,
+                model: None,
+                task_id: None,
+                count: Some(2),
+            },
+        )
+        .await
+        .unwrap();
+        let text = match out {
+            ToolOutput::Text(t) => t.text,
+            other => panic!("expected Text output, got {other:?}"),
+        };
+        assert!(text.contains("Launched 2 parallel explore subagents (2 succeeded)"));
+        assert!(text.contains("explorer 1/2"));
+        assert!(text.contains("explorer 2/2"));
+        assert!(text.contains("explorer summary 0"));
+        assert!(text.contains("explorer summary 1"));
         handle.await.unwrap();
     }
 
@@ -1570,6 +1802,7 @@ mod tests {
             cwd: None,
             model: None,
             task_id: None,
+            count: None,
         };
         let json = serde_json::to_string(&input).unwrap();
         assert!(
@@ -1617,6 +1850,7 @@ mod tests {
                 cwd: None,
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await
@@ -1684,6 +1918,7 @@ mod tests {
                     cwd: None,
                     model: None,
                     task_id: None,
+                    count: None,
                 },
             )
             .await
@@ -1730,6 +1965,7 @@ mod tests {
             cwd: None,
             model: None,
             task_id: None,
+            count: None,
         };
         let json = serde_json::to_string(&input).unwrap();
         assert!(!json.contains("cwd"), "None cwd should be skipped: {json}");
@@ -1758,6 +1994,7 @@ mod tests {
                 cwd: Some("/tmp".into()),
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await;
@@ -1813,6 +2050,7 @@ mod tests {
                 cwd: Some("".into()),
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await;
@@ -1864,6 +2102,7 @@ mod tests {
                 cwd: Some("null".into()),
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await;
@@ -1915,6 +2154,7 @@ mod tests {
                 cwd: Some("  ".into()),
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await;
@@ -1969,6 +2209,7 @@ mod tests {
                 cwd: Some("/nonexistent/path/that/does/not/exist".into()),
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await;
@@ -2003,6 +2244,7 @@ mod tests {
                 cwd: Some("/nonexistent/path/that/does/not/exist".into()),
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await;
@@ -2059,6 +2301,7 @@ mod tests {
                     cwd: Some(sentinel.into()),
                     model: None,
                     task_id: None,
+                    count: None,
                 },
             )
             .await
@@ -2113,6 +2356,7 @@ mod tests {
                 cwd: Some("/tmp".into()),
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await
@@ -2171,6 +2415,7 @@ mod tests {
                 cwd: Some("\"/tmp".into()),
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await
@@ -2224,6 +2469,7 @@ mod tests {
                 cwd: Some("/tmp".into()),
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await;
@@ -2273,6 +2519,7 @@ mod tests {
                 cwd: Some("/tmp/some-dir".into()),
                 model: None,
                 task_id: None,
+                count: None,
             },
         )
         .await

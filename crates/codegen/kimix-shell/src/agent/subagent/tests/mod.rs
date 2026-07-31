@@ -177,12 +177,12 @@ fn is_subagent_enabled_returns_false_for_disabled_names() {
 }
 #[test]
 fn lookup_returns_none_for_unknown_id() {
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     assert!(coordinator.lookup("nonexistent").is_none());
 }
 #[test]
 fn lookup_returns_ready_for_completed_subagent() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .move_to_completed(
             "sub-1",
@@ -316,7 +316,7 @@ fn is_running_returns_false_for_completed_variant() {
 }
 #[test]
 fn lookup_returns_initializing_for_pending_subagent() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .insert_pending(PendingSubagent {
             subagent_id: "sub-pending".to_string(),
@@ -344,7 +344,7 @@ fn lookup_returns_initializing_for_pending_subagent() {
 #[tokio::test]
 async fn running_gauge_tracks_pending_and_active() {
     use std::sync::atomic::Ordering;
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     let gauge = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     coordinator.set_running_gauge(gauge.clone());
     assert_eq!(gauge.load(Ordering::Relaxed), 0);
@@ -413,7 +413,7 @@ async fn running_gauge_tracks_pending_and_active() {
 }
 #[test]
 fn mark_block_waited_sets_flag_on_completed() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .move_to_completed(
             "sub-bw",
@@ -432,7 +432,7 @@ fn mark_block_waited_sets_flag_on_completed() {
 }
 #[test]
 fn is_block_waited_returns_false_for_unknown_id() {
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     assert!(! coordinator.is_block_waited("nonexistent"));
 }
 /// Race condition: caller cancels the blocking wait
@@ -442,7 +442,7 @@ fn is_block_waited_returns_false_for_unknown_id() {
 /// and let the auto-wake fire.
 #[tokio::test]
 async fn block_wait_decision_wakes_when_waiter_cancelled_before_poll_tick() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     let tracker = dummy_tracker("sub-race", "session-A", "explore", "bg task");
     coordinator.insert(tracker);
     let (tx, rx) = oneshot::channel::<Option<SubagentSnapshot>>();
@@ -464,7 +464,7 @@ async fn block_wait_decision_wakes_when_waiter_cancelled_before_poll_tick() {
 /// poll loop will deliver the result within one tick.
 #[tokio::test]
 async fn block_wait_decision_suppresses_for_live_waiter() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     let tracker = dummy_tracker("sub-live", "session-A", "explore", "bg task");
     coordinator.insert(tracker);
     let (tx, _rx) = oneshot::channel::<Option<SubagentSnapshot>>();
@@ -480,7 +480,7 @@ async fn block_wait_decision_suppresses_for_live_waiter() {
 /// suppressed even though the registration is gone.
 #[tokio::test]
 async fn block_wait_decision_suppresses_after_delivery() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     let tracker = dummy_tracker("sub-dlv", "session-A", "explore", "bg task");
     coordinator.insert(tracker);
     let (tx, mut rx) = oneshot::channel::<Option<SubagentSnapshot>>();
@@ -497,7 +497,7 @@ async fn block_wait_decision_suppresses_after_delivery() {
 }
 #[tokio::test]
 async fn mark_explicitly_killed_active_then_propagates_to_completed() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     let tracker = dummy_tracker("sub-ek", "session-A", "explore", "bg task");
     coordinator.insert(tracker);
     assert!(! coordinator.is_explicitly_killed("sub-ek"));
@@ -608,7 +608,7 @@ fn inject_subagent_completed_prompt_sends_prompt_and_marks_delivered() {
 }
 #[test]
 fn mark_explicitly_killed_sets_flag_on_completed() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .move_to_completed(
             "sub-ek-c",
@@ -627,12 +627,12 @@ fn mark_explicitly_killed_sets_flag_on_completed() {
 }
 #[test]
 fn is_explicitly_killed_returns_false_for_unknown_id() {
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     assert!(! coordinator.is_explicitly_killed("nonexistent"));
 }
 #[tokio::test]
 async fn block_waited_propagates_through_move_to_completed() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     let mut tracker = dummy_tracker("sub-prop", "session-A", "explore", "bg task");
     tracker.block_waited = true;
     coordinator.insert(tracker);
@@ -669,7 +669,7 @@ fn complete_dummy(coordinator: &mut SubagentCoordinator, id: &str, surface: bool
 }
 #[tokio::test]
 async fn move_to_completed_surfaces_when_flag_true() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     complete_dummy(&mut coordinator, "sub-surface", true);
     let drained = coordinator.drain_pending_completions();
     assert_eq!(drained.len(), 1);
@@ -677,7 +677,7 @@ async fn move_to_completed_surfaces_when_flag_true() {
 }
 #[tokio::test]
 async fn move_to_completed_skips_buffer_when_flag_false() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     complete_dummy(&mut coordinator, "sub-hidden", false);
     assert!(coordinator.drain_pending_completions().is_empty());
     assert!(coordinator.lookup("sub-hidden").is_some());
@@ -701,7 +701,7 @@ fn fail_pending(coordinator: &mut SubagentCoordinator, id: &str, surface: bool) 
 }
 #[test]
 fn failure_completion_surfaces_when_flag_true() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     fail_pending(&mut coordinator, "fail-surface", true);
     let drained = coordinator.drain_pending_completions();
     assert_eq!(drained.len(), 1);
@@ -710,7 +710,7 @@ fn failure_completion_surfaces_when_flag_true() {
 }
 #[test]
 fn failure_completion_skips_buffer_when_flag_false() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     fail_pending(&mut coordinator, "fail-hidden", false);
     assert!(coordinator.drain_pending_completions().is_empty());
     assert!(coordinator.lookup("fail-hidden").is_some());
@@ -730,7 +730,7 @@ fn is_running_returns_true_for_initializing_variant() {
 }
 #[test]
 fn remove_pending_clears_entry() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .insert_pending(PendingSubagent {
             subagent_id: "sub-1".to_string(),
@@ -754,7 +754,7 @@ fn remove_pending_clears_entry() {
 }
 #[test]
 fn move_pending_to_failed_creates_completed_entry() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .insert_pending(PendingSubagent {
             subagent_id: "sub-fail".to_string(),
@@ -792,7 +792,7 @@ fn move_pending_to_failed_creates_completed_entry() {
 }
 #[test]
 fn move_pending_to_failed_fires_completion_notify() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .insert_pending(PendingSubagent {
             subagent_id: "sub-notify".to_string(),
@@ -815,13 +815,13 @@ fn move_pending_to_failed_fires_completion_notify() {
 }
 #[test]
 fn move_pending_to_failed_noop_for_unknown_id() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator.move_pending_to_failed("nonexistent", "error");
     assert!(coordinator.completed.is_empty());
 }
 #[test]
 fn move_pending_to_cancelled_creates_cancelled_entry() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .insert_pending(PendingSubagent {
             subagent_id: "sub-killed".to_string(),
@@ -852,7 +852,7 @@ fn move_pending_to_cancelled_creates_cancelled_entry() {
 }
 #[test]
 fn evict_stale_completed_uses_completion_time() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .completed
         .insert(
@@ -889,7 +889,7 @@ fn evict_stale_completed_uses_completion_time() {
 }
 #[test]
 fn cancel_with_outcome_fires_pending_token() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     let token = CancellationToken::new();
     coordinator
         .insert_pending(PendingSubagent {
@@ -918,7 +918,7 @@ fn cancel_with_outcome_fires_pending_token() {
 }
 #[tokio::test]
 async fn cancel_with_outcome_returns_variant_for_active_finished_unknown() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator.insert(dummy_tracker("sub-active", "session-A", "explore", "task"));
     assert!(
         matches!(coordinator.cancel_with_outcome("sub-active"),
@@ -946,7 +946,7 @@ async fn cancel_with_outcome_returns_variant_for_active_finished_unknown() {
 }
 #[test]
 fn cancel_by_parent_prompt_id_fires_matching_pending_token() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     let token_a = CancellationToken::new();
     let token_b = CancellationToken::new();
     coordinator
@@ -988,7 +988,7 @@ fn cancel_by_parent_prompt_id_fires_matching_pending_token() {
 }
 #[test]
 fn completed_takes_precedence_over_pending_in_lookup() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .insert_pending(PendingSubagent {
             subagent_id: "sub-dup".to_string(),
@@ -1025,7 +1025,7 @@ fn completed_takes_precedence_over_pending_in_lookup() {
 }
 #[test]
 fn list_running_for_parent_returns_empty_when_no_active() {
-    let coordinator = SubagentCoordinator::new();
+    let coordinator = SubagentCoordinator::new(4);
     let seeds = coordinator.list_running_for_parent("parent-1");
     assert!(seeds.is_empty());
 }
@@ -1135,7 +1135,7 @@ fn dummy_tracker(
 }
 #[tokio::test]
 async fn active_summaries_for_filters_by_parent_session_id() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator.insert(dummy_tracker("sub-1", "session-A", "explore", "task 1"));
     coordinator.insert(dummy_tracker("sub-2", "session-B", "plan", "task 2"));
     coordinator.insert(dummy_tracker("sub-3", "session-A", "general-purpose", "task 3"));
@@ -1154,7 +1154,7 @@ async fn active_summaries_for_filters_by_parent_session_id() {
 }
 #[tokio::test]
 async fn active_summaries_returns_all_regardless_of_parent() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator.insert(dummy_tracker("sub-1", "session-A", "explore", "task 1"));
     coordinator.insert(dummy_tracker("sub-2", "session-B", "plan", "task 2"));
     let all = coordinator.active_summaries();
@@ -2063,7 +2063,7 @@ async fn copy_session_data_preserves_parent_chat_history() {
 async fn handle_subagent_request_rejects_disabled_agent() {
     let toggle = HashMap::from([("explore".to_string(), false)]);
     let ctx = ctx_with_toggle(toggle);
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let gateway = test_gateway();
     let (request, result_rx) = make_request("explore");
     let local = tokio::task::LocalSet::new();
@@ -2083,7 +2083,7 @@ async fn handle_subagent_request_rejects_disabled_agent() {
 #[tokio::test]
 async fn handle_subagent_request_allows_when_absent_from_toggle() {
     let ctx = ctx_with_toggle(HashMap::new());
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let gateway = test_gateway();
     let (request, result_rx) = make_request("explore");
     let local = tokio::task::LocalSet::new();
@@ -2106,7 +2106,7 @@ async fn handle_subagent_request_allows_when_absent_from_toggle() {
 #[tokio::test]
 async fn handle_subagent_request_rejects_nonexistent_cwd() {
     let ctx = ctx_with_toggle(HashMap::new());
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let gateway = test_gateway();
     let (mut request, result_rx) = make_request("explore");
     request.cwd = Some("/nonexistent/path/that/does/not/exist".into());
@@ -2130,7 +2130,7 @@ async fn handle_subagent_request_rejects_file_as_cwd() {
     let tmp_file = tmp_dir.path().join("kimix-test-cwd-file");
     std::fs::write(&tmp_file, b"not a directory").unwrap();
     let ctx = ctx_with_toggle(HashMap::new());
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let gateway = test_gateway();
     let (mut request, result_rx) = make_request("explore");
     request.cwd = Some(tmp_file.to_string_lossy().to_string());
@@ -2151,7 +2151,7 @@ async fn handle_subagent_request_rejects_file_as_cwd() {
 #[tokio::test]
 async fn handle_subagent_request_valid_cwd_passes_validation() {
     let ctx = ctx_with_toggle(HashMap::new());
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let gateway = test_gateway();
     let (mut request, result_rx) = make_request("explore");
     request.cwd = Some("/tmp".into());
@@ -2174,7 +2174,7 @@ async fn handle_subagent_request_valid_cwd_passes_validation() {
 #[tokio::test]
 async fn handle_subagent_request_quoted_cwd_passes_validation() {
     let ctx = ctx_with_toggle(HashMap::new());
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let gateway = test_gateway();
     let (mut request, result_rx) = make_request("explore");
     request.cwd = Some("\"/tmp".into());
@@ -2484,7 +2484,7 @@ fn make_background_request(
 #[tokio::test]
 async fn background_unknown_type_records_failure_completion() {
     let ctx = ctx_with_toggle(HashMap::new());
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let gateway = test_gateway();
     let (request, result_rx) = make_background_request("totally-invented-type");
     assert_background_pre_spawn_failure(
@@ -2536,7 +2536,7 @@ async fn assert_background_pre_spawn_failure(
 async fn background_disabled_type_records_failure_completion() {
     let toggle = HashMap::from([("explore".to_string(), false)]);
     let ctx = ctx_with_toggle(toggle);
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let gateway = test_gateway();
     let (request, result_rx) = make_background_request("explore");
     assert_background_pre_spawn_failure(
@@ -2553,7 +2553,7 @@ async fn background_disabled_type_records_failure_completion() {
 async fn background_not_allowed_type_records_failure_completion() {
     let mut ctx = ctx_with_toggle(HashMap::new());
     ctx.allowed_subagent_types = Some(vec!["plan".to_string()]);
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let gateway = test_gateway();
     let (request, result_rx) = make_background_request("explore");
     assert_background_pre_spawn_failure(
@@ -2590,7 +2590,7 @@ async fn assert_blocking_pre_spawn_does_not_push_summary(
 #[tokio::test]
 async fn blocking_unknown_type_does_not_push_completion_summary() {
     let ctx = ctx_with_toggle(HashMap::new());
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let gateway = test_gateway();
     let (request, result_rx) = make_request("totally-invented-type");
     assert_blocking_pre_spawn_does_not_push_summary(
@@ -2606,7 +2606,7 @@ async fn blocking_unknown_type_does_not_push_completion_summary() {
 async fn blocking_disabled_type_does_not_push_completion_summary() {
     let toggle = HashMap::from([("explore".to_string(), false)]);
     let ctx = ctx_with_toggle(toggle);
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let gateway = test_gateway();
     let (request, result_rx) = make_request("explore");
     assert_blocking_pre_spawn_does_not_push_summary(
@@ -2622,7 +2622,7 @@ async fn blocking_disabled_type_does_not_push_completion_summary() {
 async fn blocking_not_allowed_type_does_not_push_completion_summary() {
     let mut ctx = ctx_with_toggle(HashMap::new());
     ctx.allowed_subagent_types = Some(vec!["plan".to_string()]);
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let gateway = test_gateway();
     let (request, result_rx) = make_request("explore");
     assert_blocking_pre_spawn_does_not_push_summary(
@@ -2637,7 +2637,7 @@ async fn blocking_not_allowed_type_does_not_push_completion_summary() {
 #[tokio::test]
 async fn background_failure_summary_includes_description() {
     let ctx = ctx_with_toggle(HashMap::new());
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let gateway = test_gateway();
     let (mut request, _result_rx) = make_background_request("invented");
     request.description = "find auth middleware".into();
@@ -2662,7 +2662,7 @@ async fn background_unknown_type_emits_subagent_finished_notification() {
         ctx_with_toggle_and_cmd_tx, test_gateway_with_receiver,
     };
     let (ctx, mut cmd_rx) = ctx_with_toggle_and_cmd_tx(HashMap::new());
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let (gateway, mut gateway_rx) = test_gateway_with_receiver();
     let (request, _result_rx) = make_background_request("invented-type");
     let subagent_id = request.id.clone();
@@ -2718,7 +2718,7 @@ async fn cancel_pending_subagent_at_promote_emits_exactly_one_cancelled_finish()
         ctx_with_toggle_and_cmd_tx, test_gateway_with_receiver,
     };
     let (ctx, mut cmd_rx) = ctx_with_toggle_and_cmd_tx(HashMap::new());
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let (gateway, mut gateway_rx) = test_gateway_with_receiver();
     let (request, result_rx) = make_request("explore");
     let subagent_id = request.id.clone();
@@ -2805,7 +2805,7 @@ async fn run_promote_cancel_with_worktree(
         ctx_with_toggle_and_cmd_tx, test_gateway_with_receiver,
     };
     let (ctx, mut cmd_rx) = ctx_with_toggle_and_cmd_tx(HashMap::new());
-    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new());
+    let coordinator = std::cell::RefCell::new(SubagentCoordinator::new(4));
     let (gateway, mut gateway_rx) = test_gateway_with_receiver();
     let (request, result_rx) = make_request("explore");
     let subagent_id = request.id.clone();
@@ -2912,7 +2912,7 @@ async fn cancel_pending_at_promote_removes_fresh_worktree_preserves_resumed() {
 }
 #[test]
 fn record_pre_spawn_failure_populates_completed_and_summary() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .record_pre_spawn_failure(
             "sub-x".to_string(),
@@ -2945,7 +2945,7 @@ fn record_pre_spawn_failure_populates_completed_and_summary() {
 }
 #[test]
 fn record_pre_spawn_failure_skips_buffer_when_flag_false() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .record_pre_spawn_failure(
             "sub-hidden-pre".to_string(),
@@ -2961,7 +2961,7 @@ fn record_pre_spawn_failure_skips_buffer_when_flag_false() {
 }
 #[tokio::test]
 async fn record_pre_spawn_failure_notifies_waiters() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     let notify = coordinator.completion_notify();
     let waiter = notify.notified();
     coordinator
@@ -2980,7 +2980,7 @@ async fn record_pre_spawn_failure_notifies_waiters() {
 }
 #[tokio::test]
 async fn record_pre_spawn_failure_notifies_all_waiters() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     let notify = coordinator.completion_notify();
     let waiter_a = notify.notified();
     let waiter_b = notify.notified();
@@ -3000,7 +3000,7 @@ async fn record_pre_spawn_failure_notifies_all_waiters() {
 }
 #[test]
 fn record_pre_spawn_failure_clears_stale_pending_entry() {
-    let mut coordinator = SubagentCoordinator::new();
+    let mut coordinator = SubagentCoordinator::new(4);
     coordinator
         .insert_pending(PendingSubagent {
             subagent_id: "sub-z".to_string(),

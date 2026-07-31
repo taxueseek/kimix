@@ -20,8 +20,11 @@ use kimix_workspace::file_system::AsyncFileSystem;
 use kimix_hunk_tracker::HunkTrackerHandle;
 use super::*;
 impl SubagentCoordinator {
-    pub fn new() -> Self {
+    pub fn new(max_concurrency: usize) -> Self {
         Self {
+            concurrency: std::sync::Arc::new(tokio::sync::Semaphore::new(max_concurrency.max(1))),
+            max_concurrency,
+            queued_count: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             pending: HashMap::new(),
             active: HashMap::new(),
             completed: HashMap::new(),
@@ -32,6 +35,20 @@ impl SubagentCoordinator {
             block_wait_slots: HashMap::new(),
             subagent_usage_not_applied_prompts: std::collections::HashSet::new(),
         }
+    }
+    /// Clone of the worker-pool semaphore (permit per running subagent).
+    pub(crate) fn concurrency_semaphore(
+        &self,
+    ) -> std::sync::Arc<tokio::sync::Semaphore> {
+        self.concurrency.clone()
+    }
+    /// Gauge of spawn requests currently queued for a permit.
+    pub(crate) fn queued_count_arc(&self) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
+        self.queued_count.clone()
+    }
+    /// Resolved `[subagents] max_concurrency` (`0` = unlimited).
+    pub(crate) fn max_concurrency(&self) -> usize {
+        self.max_concurrency
     }
     pub fn mark_subagent_usage_not_applied(&mut self, prompt_id: &str) {
         self.subagent_usage_not_applied_prompts.insert(prompt_id.to_string());

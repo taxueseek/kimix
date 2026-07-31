@@ -527,6 +527,14 @@ pub(crate) type BlockWaitSlot =
 /// Methods on this struct contain all the orchestration logic so
 /// `mvp_agent/mod.rs` stays thin.
 pub(crate) struct SubagentCoordinator {
+    /// Bounded concurrency for the subagent worker pool. `Spawn` events
+    /// acquire a permit before launching; requests beyond the limit queue on
+    /// the semaphore until a running worker finishes. `0` = unlimited.
+    concurrency: std::sync::Arc<tokio::sync::Semaphore>,
+    /// Resolved `[subagents] max_concurrency` (`0` = unlimited).
+    max_concurrency: usize,
+    /// Number of spawn requests currently queued waiting for a permit.
+    queued_count: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     /// subagent_id → pending entry (initializing subagents)
     pending: HashMap<String, PendingSubagent>,
     /// subagent_id → tracker (running subagents)

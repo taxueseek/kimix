@@ -915,7 +915,8 @@ impl MvpAgent {
         );
         let (subagent_event_tx, subagent_event_rx) = tokio::sync::mpsc::unbounded_channel();
         let activity = crate::agent::activity::AgentActivity::default();
-        let mut subagent_coordinator = crate::agent::subagent::SubagentCoordinator::new();
+        let mut subagent_coordinator =
+            crate::agent::subagent::SubagentCoordinator::new(cfg.subagent_max_concurrency);
         subagent_coordinator.set_running_gauge(activity.subagent_gauge());
         let instance = Self {
             sessions: RefCell::new(HashMap::new()),

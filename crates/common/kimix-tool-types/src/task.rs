@@ -109,6 +109,18 @@ pub struct TaskToolInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
 
+    /// Parallel fan-out: launch N independent subagents with the same prompt
+    /// and merge their summaries. Only allowed for read-only exploration
+    /// types (`explore`), blocking mode, and without `resume_from`. 1-16,
+    /// default 1 (single spawn).
+    #[schemars(
+        description = "Parallel fan-out count: launch N independent subagents with the same \
+            prompt and merge their summaries. Only for read-only exploration (explore), \
+            blocking mode, without resume_from. Range 1-16, default 1."
+    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub count: Option<u32>,
+
     /// Server-injected before execution. Becomes the subagent's session ID.
     #[schemars(skip)]
     #[serde(default)]

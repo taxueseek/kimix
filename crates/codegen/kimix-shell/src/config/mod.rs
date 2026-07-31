@@ -224,6 +224,11 @@ impl MemoryConfig {
 pub struct SubagentsConfig {
     /// Whether subagent support is enabled.
     pub enabled: bool,
+    /// Maximum number of subagents that may run concurrently. Requests beyond
+    /// this limit queue until a slot frees. `None` = default 4; `0` = unlimited.
+    /// Parsed from `[subagents] max_concurrency` in config.toml.
+    #[serde(default)]
+    pub max_concurrency: Option<usize>,
     /// Per-subagent model ID overrides.
     /// Keys are agent names, values are model IDs that must exist in the
     /// available models registry. Parsed from `[subagents.models]` in config.toml.
