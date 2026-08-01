@@ -674,18 +674,23 @@ impl ToolRegistryBuilder {
         b.register::<kimix::SchedulerCreateTool>();
         b.register::<kimix::SchedulerDeleteTool>();
         b.register::<kimix::SchedulerListTool>();
-        b.register::<codex::apply_patch::ApplyPatchTool>();
-        b.register::<codex::list_dir::CodexListDirTool>();
-        b.register::<codex::grep_files::CodexGrepFilesTool>();
-        b.register::<codex::read_file::CodexReadFileTool>();
-        b.register::<opencode::OpenCodeBashTool>();
-        b.register::<opencode::OpenCodeReadTool>();
-        b.register::<opencode::OpenCodeEditTool>();
+        // OpenCode write stays on the native path (`new_compact` + AgentBuilder).
         b.register::<opencode::OpenCodeWriteTool>();
-        b.register::<opencode::OpenCodeGrepTool>();
-        b.register::<opencode::OpenCodeGlobTool>();
-        b.register::<opencode::OpenCodeTodoWriteTool>();
-        b.register::<opencode::OpenCodeSkillTool>();
+        // Harness-compat variants (Codex / remaining OpenCode) — P1-a feature gate.
+        #[cfg(feature = "harness-compat")]
+        {
+            b.register::<codex::apply_patch::ApplyPatchTool>();
+            b.register::<codex::list_dir::CodexListDirTool>();
+            b.register::<codex::grep_files::CodexGrepFilesTool>();
+            b.register::<codex::read_file::CodexReadFileTool>();
+            b.register::<opencode::OpenCodeBashTool>();
+            b.register::<opencode::OpenCodeReadTool>();
+            b.register::<opencode::OpenCodeEditTool>();
+            b.register::<opencode::OpenCodeGrepTool>();
+            b.register::<opencode::OpenCodeGlobTool>();
+            b.register::<opencode::OpenCodeTodoWriteTool>();
+            b.register::<opencode::OpenCodeSkillTool>();
+        }
         b.register::<crate::implementations::memory::search_tool::MemorySearchImpl>();
         b.register::<crate::implementations::memory::get_tool::MemoryGetImpl>();
         b.register::<crate::implementations::search_tool::SearchTool>();

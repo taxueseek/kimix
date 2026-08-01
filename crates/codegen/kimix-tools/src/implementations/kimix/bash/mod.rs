@@ -21,6 +21,8 @@
 //! - `TruncationCfg` — max output bytes override (optional)
 //! - `TemplateRenderer` — resolve client-facing tool/param names in hints/errors (optional)
 //! - `Params<BashParams>` — timeout, output_byte_limit, cmd_prefix (optional, all have defaults)
+mod progress;
+
 use std::sync::LazyLock;
 use std::time::Duration;
 
@@ -31,8 +33,7 @@ use crate::tool_output_chars_limit;
 use crate::computer::types::{ComputerError, TerminalRunRequest};
 use crate::notification::types::{
     BashExecutionBackgrounded, BashExecutionComplete, BashExecutionFailed, BashExecutionTimeout,
-    BashNotificationBase, BashOutputChunk, PerCallNotificationSink, ToolNotification,
-    ToolNotificationHandle,
+    BashNotificationBase, PerCallNotificationSink, ToolNotification, ToolNotificationHandle,
 };
 use crate::types::definition::ToolDefinition;
 use crate::types::output::{BackgroundTaskStarted, BashOutput};
@@ -44,6 +45,15 @@ use crate::types::resources::{
 };
 use crate::types::template_renderer::TemplateRenderer;
 use crate::types::tool::{ToolKind, ToolNamespace};
+
+use progress::{
+    BASH_CAPABILITIES, bash_output_chunk_progress, pure_delta_from_snapshot,
+    terminal_notification_base,
+};
+#[cfg(test)]
+use crate::notification::types::BashOutputChunk;
+#[cfg(test)]
+use progress::MAX_PROGRESS_DELTA_BYTES;
 
 #[derive(thiserror::Error, Debug)]
 pub enum BashError {
@@ -59,66 +69,6 @@ pub enum BashError {
 
 fn default_true() -> bool {
     true
-}
-
-/// Maximum size, in bytes, of a single emitted progress `delta`. Guards
-/// against a pathological single-tick burst (a large accumulation flushed in
-/// one ~100 ms tick) flooding the harness in one frame. A delta larger than
-/// this is cut on a UTF-8 char boundary and the remainder is held back for the
-/// next tick (append is lossless); `total_bytes` still reflects the true
-/// monotonic count.
-const MAX_PROGRESS_DELTA_BYTES: usize = 16 * 1024;
-
-/// Bash's capabilities incl. its streaming spec (single source of truth):
-/// raw stdout is the terminal projection, so `RawTerminal` / `Append`,
-/// capped per frame at [`MAX_PROGRESS_DELTA_BYTES`].
-static BASH_CAPABILITIES: LazyLock<kimix_tool_protocol::ToolCapabilities> =
-    LazyLock::new(|| kimix_tool_protocol::ToolCapabilities {
-        is_read_only: false,
-        tool_scope: Some(kimix_tool_protocol::ToolScope::Write),
-        streaming: Some(kimix_tool_protocol::StreamingSpec {
-            subkind: "bash_output_chunk".to_owned(),
-            max_delta_bytes: Some(MAX_PROGRESS_DELTA_BYTES as u32),
-        }),
-        ..Default::default()
-    });
-
-/// One `ToolProgress` delta from a `BashOutputChunk`; `None` when no new bytes.
-fn bash_output_chunk_progress(
-    spec: &kimix_tool_protocol::StreamingSpec,
-    chunk: &BashOutputChunk,
-    last_total: &mut usize,
-) -> Option<kimix_tool_runtime::ToolProgress> {
-    // `stream_chunk` counts in `u64`; convert at the boundary.
-    let mut cursor = *last_total as u64;
-    let progress = kimix_tool_runtime::stream_chunk(
-        spec,
-        &chunk.base.output,
-        chunk.base.total_bytes as u64,
-        &mut cursor,
-        // Cumulative truncation maps to `truncated`; per-tick overflow is `gap`.
-        chunk.base.truncated,
-    );
-    *last_total = cursor as usize;
-    progress
-}
-
-/// Extract the final [`BashNotificationBase`] carried by a terminal bash
-/// notification (`Complete` / `Timeout` / `Backgrounded`), or `None` for any
-/// other notification variant.
-///
-/// `BashTool::run` always sends one of these as its last notification, and
-/// `LocalTerminalActor::drain_remaining_output` can append bytes *after* the
-/// final periodic `BashOutputChunk` has been emitted. The streaming loop folds
-/// this final base into a synthetic chunk so the in-band `bash_output_chunk`
-/// deltas reach the terminal `total_bytes` without losing the tail.
-fn terminal_notification_base(notif: &ToolNotification) -> Option<&BashNotificationBase> {
-    match notif {
-        ToolNotification::BashExecutionComplete(c) => Some(&c.base),
-        ToolNotification::BashExecutionTimeout(t) => Some(&t.base),
-        ToolNotification::BashExecutionBackgrounded(b) => Some(&b.base),
-        _ => None,
-    }
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -1685,6 +1635,8 @@ impl kimix_tool_runtime::Tool for BashTool {
             let mut run_fut = std::pin::pin!(this.run(ctx, input));
             // Monotonic byte count already surfaced as a progress delta.
             let mut last_total: usize = 0;
+            // Unconsumed pure-delta bytes held back by the per-frame cap.
+            let mut pending: Vec<u8> = Vec::new();
 
             loop {
                 tokio::select! {
@@ -1692,35 +1644,49 @@ impl kimix_tool_runtime::Tool for BashTool {
                     maybe = rx.recv() => {
                         match maybe {
                             Some(ToolNotification::BashOutputChunk(chunk)) => {
-                                // Coalesce: drain queued chunks, keep the newest
-                                // (largest total_bytes), emit one delta per drain.
+                                // Coalesce: drain queued pure-delta chunks by
+                                // concatenating deltas (NOT replace — replace
+                                // would drop intermediate bytes).
                                 let mut latest = chunk;
                                 while let Ok(ToolNotification::BashOutputChunk(next)) = rx.try_recv() {
-                                    latest = next;
+                                    latest.base.output.extend_from_slice(&next.base.output);
+                                    latest.base.total_bytes = next.base.total_bytes;
+                                    latest.base.truncated |= next.base.truncated;
                                 }
-                                if stream_progress
-                                    && let Some(p) =
-                                        bash_output_chunk_progress(spec, &latest, &mut last_total)
-                                {
-                                    yield kimix_tool_runtime::ToolStreamItem::Progress(p);
+                                if stream_progress {
+                                    while let Some(p) = bash_output_chunk_progress(
+                                        spec,
+                                        &latest,
+                                        &mut last_total,
+                                        &mut pending,
+                                    ) {
+                                        // Only the first call consumes this
+                                        // chunk's delta; subsequent loops drain
+                                        // cap hold-back with empty append.
+                                        latest.base.output.clear();
+                                        yield kimix_tool_runtime::ToolStreamItem::Progress(p);
+                                    }
                                 }
                             }
                             Some(notif) => {
                                 // Terminal bash notifications carry a final
-                                // `BashNotificationBase` whose `total_bytes` can
-                                // exceed the last periodic chunk because the
-                                // actor's `drain_remaining_output` runs after
-                                // its last tick. Fold the final base into a
-                                // synthetic chunk so the tail bytes still
-                                // become an in-band delta and `last_total`
-                                // reaches the terminal `total_bytes`.
+                                // full-snapshot `BashNotificationBase` whose
+                                // `total_bytes` can exceed the last periodic
+                                // chunk (drain after last tick). Convert to
+                                // pure delta relative to `last_total` before
+                                // folding into the progress path.
                                 if stream_progress
                                     && let Some(base) = terminal_notification_base(&notif)
                                 {
-                                    let synthetic = BashOutputChunk { base: base.clone() };
-                                    if let Some(p) =
-                                        bash_output_chunk_progress(spec, &synthetic, &mut last_total)
-                                    {
+                                    let mut synthetic =
+                                        pure_delta_from_snapshot(base, last_total);
+                                    while let Some(p) = bash_output_chunk_progress(
+                                        spec,
+                                        &synthetic,
+                                        &mut last_total,
+                                        &mut pending,
+                                    ) {
+                                        synthetic.base.output.clear();
                                         yield kimix_tool_runtime::ToolStreamItem::Progress(p);
                                     }
                                 }
@@ -1743,21 +1709,28 @@ impl kimix_tool_runtime::Tool for BashTool {
                             while let Ok(notif) = rx.try_recv() {
                                 match notif {
                                     ToolNotification::BashOutputChunk(chunk) => {
-                                        if let Some(p) =
-                                            bash_output_chunk_progress(spec, &chunk, &mut last_total)
-                                        {
+                                        let mut latest = chunk;
+                                        while let Some(p) = bash_output_chunk_progress(
+                                            spec,
+                                            &latest,
+                                            &mut last_total,
+                                            &mut pending,
+                                        ) {
+                                            latest.base.output.clear();
                                             yield kimix_tool_runtime::ToolStreamItem::Progress(p);
                                         }
                                     }
                                     other => {
                                         if let Some(base) = terminal_notification_base(&other) {
-                                            let synthetic =
-                                                BashOutputChunk { base: base.clone() };
-                                            if let Some(p) = bash_output_chunk_progress(
+                                            let mut synthetic =
+                                                pure_delta_from_snapshot(base, last_total);
+                                            while let Some(p) = bash_output_chunk_progress(
                                                 spec,
                                                 &synthetic,
                                                 &mut last_total,
+                                                &mut pending,
                                             ) {
+                                                synthetic.base.output.clear();
                                                 yield kimix_tool_runtime::ToolStreamItem::Progress(p);
                                             }
                                         }
@@ -2585,10 +2558,9 @@ mod tests {
 
     // ─── Streaming tests ───
 
-    /// Deterministic regression guard for Key Decision 6 (delta math keyed off
-    /// the monotonic `total_bytes`, not buffer length). Exercises the common
-    /// suffix-slice case, the no-new-bytes case, the post-truncation shrinking
-    /// tail, and the single-tick overflow `gap`.
+    /// Deterministic regression guard for pure-delta progress math keyed off
+    /// monotonic `total_bytes`. Exercises the common append case, no-new-bytes,
+    /// post-truncation pure delta, and single-tick overflow `gap`.
     #[test]
     fn bash_output_chunk_progress_delta_math() {
         fn chunk(output: &[u8], total: usize, truncated: bool) -> BashOutputChunk {
@@ -2606,36 +2578,56 @@ mod tests {
 
         let spec = BASH_CAPABILITIES.streaming.as_ref().unwrap();
         let mut last = 0usize;
+        let mut pending = Vec::new();
 
-        // 5 brand-new bytes, all present in the tail buffer.
-        let p = bash_output_chunk_progress(spec, &chunk(b"hello", 5, false), &mut last).unwrap();
+        // 5 brand-new bytes as a pure delta.
+        let p = bash_output_chunk_progress(
+            spec,
+            &chunk(b"hello", 5, false),
+            &mut last,
+            &mut pending,
+        )
+        .unwrap();
         assert_eq!(read_chunk_progress(&p), ("hello".into(), 5, false, false));
         assert_eq!(last, 5);
+        assert!(pending.is_empty());
 
-        // No new bytes (total unchanged) → no delta.
-        assert!(bash_output_chunk_progress(spec, &chunk(b"hello", 5, false), &mut last).is_none());
+        // No new bytes (empty pure delta, total unchanged) → no progress.
+        assert!(
+            bash_output_chunk_progress(spec, &chunk(b"", 5, false), &mut last, &mut pending)
+                .is_none()
+        );
         assert_eq!(last, 5);
 
-        // After truncation the buffer is a *shrinking* tail. total 5 → 12
-        // (7 new bytes); tail holds the last 8 bytes "lo world", and 7 <= 8 so
-        // we slice the suffix: the last 7 bytes = "o world".
-        let p = bash_output_chunk_progress(spec, &chunk(b"lo world", 12, true), &mut last).unwrap();
+        // Pure delta of the 7 new bytes after truncation (producer already
+        // sliced the surviving tail; we do not re-derive from a full snapshot).
+        let p = bash_output_chunk_progress(
+            spec,
+            &chunk(b"o world", 12, true),
+            &mut last,
+            &mut pending,
+        )
+        .unwrap();
         assert_eq!(read_chunk_progress(&p), ("o world".into(), 12, true, false));
         assert_eq!(last, 12);
 
-        // Single-tick burst overflow: total 12 → 100 (88 new) but the tail only
-        // holds 4 bytes → the middle was dropped this tick. Emit the surviving
-        // tail with gap=true. `truncated` carries the caller's cumulative flag
-        // (base.truncated=false here) and is kept distinct from the per-tick gap.
-        let p = bash_output_chunk_progress(spec, &chunk(b"tail", 100, false), &mut last).unwrap();
+        // Single-tick burst overflow: total 12 → 100 (88 new) but only 4 bytes
+        // of pure delta survived → gap=true.
+        let p = bash_output_chunk_progress(
+            spec,
+            &chunk(b"tail", 100, false),
+            &mut last,
+            &mut pending,
+        )
+        .unwrap();
         assert_eq!(read_chunk_progress(&p), ("tail".into(), 100, false, true));
         assert_eq!(last, 100);
     }
 
     /// A single tick whose delta exceeds [`MAX_PROGRESS_DELTA_BYTES`] is cut to
     /// the cap (on a UTF-8 char boundary, never splitting a multi-byte
-    /// sequence) and the remainder is deferred to the next tick (append is
-    /// lossless); `total_bytes` still reflects the full count.
+    /// sequence) and the remainder is held in `pending` for the next call
+    /// (append is lossless); `total_bytes` still reflects the full count.
     #[test]
     fn bash_output_chunk_progress_caps_oversized_delta() {
         // Multi-byte chars (`€` = 3 bytes) ensure the cap lands mid-char so we
@@ -2656,7 +2648,8 @@ mod tests {
 
         let spec = BASH_CAPABILITIES.streaming.as_ref().unwrap();
         let mut last = 0usize;
-        let p = bash_output_chunk_progress(spec, &chunk, &mut last).unwrap();
+        let mut pending = Vec::new();
+        let p = bash_output_chunk_progress(spec, &chunk, &mut last, &mut pending).unwrap();
         match p {
             kimix_tool_runtime::ToolProgress::Custom { subkind, payload } => {
                 assert_eq!(subkind, "bash_output_chunk");
@@ -2684,12 +2677,23 @@ mod tests {
             other => panic!("expected Custom progress, got {other:?}"),
         }
 
-        // Drain the deferred remainder: repeated calls with the same chunk
-        // pace it out in capped frames until the full payload is surfaced.
+        // Drain the deferred remainder from `pending` with empty pure-delta
+        // chunks (same total) until the full payload is surfaced.
         let mut reassembled = String::new();
         reassembled.push_str(&payload_str[..last]);
+        let empty = BashOutputChunk {
+            base: BashNotificationBase {
+                tool_call_id: "t".into(),
+                command: "c".into(),
+                output: Vec::new(),
+                total_bytes: total,
+                truncated: false,
+                cwd: PathBuf::from("/"),
+            },
+        };
         while last < total {
-            let p = bash_output_chunk_progress(spec, &chunk, &mut last).unwrap();
+            let p = bash_output_chunk_progress(spec, &empty, &mut last, &mut pending)
+                .expect("pending hold-back should still emit");
             let kimix_tool_runtime::ToolProgress::Custom { payload, .. } = p else {
                 panic!("expected Custom progress");
             };
@@ -2699,6 +2703,7 @@ mod tests {
         }
         assert_eq!(reassembled, payload_str, "deferred pacing is lossless");
         assert_eq!(last, total);
+        assert!(pending.is_empty());
     }
 
     /// Absent `WorkspaceViewerContext` extension = no Progress emitted;

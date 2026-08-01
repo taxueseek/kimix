@@ -343,6 +343,26 @@ impl ProcessState {
         }
     }
 
+    /// Pure-delta slice for the next [`BashOutputChunk`].
+    ///
+    /// New bytes since [`Self::last_notified_total`] are taken from the end of
+    /// the (possibly truncated) tail buffer. When a single tick overflowed the
+    /// tail (`new > output_buffer.len()`), the surviving tail is returned and
+    /// consumers treat the shortfall as a gap via `total_bytes`.
+    fn take_output_delta(&self) -> Vec<u8> {
+        let new = self.total_bytes.saturating_sub(self.last_notified_total);
+        if new == 0 {
+            return Vec::new();
+        }
+        let len = self.output_buffer.len();
+        if new <= len {
+            self.output_buffer[len - new..].to_vec()
+        } else {
+            // Gap: middle was dropped by maybe_truncate within this window.
+            self.output_buffer.clone()
+        }
+    }
+
     /// Front-and-back truncation using character counts.
     ///
     /// When the total char count of `output_buffer` exceeds `output_char_limit`:
@@ -1605,19 +1625,23 @@ impl LocalTerminalActor {
         // This happens every ~100ms (the actor's tick interval).
         // If the handle is noop(), send() silently drops — no performance cost.
         //
-
         // Keyed off the monotonic `total_bytes` (not `output_buffer.len()`):
         // after `maybe_truncate` freezes the front half and keeps only the
         // shrinking tail, a length-based gate would go false and stay false,
         // starving the stream of chunks for the rest of a long-output command.
+        //
+        // Payload is a **pure delta** (new bytes since last notification), not
+        // a full buffer snapshot — consumers append; bridge/TUI never re-clone
+        // multi-MB tails on every tick.
         if process.total_bytes > process.last_notified_total {
+            let delta = process.take_output_delta();
             process
                 .notification_handle
                 .send_output_chunk(BashOutputChunk {
                     base: BashNotificationBase {
                         tool_call_id: process.tool_call_id.clone(),
                         command: process.command.clone(),
-                        output: process.output_buffer.clone(),
+                        output: delta,
                         total_bytes: process.total_bytes,
                         truncated: process.truncated,
                         cwd: process.cwd.clone().into(),
@@ -3508,14 +3532,24 @@ mod tests {
             "Initial chunk should have empty output"
         );
 
-        // Subsequent chunks should have output
+        // Subsequent chunks should have pure-delta output
         let first_with_output = &chunks[1];
         assert!(!first_with_output.base.output.is_empty());
 
-        // Later chunks should have more output than earlier ones
+        // total_bytes is monotonic; concatenating pure deltas reconstructs
+        // the in-memory stream (modulo truncation).
         assert!(
-            chunks.last().unwrap().base.output.len() >= first_with_output.base.output.len(),
-            "Output should accumulate across chunks"
+            chunks.last().unwrap().base.total_bytes >= first_with_output.base.total_bytes,
+            "total_bytes should be non-decreasing across chunks"
+        );
+        let mut concat = Vec::new();
+        for c in &chunks {
+            concat.extend_from_slice(&c.base.output);
+        }
+        let concat_str = String::from_utf8_lossy(&concat);
+        assert!(
+            concat_str.contains("chunk_1") && concat_str.contains("chunk_3"),
+            "concatenated pure deltas must include all emitted chunks"
         );
 
         // The final output should contain all chunks

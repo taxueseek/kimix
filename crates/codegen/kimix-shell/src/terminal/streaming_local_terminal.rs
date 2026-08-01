@@ -90,6 +90,23 @@ impl SessionNotificationSender for kimix_acp_lib::AcpAgentGatewaySender {
     }
 }
 
+/// Drop-all notifier for silent (`stream: false`) terminal runs.
+///
+/// Used by [`super::TerminalRunner`] so non-streaming callers share the same
+/// streaming I/O stack (capped reads, kill registry optional) without emitting
+/// ACP progress frames.
+pub struct NoopSessionNotifier;
+
+#[async_trait::async_trait]
+impl SessionNotificationSender for NoopSessionNotifier {
+    async fn session_notification(
+        &self,
+        _notification: acp::SessionNotification,
+    ) -> Result<(), acp::Error> {
+        Ok(())
+    }
+}
+
 /// A wrapper around a [`SessionNotificationSender`] that respects the
 /// `gateway_enabled` gate. When the gate is closed (e.g., for agent-initiated
 /// fork sessions before `session/load`), notifications are silently dropped.
@@ -132,7 +149,9 @@ type ChildHandle = Arc<Mutex<Box<dyn process_wrap::tokio::ChildWrapper>>>;
 
 #[derive(Debug, Default)]
 struct OutputState {
-    output: Vec<u8>,
+    /// Shared snapshot so streaming ticks only allocate once and waiters
+    /// clone an `Arc` instead of re-copying multi-MB buffers.
+    output: std::sync::Arc<[u8]>,
     truncated: bool,
     exit_status: Option<ExitStatus>,
     /// Whether the terminal has been backgrounded (agent should continue without waiting)
@@ -579,15 +598,12 @@ impl StreamingLocalTerminalRunner {
             None => None,
         };
 
-        self.send_update(
+        self.send_progress_update(
             &request.tool_call_id,
             &request.command,
             &[],
             0,
             false,
-            false,
-            None,
-            acp::ToolCallStatus::InProgress,
             request.cwd.as_str(),
         )
         .await;
@@ -686,24 +702,23 @@ impl StreamingLocalTerminalRunner {
 
                     {
                         let mut state = output_state.lock().await;
-                        state.output = output_buf.clone();
+                        // Shared snapshot for mid-run waiters; Arc so the tick
+                        // only bumps a refcount when readers hold an old view.
+                        state.output = std::sync::Arc::from(output_buf.as_slice());
                         state.truncated = truncated;
                     }
 
                     if output_buf.len() > last_sent_len {
-                        // NOTE: This `send_update` is safe because `session_notification`
-                        // is fire-and-forget (see gateway.rs).  If it ever becomes blocking
-                        // again, the deadline branch above won't save us once the ticker
-                        // arm is selected — both changes are required for correctness.
-                        self.send_update(
+                        // Pure delta for InProgress — no full-buffer
+                        // make_output_for_prompt / content rewrite.
+                        // NOTE: send is fire-and-forget (see gateway.rs).
+                        let delta = &output_buf[last_sent_len..];
+                        self.send_progress_update(
                             &request.tool_call_id,
                             &request.command,
-                            &output_buf,
-                            0,
+                            delta,
+                            output_buf.len(),
                             truncated,
-                            false,
-                            None,
-                            acp::ToolCallStatus::InProgress,
                             request.cwd.as_str(),
                         )
                         .await;
@@ -751,7 +766,7 @@ impl StreamingLocalTerminalRunner {
         };
         finalize_output_state(output_state, exit_notify, output, truncated, &exit_status).await;
 
-        self.send_update(
+        self.send_final_update(
             &request.tool_call_id,
             &request.command,
             output,
@@ -791,7 +806,7 @@ impl StreamingLocalTerminalRunner {
             acp::ToolCallStatus::Failed
         };
 
-        self.send_update(
+        self.send_final_update(
             &request.tool_call_id,
             &request.command,
             output,
@@ -813,7 +828,53 @@ impl StreamingLocalTerminalRunner {
         })
     }
 
-    async fn send_update(
+    /// InProgress frame: pure delta only — no ANSI strip / soft-wrap over the
+    /// full buffer, no full `output` snapshot in raw_output.
+    async fn send_progress_update(
+        &self,
+        tool_call_id: &acp::ToolCallId,
+        command: &str,
+        delta: &[u8],
+        total_bytes: usize,
+        truncated: bool,
+        cwd: &str,
+    ) {
+        let bash_output = BashOutput {
+            output_for_prompt: String::new(),
+            output: Vec::new(),
+            exit_code: 0,
+            command: command.to_string(),
+            truncated,
+            signal: None,
+            timed_out: false,
+            description: None,
+            current_dir: cwd.to_owned(),
+            output_file: String::new(),
+            total_bytes,
+            output_delta: Some(delta.to_vec()),
+            was_bare_echo: false,
+        };
+
+        let content_text = String::from_utf8_lossy(delta).into_owned();
+        let _ = self
+            .notifier
+            .session_notification(acp::SessionNotification::new(
+                self.session_id.clone(),
+                acp::SessionUpdate::ToolCallUpdate(acp::ToolCallUpdate::new(
+                    tool_call_id.clone(),
+                    acp::ToolCallUpdateFields::new()
+                        .status(Some(acp::ToolCallStatus::InProgress))
+                        .content(Some(vec![acp::ToolCallContent::from(
+                            acp::ContentBlock::Text(acp::TextContent::new(content_text)),
+                        )]))
+                        .raw_output(serde_json::to_value(ToolOutput::Bash(bash_output)).ok()),
+                )),
+            ))
+            .await;
+    }
+
+    /// Completed / Failed frame: full snapshot + model-facing wrap once.
+    async fn send_final_update(
         &self,
         tool_call_id: &acp::ToolCallId,
         command: &str,
@@ -1028,7 +1089,7 @@ async fn finalize_output_state(
 ) {
     {
         let mut state = output_state.lock().await;
-        state.output = output.to_vec();
+        state.output = std::sync::Arc::from(output);
         state.truncated = truncated;
         state.exit_status = Some(exit_status.clone());
     }
@@ -1055,8 +1116,8 @@ async fn wait_background_completion(
         if let Some(process_status) = try_get_exit_status(&child_handle).await {
             let exit_status = extract_exit_status(process_status);
 
-            // Get final output from state
-            let (output_buf, truncated) = {
+            // Get final output from state (`Arc<[u8]>` shared snapshot).
+            let (output_arc, truncated) = {
                 let state = output_state.lock().await;
                 (state.output.clone(), state.truncated)
             };
@@ -1064,7 +1125,7 @@ async fn wait_background_completion(
             finalize_output_state(
                 &output_state,
                 &exit_notify,
-                &output_buf,
+                &output_arc,
                 truncated,
                 &exit_status,
             )
@@ -1077,9 +1138,9 @@ async fn wait_background_completion(
 
             let bash_output = BashOutput {
                 output_for_prompt: BashOutput::make_output_for_prompt(&String::from_utf8_lossy(
-                    &output_buf,
+                    &output_arc,
                 )),
-                output: output_buf,
+                output: output_arc.to_vec(),
                 exit_code: exit_status.exit_code.unwrap_or(-1),
                 command,
                 truncated,
@@ -1088,7 +1149,7 @@ async fn wait_background_completion(
                 description: None,
                 current_dir: cwd,
                 output_file: String::new(),
-                total_bytes: 0,
+                total_bytes: output_arc.len(),
                 output_delta: None,
                 was_bare_echo: false,
             };
@@ -1177,7 +1238,7 @@ async fn run_output_collector(
 
                 {
                     let mut state = output_state.lock().await;
-                    state.output = output_buf.clone();
+                    state.output = std::sync::Arc::from(output_buf.as_slice());
                     state.truncated = truncated;
                 }
             }

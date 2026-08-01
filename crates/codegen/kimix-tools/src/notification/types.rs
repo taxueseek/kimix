@@ -18,7 +18,14 @@ pub struct BashNotificationBase {
     /// The command being executed
     pub command: String,
 
-    /// Output bytes (may be truncated if exceeds limit).
+    /// Output payload. Semantics depend on the wrapping variant:
+    ///
+    /// - **[`BashOutputChunk`]**: pure delta since the previous chunk,
+    ///   keyed by monotonic [`Self::total_bytes`]. Empty for the initial
+    ///   "timer start" tick. Never a full buffer snapshot.
+    /// - **Terminal events** (`Complete` / `Timeout` / `Backgrounded`):
+    ///   full captured snapshot (or empty when deferred to disk).
+    ///
     /// Use `output_lossy()` for string conversion.
     ///
     /// Serialized as base64; see `crate::util::serde_base64` for the wire format
@@ -28,7 +35,9 @@ pub struct BashNotificationBase {
     #[schemars(with = "String")]
     pub output: Vec<u8>,
 
-    /// Total bytes of output received (before any truncation)
+    /// Total bytes of output received (before any truncation).
+    /// Monotonic across streaming chunks; used with pure-delta `output` to
+    /// detect gaps when a single tick overflowed the in-memory tail.
     pub total_bytes: usize,
 
     /// Whether the output was truncated due to size limits
@@ -51,6 +60,9 @@ impl BashNotificationBase {
 
 /// A chunk of output streamed from a bash command execution.
 /// Sent periodically during execution when streaming is enabled.
+///
+/// `base.output` is a **pure delta** (new bytes since the previous chunk),
+/// not a full buffer snapshot. Consumers must append; do not replace.
 #[derive(Debug, Clone, PartialEq, Eq, schemars::JsonSchema)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct BashOutputChunk {
@@ -720,6 +732,21 @@ mod handle_tests {
         for (tag, schema) in &catalog {
             assert!(schema.is_object(), "schema for {tag} is not an object");
         }
+    }
+
+    /// P1-b: tools tags must match the protocol kind SSOT (and thus the
+    /// trait-crate twin). Adding a variant requires updating
+    /// `KNOWN_NOTIFICATION_KINDS` in kimix-tool-protocol.
+    #[test]
+    fn notification_tags_match_protocol_ssot() {
+        let mut tools: Vec<&str> = ALL_NOTIFICATION_TAGS.to_vec();
+        tools.sort_unstable();
+        let mut protocol: Vec<&str> = kimix_tool_protocol::KNOWN_NOTIFICATION_KINDS.to_vec();
+        protocol.sort_unstable();
+        assert_eq!(
+            tools, protocol,
+            "ALL_NOTIFICATION_TAGS must equal KNOWN_NOTIFICATION_KINDS"
+        );
     }
 
     #[test]

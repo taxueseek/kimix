@@ -104,12 +104,14 @@ pub fn spawn_notification_bridge(config: NotificationBridgeConfig) -> ToolNotifi
     let (handle, mut rx) = ToolNotificationHandle::channel();
 
     tokio::task::spawn_local(async move {
-        // Per-tool-call byte offset for incremental delta computation.
-        // Only used when `config.incremental_bash_output` is true.
-        let mut offsets: HashMap<String, usize> = HashMap::new();
+        // Per-tool-call accumulator for non-incremental clients that still
+        // need a full `output` snapshot each tick. Pure-delta producers only
+        // ship new bytes, so the bridge rebuilds the full buffer here when
+        // the client has not opted into `kimix/incrementalBashOutput`.
+        let mut full_buffers: HashMap<String, Vec<u8>> = HashMap::new();
 
         while let Some(notification) = rx.recv().await {
-            handle_notification(&config, notification, &mut offsets).await;
+            handle_notification(&config, notification, &mut full_buffers).await;
         }
         tracing::debug!("Notification bridge task exiting (sender dropped)");
     });
@@ -143,40 +145,37 @@ async fn emit_current_mode_update(
 async fn handle_notification(
     config: &NotificationBridgeConfig,
     notification: ToolNotification,
-    offsets: &mut HashMap<String, usize>,
+    full_buffers: &mut HashMap<String, Vec<u8>>,
 ) {
     match notification {
         ToolNotification::BashOutputChunk(chunk) => {
-            // Compute output and output_delta based on incremental mode.
-            let (output, output_delta) = if config.incremental_bash_output {
-                let prev_offset = offsets.get(&chunk.base.tool_call_id).copied().unwrap_or(0);
-                let full = &chunk.base.output;
-                let delta = if prev_offset <= full.len() {
-                    full[prev_offset..].to_vec()
-                } else {
-                    // Buffer shrank (e.g. terminal clear / reset).
-                    // Send the full buffer and reset offset.
-                    full.clone()
-                };
-                offsets.insert(chunk.base.tool_call_id.clone(), full.len());
-                // In incremental mode: output is empty, delta carries the bytes.
-                (Vec::new(), Some(delta))
-            } else {
-                (chunk.base.output.clone(), None)
-            };
+            // Producer already ships pure deltas in `chunk.base.output`.
+            let delta = &chunk.base.output;
+            let delta_text = String::from_utf8_lossy(delta);
 
-            // Incremental mode: intermediate `InProgress` frames only carry the
-            // output delta for the TUI renderer. The model-facing
-            // `output_for_prompt` (ANSI-strip + soft-wrap over the FULL buffer)
-            // is only consumed on the completed tool-call frame built by the
-            // tool dispatch path, so rebuilding it on every tick is pure waste
-            // for long-running output. Non-incremental mode keeps the legacy
-            // behavior (full buffer + full prompt text each tick).
-            let output_for_prompt = if config.incremental_bash_output {
-                String::new()
-            } else {
-                BashOutput::make_output_for_prompt(&String::from_utf8_lossy(&chunk.base.output))
-            };
+            // Incremental (default/native): pure delta only — no soft-wrap.
+            // Legacy replace-mode: rebuild full `output`/`content` for the UI,
+            // but **never** call `make_output_for_prompt` on mid-frames (P0-c):
+            // that ANSI-strip + soft-wrap over multi-MB buffers every ~100ms
+            // is the residual hot path. Model-facing wrap is done once on the
+            // terminal frame in tool_dispatch / send_final_update.
+            let (output, output_delta, content_text, output_for_prompt) =
+                if config.incremental_bash_output {
+                    full_buffers.remove(&chunk.base.tool_call_id);
+                    (
+                        Vec::new(),
+                        Some(delta.to_vec()),
+                        delta_text.into_owned(),
+                        String::new(),
+                    )
+                } else {
+                    let full = full_buffers
+                        .entry(chunk.base.tool_call_id.clone())
+                        .or_default();
+                    full.extend_from_slice(delta);
+                    let full_text = String::from_utf8_lossy(full).into_owned();
+                    (full.clone(), None, full_text, String::new())
+                };
 
             // Build a ToolOutput::Bash from the chunk for the TUI to parse
             let bash_output = ToolOutput::Bash(BashOutput {
@@ -195,15 +194,16 @@ async fn handle_notification(
                 was_bare_echo: false,
             });
 
-            // Send ACP ToolCallUpdate with InProgress status for TUI streaming
+            // Send ACP ToolCallUpdate with InProgress status for TUI streaming.
+            // `content` must match the same delta/full policy as raw_output —
+            // never re-expand to a full buffer when the client opted into
+            // incremental mode (that was the half-fixed 0.1.16 path).
             let update = acp::SessionUpdate::ToolCallUpdate(acp::ToolCallUpdate::new(
                 acp::ToolCallId::new(chunk.base.tool_call_id.clone()),
                 acp::ToolCallUpdateFields::new()
                     .status(Some(acp::ToolCallStatus::InProgress))
                     .content(Some(vec![acp::ToolCallContent::from(
-                        acp::ContentBlock::Text(acp::TextContent::new(
-                            String::from_utf8_lossy(&chunk.base.output).into_owned(),
-                        )),
+                        acp::ContentBlock::Text(acp::TextContent::new(content_text)),
                     )]))
                     .raw_output(serde_json::to_value(&bash_output).ok()),
             ));
@@ -224,8 +224,8 @@ async fn handle_notification(
         }
 
         ToolNotification::BashExecutionComplete(complete) => {
-            // Clean up offset tracking for this tool call.
-            offsets.remove(&complete.base.tool_call_id);
+            // Drop any non-incremental full-buffer accumulation for this call.
+            full_buffers.remove(&complete.base.tool_call_id);
             tracing::debug!(
                 tool_call_id = %complete.base.tool_call_id,
                 exit_code = ?complete.exit_code,
@@ -234,6 +234,7 @@ async fn handle_notification(
         }
 
         ToolNotification::BashExecutionTimeout(timeout) => {
+            full_buffers.remove(&timeout.base.tool_call_id);
             tracing::debug!(
                 tool_call_id = %timeout.base.tool_call_id,
                 elapsed = ?timeout.elapsed,
@@ -242,6 +243,7 @@ async fn handle_notification(
         }
 
         ToolNotification::BashExecutionFailed(failed) => {
+            full_buffers.remove(&failed.tool_call_id);
             tracing::warn!(
                 tool_call_id = %failed.tool_call_id,
                 error = %failed.error,
@@ -250,6 +252,7 @@ async fn handle_notification(
         }
 
         ToolNotification::BashExecutionBackgrounded(bg) => {
+            full_buffers.remove(&bg.base.tool_call_id);
             tracing::debug!(
                 tool_call_id = %bg.base.tool_call_id,
                 task_id = %bg.task_id,
@@ -807,7 +810,8 @@ mod tests {
             cwd: PathBuf::from("/tmp"),
             gateway_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             persistence_tx,
-            incremental_bash_output: false,
+            // Mirror production default: pure-delta on unless a client opts out.
+            incremental_bash_output: true,
             plan_mode: Arc::new(parking_lot::Mutex::new(
                 crate::session::plan_mode::PlanModeTracker::new(PathBuf::from("/tmp/test-session")),
             )),
@@ -1336,6 +1340,172 @@ mod tests {
         }
     }
 
+    /// Incremental mode: pure-delta producer bytes land in `output_delta` and
+    /// ACP `content`, with empty full `output` / `output_for_prompt` (no
+    /// multi-MB re-clone or soft-wrap on every tick).
+    #[tokio::test]
+    async fn bash_output_chunk_incremental_sends_pure_delta_only() {
+        let (mut config, mut gateway_rx, _persistence_rx, _cmd_rx) = make_test_config_full();
+        config.incremental_bash_output = true;
+        let mut full_buffers = HashMap::new();
+
+        handle_notification(
+            &config,
+            ToolNotification::BashOutputChunk(kimix_tools::notification::types::BashOutputChunk {
+                base: kimix_tools::notification::types::BashNotificationBase {
+                    tool_call_id: "call-delta".into(),
+                    command: "echo".into(),
+                    output: b"hel".to_vec(),
+                    total_bytes: 3,
+                    truncated: false,
+                    cwd: PathBuf::from("/tmp"),
+                },
+            }),
+            &mut full_buffers,
+        )
+        .await;
+        handle_notification(
+            &config,
+            ToolNotification::BashOutputChunk(kimix_tools::notification::types::BashOutputChunk {
+                base: kimix_tools::notification::types::BashNotificationBase {
+                    tool_call_id: "call-delta".into(),
+                    command: "echo".into(),
+                    output: b"lo\n".to_vec(),
+                    total_bytes: 6,
+                    truncated: false,
+                    cwd: PathBuf::from("/tmp"),
+                },
+            }),
+            &mut full_buffers,
+        )
+        .await;
+
+        assert!(
+            full_buffers.is_empty(),
+            "incremental path must not accumulate full buffers"
+        );
+
+        let mut deltas = Vec::new();
+        while let Ok(msg) = gateway_rx.try_recv() {
+            let kimix_acp_lib::AcpClientMessage::SessionNotification(args) = msg else {
+                panic!("expected SessionNotification");
+            };
+            let acp::SessionUpdate::ToolCallUpdate(update) = args.request.update else {
+                panic!("expected ToolCallUpdate");
+            };
+            let fields = update.fields;
+            let content = fields.content.expect("content present");
+            let text = match &content[0] {
+                acp::ToolCallContent::Content(c) => match &c.content {
+                    acp::ContentBlock::Text(t) => t.text.clone(),
+                    other => panic!("expected text content, got {other:?}"),
+                },
+                other => panic!("expected content block, got {other:?}"),
+            };
+            deltas.push(text.clone());
+            let raw = fields.raw_output.expect("raw_output present");
+            // raw_output serializes ToolOutput::Bash (tagged), not bare BashOutput.
+            let tool_out: kimix_tools::types::output::ToolOutput =
+                serde_json::from_value(raw).expect("ToolOutput");
+            let kimix_tools::types::output::ToolOutput::Bash(bash) = tool_out else {
+                panic!("expected ToolOutput::Bash");
+            };
+            assert!(
+                bash.output.is_empty(),
+                "incremental frames must not ship full output"
+            );
+            assert!(
+                bash.output_for_prompt.is_empty(),
+                "incremental frames must not soft-wrap full output"
+            );
+            assert_eq!(
+                bash.output_delta.as_deref(),
+                Some(text.as_bytes()),
+                "output_delta must match content text"
+            );
+        }
+        assert_eq!(deltas, vec!["hel".to_string(), "lo\n".to_string()]);
+    }
+
+    /// Non-incremental clients still receive a reconstructed full snapshot in
+    /// `output` / `content` so replace-mode UIs keep working — but mid-frames
+    /// must not pay `make_output_for_prompt` (P0-c).
+    #[tokio::test]
+    async fn bash_output_chunk_non_incremental_rebuilds_full_snapshot() {
+        let (mut config, mut gateway_rx, _persistence_rx, _cmd_rx) = make_test_config_full();
+        config.incremental_bash_output = false;
+        let mut full_buffers = HashMap::new();
+
+        handle_notification(
+            &config,
+            ToolNotification::BashOutputChunk(kimix_tools::notification::types::BashOutputChunk {
+                base: kimix_tools::notification::types::BashNotificationBase {
+                    tool_call_id: "call-full".into(),
+                    command: "echo".into(),
+                    output: b"hel".to_vec(),
+                    total_bytes: 3,
+                    truncated: false,
+                    cwd: PathBuf::from("/tmp"),
+                },
+            }),
+            &mut full_buffers,
+        )
+        .await;
+        handle_notification(
+            &config,
+            ToolNotification::BashOutputChunk(kimix_tools::notification::types::BashOutputChunk {
+                base: kimix_tools::notification::types::BashNotificationBase {
+                    tool_call_id: "call-full".into(),
+                    command: "echo".into(),
+                    output: b"lo\n".to_vec(),
+                    total_bytes: 6,
+                    truncated: false,
+                    cwd: PathBuf::from("/tmp"),
+                },
+            }),
+            &mut full_buffers,
+        )
+        .await;
+
+        assert_eq!(
+            full_buffers.get("call-full").map(Vec::as_slice),
+            Some(b"hello\n".as_slice())
+        );
+
+        let mut contents = Vec::new();
+        while let Ok(msg) = gateway_rx.try_recv() {
+            let kimix_acp_lib::AcpClientMessage::SessionNotification(args) = msg else {
+                panic!("expected SessionNotification");
+            };
+            let acp::SessionUpdate::ToolCallUpdate(update) = args.request.update else {
+                panic!("expected ToolCallUpdate");
+            };
+            let fields = update.fields;
+            let content = fields.content.expect("content present");
+            let text = match &content[0] {
+                acp::ToolCallContent::Content(c) => match &c.content {
+                    acp::ContentBlock::Text(t) => t.text.clone(),
+                    other => panic!("expected text content, got {other:?}"),
+                },
+                other => panic!("expected content block, got {other:?}"),
+            };
+            contents.push(text);
+            let raw = fields.raw_output.expect("raw_output present");
+            let tool_out: kimix_tools::types::output::ToolOutput =
+                serde_json::from_value(raw).expect("ToolOutput");
+            let kimix_tools::types::output::ToolOutput::Bash(bash) = tool_out else {
+                panic!("expected ToolOutput::Bash");
+            };
+            assert!(bash.output_delta.is_none());
+            assert_eq!(bash.output, contents.last().unwrap().as_bytes());
+            assert!(
+                bash.output_for_prompt.is_empty(),
+                "mid-frames must not soft-wrap full output (P0-c)"
+            );
+        }
+        assert_eq!(contents, vec!["hel".to_string(), "hello\n".to_string()]);
+    }
+
     /// Persisted⇒stamped contract at the bridge's highest-frequency emitter:
     /// the persisted bash-output line carries an `eventId`, and the live
     /// broadcast carries the SAME id (the meta is minted before the
@@ -1355,9 +1525,9 @@ mod tests {
                     cwd: PathBuf::from("/tmp"),
                 },
             });
-        let mut offsets = HashMap::new();
+        let mut full_buffers = HashMap::new();
 
-        handle_notification(&config, notification, &mut offsets).await;
+        handle_notification(&config, notification, &mut full_buffers).await;
 
         let persisted_id = match persistence_rx.try_recv().expect("chunk must be persisted") {
             PersistenceMsg::Update(crate::session::storage::SessionUpdate::Acp(notif)) => notif

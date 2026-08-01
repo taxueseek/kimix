@@ -1881,13 +1881,17 @@ impl MvpAgent {
                 .and_then(|v| v.get("mode"))
                 .and_then(|v| v.as_str()),
         );
+        // Pure-delta is the native path (Kimix TUI always advertises true).
+        // Opt-out only: legacy ACP clients that cannot append must send
+        // `kimix/incrementalBashOutput: false`. Default true so headless /
+        // missing-meta sessions never rebuild full buffers every 100ms.
         let incremental_bash_output = init
             .client_capabilities
             .meta
             .as_ref()
             .and_then(|m| m.get("kimix/incrementalBashOutput"))
             .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+            .unwrap_or(true);
         let no_color = init
             .client_capabilities
             .meta

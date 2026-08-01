@@ -185,17 +185,21 @@ pub fn no_color_env() -> std::collections::HashMap<String, String> {
 
 mod streaming_local_terminal;
 pub use streaming_local_terminal::{
-    ExitStatus, GatedNotifier, KillOutcome, OutputSnapshot, SessionNotificationSender,
-    StreamingLocalTerminalRunner, background_terminal, create_terminal, find_terminal_session_id,
-    get_terminal_output, kill_and_release_all_for_session, kill_terminal, release_terminal,
-    wait_for_terminal_exit,
+    ExitStatus, GatedNotifier, KillOutcome, NoopSessionNotifier, OutputSnapshot,
+    SessionNotificationSender, StreamingLocalTerminalRunner, background_terminal, create_terminal,
+    find_terminal_session_id, get_terminal_output, kill_and_release_all_for_session, kill_terminal,
+    release_terminal, wait_for_terminal_exit,
 };
 
 use std::sync::Arc;
 
-/// Terminal runner that routes requests based on the `stream` flag:
-/// - `stream: true` → StreamingLocalTerminalRunner (updates, killable)
-/// - `stream: false` → LocalTerminalRunner (silent, fire-and-forget)
+/// Single terminal entry point (P0-a).
+///
+/// Always runs on [`StreamingLocalTerminalRunner`] so every production path
+/// gets capped incremental reads, pure-delta progress frames, and the kill
+/// registry. `stream: false` only swaps the notifier for
+/// [`NoopSessionNotifier`] (silent / fire-and-forget semantics) — it does
+/// **not** fall back to the unbounded [`LocalTerminalRunner`] stack.
 pub struct TerminalRunner {
     notifier: Arc<dyn SessionNotificationSender>,
     session_id: agent_client_protocol::SessionId,
@@ -216,15 +220,16 @@ impl TerminalRunner {
 #[async_trait::async_trait]
 impl AsyncTerminalRunner for TerminalRunner {
     async fn run(&self, request: TerminalRunRequest) -> Result<TerminalRunResult, TerminalError> {
-        if request.stream {
-            StreamingLocalTerminalRunner {
-                notifier: self.notifier.clone(),
-                session_id: self.session_id.clone(),
-            }
-            .run(request)
-            .await
+        let notifier: Arc<dyn SessionNotificationSender> = if request.stream {
+            self.notifier.clone()
         } else {
-            LocalTerminalRunner.run(request).await
+            Arc::new(NoopSessionNotifier)
+        };
+        StreamingLocalTerminalRunner {
+            notifier,
+            session_id: self.session_id.clone(),
         }
+        .run(request)
+        .await
     }
 }

@@ -235,6 +235,7 @@ fn monitor_event_round_trip() {
         description: "errors in deploy.log".into(),
         event_text: "<monitor-event>...</monitor-event>".into(),
         raw_text: "...".into(),
+        owner_session_id: None,
     });
     let json = round_trip(&n);
     assert_type_tag(&json, "MonitorEvent");
@@ -349,6 +350,7 @@ fn variant_count_matches_variant_name() {
             description: String::new(),
             event_text: String::new(),
             raw_text: String::new(),
+            owner_session_id: None,
         }),
     ];
     let names: std::collections::HashSet<_> =
@@ -359,6 +361,16 @@ fn variant_count_matches_variant_name() {
         "expected 19 distinct variant names; if you added a notification, extend the test list and `variant_name`"
     );
     assert_eq!(all_variants.len(), 19);
+
+    // P1-b: trait-crate tags must match protocol kind SSOT.
+    let mut runtime: Vec<&str> = names.into_iter().collect();
+    runtime.sort_unstable();
+    let mut protocol: Vec<&str> = kimix_tool_protocol::KNOWN_NOTIFICATION_KINDS.to_vec();
+    protocol.sort_unstable();
+    assert_eq!(
+        runtime, protocol,
+        "runtime variant_name set must equal KNOWN_NOTIFICATION_KINDS"
+    );
 }
 
 #[test]

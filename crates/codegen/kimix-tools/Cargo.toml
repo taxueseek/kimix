@@ -113,6 +113,12 @@ workspace = true
 [features]
 default-bazel = [
     "serde",
+    "harness-compat",
     ]
-default = ["serde"]
+# `harness-compat` registers OpenCode/Codex variant tools in the full
+# `ToolRegistryBuilder::new()` catalog. Native Kimix uses `new_compact()`
+# (write tool only from OpenCode). Disable for a slimmer default catalog:
+#   kimix-tools = { default-features = false, features = ["serde"] }
+default = ["serde", "harness-compat"]
 serde = []
+harness-compat = []

@@ -11,9 +11,31 @@ use crate::terminal::runner::{
 
 pub struct LocalTerminalRunner;
 
-async fn read_stream(mut stream: impl AsyncReadExt + Unpin) -> Vec<u8> {
+/// Read a pipe with a hard byte cap. Unlike unbounded `read_to_end`, this
+/// keeps only the last `limit` bytes (same policy as post-hoc truncation) so
+/// a runaway `cat /dev/zero` or multi-GB log dump cannot OOM the process.
+///
+/// Prefer [`super::StreamingLocalTerminalRunner`] for production paths —
+/// this helper only exists for direct [`LocalTerminalRunner`] callers
+/// (tests / silent helpers). Production routes go through
+/// [`super::TerminalRunner`], which always uses the streaming stack.
+async fn read_stream_capped(mut stream: impl AsyncReadExt + Unpin, limit: usize) -> Vec<u8> {
     let mut buffer = Vec::new();
-    let _ = stream.read_to_end(&mut buffer).await;
+    let mut tmp = [0u8; 8192];
+    loop {
+        match stream.read(&mut tmp).await {
+            Ok(0) => break,
+            Ok(n) => {
+                buffer.extend_from_slice(&tmp[..n]);
+                // Cap during read so peak memory stays near `limit`, not the
+                // full stream size. Drop oldest bytes when over limit.
+                if limit > 0 && buffer.len() > limit {
+                    let _ = truncate_buffer(&mut buffer, limit);
+                }
+            }
+            Err(_) => break,
+        }
+    }
     buffer
 }
 
@@ -23,6 +45,13 @@ async fn read_stream(mut stream: impl AsyncReadExt + Unpin) -> Vec<u8> {
 /// This function ensures we don't split UTF-8 characters when truncating
 /// by using char_indices to find a valid character boundary.
 fn truncate_buffer(buf: &mut Vec<u8>, limit: usize) -> bool {
+    if limit == 0 {
+        if buf.is_empty() {
+            return false;
+        }
+        buf.clear();
+        return true;
+    }
     if buf.len() > limit {
         // Convert to string to work with character boundaries
         let s = String::from_utf8_lossy(buf);
@@ -85,8 +114,11 @@ impl AsyncTerminalRunner for LocalTerminalRunner {
             .take()
             .ok_or_else(|| TerminalError::Other("Failed to capture stderr".into()))?;
 
-        let stdout_task = tokio::spawn(read_stream(stdout));
-        let stderr_task = tokio::spawn(read_stream(stderr));
+        // Cap both pipes to `output_byte_limit` while reading (P0-a). Final
+        // combined truncation below still applies for the merged buffer.
+        let limit = request.output_byte_limit;
+        let stdout_task = tokio::spawn(read_stream_capped(stdout, limit));
+        let stderr_task = tokio::spawn(read_stream_capped(stderr, limit));
 
         let mut timed_out = false;
 

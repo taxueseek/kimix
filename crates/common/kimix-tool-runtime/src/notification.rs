@@ -29,11 +29,15 @@ pub struct BashNotificationBase {
     /// The command being executed.
     pub command: String,
 
-    /// Captured output bytes. May be truncated; use `output_lossy` for a
-    /// `String` rendering that handles invalid UTF-8.
+    /// Output payload. For [`BashOutputChunk`]: pure delta since the previous
+    /// chunk (keyed by `total_bytes`). For terminal events (`Complete` /
+    /// `Timeout` / `Backgrounded`): full captured snapshot (or empty when
+    /// deferred to disk). Use `output_lossy` for a `String` rendering that
+    /// handles invalid UTF-8.
     pub output: Vec<u8>,
 
-    /// Total bytes received before any truncation.
+    /// Total bytes received before any truncation. Monotonic across
+    /// streaming chunks.
     pub total_bytes: usize,
 
     /// Whether `output` was truncated to fit a size cap.
@@ -52,6 +56,9 @@ impl BashNotificationBase {
 
 /// Incremental output chunk streamed during a bash command. Sent
 /// periodically while the process is still running.
+///
+/// `base.output` is a pure delta (new bytes since the previous chunk), not
+/// a full buffer snapshot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BashOutputChunk {
     #[serde(flatten)]
@@ -263,6 +270,10 @@ pub struct MonitorEvent {
     pub event_text: String,
     /// Raw text without XML wrapping.
     pub raw_text: String,
+    /// Session that owns the monitor task. `None` for legacy backends.
+    /// Kept in lockstep with the production `kimix-tools` payload (P1-b).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_session_id: Option<String>,
 }
 
 /// Snapshot of a background task's state. Identical shape to the Kimix

@@ -1,3 +1,14 @@
+//! Production tool-notification surface (P1-b).
+//!
+//! **Canonical wire + runtime handle for Kimix shell / TUI.**
+//! - Payload shapes and tags live here (tokio `mpsc`, schemars, base64
+//!   `output` on the wire).
+//! - Variant *tags* are cross-checked against
+//!   [`kimix_tool_protocol::KNOWN_NOTIFICATION_KINDS`] (protocol SSOT for
+//!   kind names).
+//! - [`kimix_tool_runtime::notification`] is the trait-crate twin
+//!   (futures `mpsc`, no schemars) kept in lockstep via the same kind list;
+//!   do not invent a third enum.
 pub mod types;
 
 pub use types::ALL_NOTIFICATION_TAGS;
