@@ -1,7 +1,7 @@
 //! Kimix resource URL scheme.
 //!
-//! Provides a unified resource addressing mechanism similar to OpenMinis's
-//! `minis://` scheme. Tool outputs can reference persistent resources via
+//! Provides a unified resource addressing mechanism via `kimix://` URLs.
+//! Tool outputs can reference persistent resources via
 //! `kimix://` URLs, enabling multi-turn resource references.
 //!
 //! # Format

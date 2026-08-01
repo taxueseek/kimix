@@ -1,8 +1,7 @@
 //! Subagent crash isolation.
 //!
-//! Provides thread-level crash isolation for subagents, inspired by
-//! OpenMinis's approach of suspending crashed threads instead of
-//! terminating the entire process.
+//! Provides thread-level crash isolation for subagents: a crashed thread
+//! is suspended permanently instead of terminating the entire process.
 //!
 //! # Design
 //!

@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- npm 分发包 `kimix`（`npm/`）：`npx kimix` 即装即用，postinstall 从 GitHub
+  Releases 下载对应平台二进制并校验 SHA256SUMS；发布前 `prepublishOnly`
+  门禁校验 npm 版本与 GitHub release tag 对齐
+- Homebrew formula 模板 `contrib/homebrew/kimix.rb`（自建 tap 后
+  `brew install kimix`）
+- README 安装章节新增 npx / npm、Homebrew、cargo install 三种安装方式
+
 ## [0.1.16] - 2026-07-31
 
 ### Added

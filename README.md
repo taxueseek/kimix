@@ -25,8 +25,13 @@ Kimix 是一个通用的终端 AI 代理工具，具有非常优秀的长程任�
 管理长时运行任务。既可以交互使用，也可以在脚本 / CI 中无头运行，
 还支持通过 ACP 协议嵌入编辑器。
 
-kimix 采用 Grok 4.5、Kimi K3 两个优秀模型构建，采用 GLM 5.2、deepseek-v4-flash 进行性能优化，并在真实环境中还使用来 DeepSeek、Mimo、LongCat-2.0
-等开源模型做了广泛测试和适配，已经实现通过 kimix 来更新迭代 kimix 自身。具有高性能、高缓存命中率的特点，有效降低Token消耗。日常能保持95%多的缓存命中率，当然更为关键的是长程任务的输出水平。高缓存命中率应该说是从一开始我构建这个项目就已经实现的了。极致的初始上下文，可以做到跟Pi 一个水平线，优于 grok-build、Claude Code, Kimi code 的初始上下文水平 。界面也更加低门槛，易于操作，界面和设置支持中英文双语
+kimix 采用 Grok 4.5 与 Kimi K3 构建核心能力，用 GLM 5.2、DeepSeek V4-Flash 做性能优化，
+并以 DeepSeek、MiMo、LongCat-2.0 等开源模型在真实环境中做了广泛测试与适配；
+kimix 自身已经具备「用 kimix 更新迭代 kimix」的能力。
+
+核心特点：高缓存命中率（日常保持 95% 以上，显著降低 Token 消耗）、
+优秀的长程任务输出水平、低门槛的全屏 TUI 界面，界面与设置支持中英文双语。
+极致的初始上下文水平，可以做到与 Pi 一个水平线，优于 grok-build、Claude Code、Kimi code。
 
 适用场景：
 - 💻 编程辅助：理解代码库、重构、修 bug、写测试
@@ -105,15 +110,39 @@ kimix 采用 Grok 4.5、Kimi K3 两个优秀模型构建，采用 GLM 5.2、deep
 
 ### 快速开始
 
+**方式一：npx / npm**（无需脚本，安装时自动匹配平台下载二进制并校验 SHA256SUMS）
+
 ```sh
-# 安装（macOS / Linux）
+npx kimix --version          # 临时使用，即装即跑
+npm install -g kimix         # 全局安装
+```
+
+**方式二：官方安装脚本（macOS / Linux）**
+
+```sh
 curl -fsSL https://raw.githubusercontent.com/taxueseek/kimix/main/install.sh | bash
 ```
 
+**方式三：官方安装脚本（Windows PowerShell）**
+
 ```powershell
-# Windows PowerShell
 irm https://raw.githubusercontent.com/taxueseek/kimix/main/install.ps1 | iex
 ```
+
+**方式四：Homebrew**（需自建 tap，公式模板见 `contrib/homebrew/kimix.rb`）
+
+```sh
+brew tap taxueseek/homebrew-kimix
+brew install kimix
+```
+
+**方式五：cargo install**（需 Rust 工具链 + [dotslash](https://dotslash-cli.com)）
+
+```sh
+cargo install --git https://github.com/taxueseek/kimix kimix-bin
+```
+
+安装完成后：
 
 ```sh
 kimix --version   # kimix 0.1.16 … unofficial Kimi Code CLI community build
@@ -122,8 +151,8 @@ kimix             # 启动全屏 TUI
 kimix -p "你好"    # 无头模式，直接提问
 ```
 
-安装器会校验 SHA256SUMS，将二进制安装到 `~/.kimix/bin/kimix`
-（Windows: `%USERPROFILE%\.kimix\bin\kimix.exe`）。
+脚本安装与 npx 安装都校验发布资产的 SHA256SUMS，将二进制安装到
+`~/.kimix/bin/kimix`（Windows: `%USERPROFILE%\.kimix\bin\kimix.exe`）。
 后续版本通过内置自更新器获取（`kimix update`，由 `KIMIX_AUTO_UPDATE` 控制）。
 
 ### 供应商与 API 密钥
@@ -203,9 +232,16 @@ edits files, executes shell commands, searches the web, and manages
 long-running tasks. Use it interactively, headlessly for scripting/CI,
 or embedded in editors via the Agent Client Protocol (ACP).
 
-kimix itself is built with Grok 4.5 and Kimi K3, and battle-tested against
-open models such as DeepSeek, Mimo, and LongCat-2.0 — kimix is already
-used to iterate on kimix.
+kimix itself is built with Grok 4.5 and Kimi K3, optimized with GLM 5.2
+and DeepSeek V4-Flash, and battle-tested against open models such as
+DeepSeek, Mimo, and LongCat-2.0 — kimix is already used to iterate on
+kimix.
+
+Core traits: a 95%+ prompt-cache hit rate in daily use (keeping token
+costs low), strong long-horizon task output, and a low-friction
+full-screen TUI with bilingual (中文 / English) interface and settings.
+Its lean initial context is on par with Pi and ahead of grok-build,
+Claude Code, or Kimi code.
 
 Use cases:
 - 💻 Coding assistance: understand codebases, refactor, fix bugs, write tests
@@ -282,15 +318,41 @@ A systematic performance + security + correctness deep-dive, audited by 4 parall
 
 ### Quick Start
 
+**Option 1 — npx / npm** (no install script; downloads the matching platform
+binary from GitHub Releases and verifies SHA256SUMS on install)
+
 ```sh
-# Install (macOS / Linux)
+npx kimix --version          # one-off: download and run
+npm install -g kimix         # global install
+```
+
+**Option 2 — official installer (macOS / Linux)**
+
+```sh
 curl -fsSL https://raw.githubusercontent.com/taxueseek/kimix/main/install.sh | bash
 ```
 
+**Option 3 — official installer (Windows PowerShell)**
+
 ```powershell
-# Windows PowerShell
 irm https://raw.githubusercontent.com/taxueseek/kimix/main/install.ps1 | iex
 ```
+
+**Option 4 — Homebrew** (self-hosted tap; formula template lives in
+`contrib/homebrew/kimix.rb`)
+
+```sh
+brew tap taxueseek/homebrew-kimix
+brew install kimix
+```
+
+**Option 5 — cargo install** (requires a Rust toolchain + [dotslash](https://dotslash-cli.com))
+
+```sh
+cargo install --git https://github.com/taxueseek/kimix kimix-bin
+```
+
+Once installed:
 
 ```sh
 kimix --version   # kimix 0.1.16 … unofficial Kimi Code CLI community build
@@ -299,10 +361,10 @@ kimix             # start the TUI
 kimix -p "Hello"  # headless mode
 ```
 
-The installer verifies every download against the release's `SHA256SUMS`,
-installs into `~/.kimix/bin/kimix` (`%USERPROFILE%\.kimix\bin\kimix.exe` on
-Windows), and prints the PATH line to add. Later releases arrive through the
-built-in self-updater (`kimix update`, gated by `KIMIX_AUTO_UPDATE`).
+Both the script installers and the npm package verify every download against
+the release's `SHA256SUMS`, and install into `~/.kimix/bin/kimix`
+(`%USERPROFILE%\.kimix\bin\kimix.exe` on Windows). Later releases arrive
+through the built-in self-updater (`kimix update`, gated by `KIMIX_AUTO_UPDATE`).
 
 ### Providers and API Keys
 

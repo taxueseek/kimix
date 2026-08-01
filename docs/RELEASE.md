@@ -39,6 +39,17 @@ self-updater (`kimix-update`), which resolves the same Releases API.
    curl -fsSL https://raw.githubusercontent.com/taxueseek/kimix/main/install.sh | sh
    ~/.kimix/bin/kimix --version
    ```
+6. Publish the npm distribution (optional but recommended; the npm package
+   is a thin downloader, not a second build):
+
+   ```sh
+   cd npm
+   npm publish
+   ```
+
+   `prepublishOnly` runs `scripts/check-version.js`, which fails unless
+   `package.json`'s version matches the GitHub release tag already published
+   in step 4 — so publish npm only after the Release workflow has finished.
 
 ## Invariants to keep in lockstep
 
@@ -54,5 +65,9 @@ self-updater (`kimix-update`), which resolves the same Releases API.
 - Rollbacks: deleting the bad release (or re-pointing "latest") is enough —
   the internal installer treats the Releases API as authoritative and
   downgrades clients on its own.
-- No PyPI/npm packages, ever; in particular never squat the `kimi-cli`
-  package name (PRD F8).
+- No PyPI packages, ever; never squat third-party package names —
+  in particular never publish anything as `kimi-cli`. The `kimix` npm
+  package (step 6) is the one allowed npm distribution: it is a thin
+  postinstall downloader for the same GitHub Release assets, never a
+  separate build. Its version must always stay in lockstep with the
+  workspace version, enforced by `npm/scripts/check-version.js`.
