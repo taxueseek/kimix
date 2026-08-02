@@ -52,6 +52,7 @@ pub mod sessions_cmd;
 pub mod settings;
 pub mod slash;
 pub mod startup;
+pub mod stream_telemetry;
 pub mod tips;
 pub mod wrap_clipboard_image;
 pub mod wrap_cmd;

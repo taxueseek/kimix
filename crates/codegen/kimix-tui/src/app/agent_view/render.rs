@@ -3012,13 +3012,9 @@ impl AgentView {
                 .render(layout.shortcuts, buf);
         } else {
             let mut hints = self.normal_pane_hints(registry);
-            // Live tok/s label for the bottom-left chrome (owned for this frame).
-            let tok_s_label = self
-                .session
-                .tracker
-                .token_rate
-                .label()
-                .map(str::to_owned);
+            // Live tok/s: refresh cache then borrow without per-frame alloc.
+            self.session.tracker.stream_telemetry.tick_label();
+            let tok_s_label = self.session.tracker.stream_telemetry.label_str();
             if in_dashboard_overlay {
                 use crate::views::shortcuts_bar::HintItem;
                 hints.insert(
@@ -3056,7 +3052,7 @@ impl AgentView {
             ShortcutsBar::new(&hints)
                 .compact(5, help_hint)
                 .with_pending(pending_hint)
-                .with_left_text(tok_s_label.as_deref())
+                .with_left_text(tok_s_label)
                 .render(layout.shortcuts, buf);
         }
         let is_plan_viewer = self.is_plan_viewer();
