@@ -132,7 +132,7 @@ impl Theme {
             md_code_bg: rgb(36, 26, 31),
             md_text: FG_DARK,
             link_fg: rgb(220, 150, 190), // #dc96be — soft sakura for dark bg
-            animation: super::tokyonight::MoonAnimation::Standard,
+            animation: super::tokyonight::MoonAnimation::SakuraPetals,
         }
     }
 }

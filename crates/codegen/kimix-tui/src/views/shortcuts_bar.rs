@@ -87,6 +87,8 @@ pub struct ShortcutsBar<'a> {
     hints: &'a [HintItem],
     /// If set, replaces all hints with "press again to {label}".
     pending_confirmation: Option<PendingHint>,
+    /// Left-aligned leading text (e.g. live `42 tok/s`), drawn before hints.
+    left_text: Option<&'a str>,
     /// Right-aligned text (e.g. team name).
     right_text: Option<&'a str>,
     /// Compact mode config: render only the first `max_visible` hints from
@@ -118,6 +120,7 @@ impl<'a> ShortcutsBar<'a> {
         Self {
             hints,
             pending_confirmation: None,
+            left_text: None,
             right_text: None,
             compact: None,
         }
@@ -136,6 +139,12 @@ impl<'a> ShortcutsBar<'a> {
     /// Set the pending confirmation hint (replaces all normal hints).
     pub fn with_pending(mut self, pending: Option<PendingHint>) -> Self {
         self.pending_confirmation = pending;
+        self
+    }
+
+    /// Set left-aligned leading text (e.g. live token throughput).
+    pub fn with_left_text(mut self, text: Option<&'a str>) -> Self {
+        self.left_text = text;
         self
     }
 
@@ -208,6 +217,24 @@ impl Widget for ShortcutsBar<'_> {
             .remove_modifier(Modifier::BOLD);
 
         let mut x = area.x;
+
+        // Leading left text (tok/s) sits in the bottom-left corner.
+        if let Some(left) = self.left_text {
+            let left_style = Style::default()
+                .fg(theme.accent_running)
+                .bg(theme.bg_base)
+                .add_modifier(Modifier::BOLD);
+            let lw = left.width() as u16;
+            if lw > 0 && x + lw <= area.x + area.width {
+                buf.set_span(x, area.y, &Span::styled(left, left_style), lw);
+                x += lw;
+                // Gap before keyboard hints.
+                let gap = 2u16;
+                if x + gap <= area.x + area.width {
+                    x += gap;
+                }
+            }
+        }
 
         // Build the effective hint list (compact-aware).
         let effective = compute_effective_hints(self.hints, self.compact.as_ref());

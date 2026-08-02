@@ -426,6 +426,47 @@ fn moon_cells(size: MoonSize, p: f32) -> Vec<Vec<Option<MoonCell>>> {
         .collect()
 }
 
+/// Quantized lunation frames for the moon raster cache (~96 keys per size).
+fn phase_frame_index(p: f32) -> u32 {
+    let n = (LUNATION_SECS * MOON_FPS).round().max(1.0) as u32;
+    ((p.fract() + 1.0).fract() * n as f32).floor() as u32 % n
+}
+
+/// Cached moon disc raster. Rebuilt only when size or phase frame changes —
+/// spares the welcome screen from full disc rasterization at 12 fps when the
+/// terminator has not advanced a quantized step.
+fn moon_cells_cached(size: MoonSize, p: f32) -> Vec<Vec<Option<MoonCell>>> {
+    use std::cell::RefCell;
+    struct Entry {
+        cols: u16,
+        rows: u16,
+        phase_q: u32,
+        cells: Vec<Vec<Option<MoonCell>>>,
+    }
+    thread_local! {
+        static CACHE: RefCell<Option<Entry>> = const { RefCell::new(None) };
+    }
+    let phase_q = phase_frame_index(p);
+    CACHE.with(|slot| {
+        let mut guard = slot.borrow_mut();
+        if let Some(entry) = guard.as_ref()
+            && entry.cols == size.cols
+            && entry.rows == size.rows
+            && entry.phase_q == phase_q
+        {
+            return entry.cells.clone();
+        }
+        let cells = moon_cells(size, p);
+        *guard = Some(Entry {
+            cols: size.cols,
+            rows: size.rows,
+            phase_q,
+            cells: cells.clone(),
+        });
+        cells
+    })
+}
+
 fn render_into(area: Rect, buf: &mut Buffer, theme: &Theme, size: MoonSize) {
     use crate::theme::tokyonight::MoonAnimation;
 
@@ -497,16 +538,15 @@ fn render_into(area: Rect, buf: &mut Buffer, theme: &Theme, size: MoonSize) {
             (lit, dark, corona)
         }
 
-        // ── Moon Dark: cold silver + stars + 太极 moon dot ──────────
-        //   Also the default for Standard themes.
+        // ── Moon Dark / Standard: cold silver + stars ────────────────
         MoonAnimation::MoonDark | MoonAnimation::Standard => {
             let breathe = 0.6 + 0.15 * (std::f32::consts::TAU * secs / 7.0).sin();
             let lit = blend_color(base, Color::Rgb(180, 200, 230), breathe).unwrap_or(base);
             let dark = blend_color(base, Color::Rgb(30, 35, 50), 0.35).unwrap_or(base);
-            // Twinkling stars scattered around
-            let mut stars: Vec<(u16, u16, Color)> = Vec::new();
+            // Twinkling stars (capped for paint cost on long-lived welcome).
+            let mut stars: Vec<(u16, u16, Color)> = Vec::with_capacity(12);
             let star_seed = (secs * 13.7) as u64;
-            for i in 0..22 {
+            for i in 0..12u64 {
                 let sx = ((star_seed.wrapping_mul(31 + i * 7) as f32 * 0.001).fract()
                     * size.cols as f32) as u16;
                 let sy = ((star_seed.wrapping_mul(53 + i * 11) as f32 * 0.001).fract()
@@ -553,7 +593,7 @@ fn render_into(area: Rect, buf: &mut Buffer, theme: &Theme, size: MoonSize) {
             let lit = blend_color(base, Color::Rgb(50, 140, 210), wave + shimmer).unwrap_or(base);
             let dark = blend_color(base, Color::Rgb(15, 30, 50), 0.4).unwrap_or(base);
             // Wave ripple rows across the moon
-            let mut ripples: Vec<(u16, u16, Color)> = Vec::new();
+            let mut ripples: Vec<(u16, u16, Color)> = Vec::with_capacity(size.rows as usize);
             for row in 0..size.rows {
                 let offset = ((secs * 0.8 + row as f32 * 0.5).sin() * 0.5 + 0.5) as u16;
                 let ripple_alpha = 0.08 + 0.06 * (secs * 2.0 + row as f32).sin();
@@ -565,17 +605,65 @@ fn render_into(area: Rect, buf: &mut Buffer, theme: &Theme, size: MoonSize) {
                 ));
             }
             (lit, dark, ripples)
-        } // ── Ocean Whale: blue whale silhouette + bubbles ─────────
+        }
+
+        // ── Sakura: soft pink bloom + falling petals ────────────────
+        MoonAnimation::SakuraPetals => {
+            let bloom = 0.72 + 0.18 * (std::f32::consts::TAU * secs / 4.0).sin();
+            let lit = blend_color(base, Color::Rgb(242, 160, 192), bloom).unwrap_or(base);
+            let dark = blend_color(base, Color::Rgb(80, 40, 55), 0.4).unwrap_or(base);
+            let mut petals: Vec<(u16, u16, Color)> = Vec::with_capacity(10);
+            for i in 0..10u32 {
+                let fall = (secs * 0.35 + i as f32 * 0.37).fract();
+                let sway = (secs * 1.1 + i as f32 * 1.7).sin() * 0.15;
+                let x = ((0.1 + (i as f32 * 0.09) + sway).rem_euclid(1.0) * size.cols as f32)
+                    as u16;
+                let y = (fall * (size.rows as f32 + 1.0)) as u16;
+                let alpha = (1.0 - fall).max(0.15) * 0.7;
+                if y < size.rows {
+                    petals.push((
+                        x.min(size.cols.saturating_sub(1)),
+                        y,
+                        blend_color(Color::Rgb(0, 0, 0), Color::Rgb(255, 180, 210), alpha)
+                            .unwrap_or(Color::Rgb(0, 0, 0)),
+                    ));
+                }
+            }
+            (lit, dark, petals)
+        }
+
+        // ── Forest: jade breathing + fireflies ──────────────────────
+        MoonAnimation::ForestGlow => {
+            let breathe = 0.62 + 0.2 * (std::f32::consts::TAU * secs / 5.5).sin();
+            let lit = blend_color(base, Color::Rgb(127, 176, 105), breathe).unwrap_or(base);
+            let dark = blend_color(base, Color::Rgb(20, 35, 18), 0.4).unwrap_or(base);
+            let mut fireflies: Vec<(u16, u16, Color)> = Vec::with_capacity(12);
+            for i in 0..12u32 {
+                let orbit = secs * (0.4 + (i % 3) as f32 * 0.12) + i as f32;
+                let x = ((0.5 + 0.42 * orbit.cos()) * size.cols as f32) as u16;
+                let y = ((0.5 + 0.38 * (orbit * 1.3).sin()) * size.rows as f32) as u16;
+                let twinkle = ((secs * 3.2 + i as f32 * 2.1).sin() * 0.5 + 0.5).powi(2);
+                if twinkle > 0.12 && x < size.cols && y < size.rows {
+                    fireflies.push((
+                        x,
+                        y,
+                        blend_color(Color::Rgb(0, 0, 0), Color::Rgb(180, 255, 140), twinkle)
+                            .unwrap_or(Color::Rgb(0, 0, 0)),
+                    ));
+                }
+            }
+            (lit, dark, fireflies)
+        }
     };
 
     // ── Build the logo cell grid ────────────────────────────────────
     // Whale and GrokX use custom shapes; moon themes use circular moon
-    // with 太极 (yinyang) dots embedded.
+    // with 太极 (yinyang) dots embedded. Disc raster is phase-cached.
     let cells: Vec<Vec<Option<MoonCell>>> = match theme.animation {
         MoonAnimation::GrokX => grok_x_cells(size, secs),
         MoonAnimation::OceanWhale => whale_cells(size, secs),
         _ => {
-            let mut mc = moon_cells(size, phase_now());
+            let mut mc = moon_cells_cached(size, phase_now());
             embed_taiji_dots(&mut mc, size, secs);
             mc
         }

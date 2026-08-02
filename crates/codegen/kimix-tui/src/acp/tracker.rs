@@ -212,6 +212,8 @@ pub struct PendingCompaction {
 /// Does nothing else — no UI, no networking, just data transformation.
 #[derive(Debug, Default)]
 pub struct AcpUpdateTracker {
+    /// Live streaming token throughput for the bottom-left `tok/s` readout.
+    pub(crate) token_rate: crate::views::token_rate::TokenRateMeter,
     /// Entry currently receiving AgentMessageChunk deltas.
     /// None between turns or before first message chunk.
     current_agent_msg: Option<EntryId>,
@@ -821,6 +823,12 @@ impl AcpUpdateTracker {
                 {
                     self.pre_create_thinking(scrollback);
                 }
+                if !meta.is_replay {
+                    self.token_rate.on_stream_boundary();
+                }
+            } else if self.last_stream_start_ms.is_none() && !meta.is_replay {
+                // First stream of the turn.
+                self.token_rate.on_stream_boundary();
             }
             self.last_stream_start_ms = Some(new_start);
         }
@@ -893,6 +901,7 @@ impl AcpUpdateTracker {
         self.suppressed_tools.clear();
         self.blocking_waits.clear();
         self.skip_next_skill_body = false;
+        self.token_rate.on_turn_end();
     }
     /// Finish the current thinking block, passing elapsed time to the entry.
     ///
@@ -985,6 +994,7 @@ impl AcpUpdateTracker {
         if meta.is_replay {
             scrollback.push_chunk_to_agent_deferred(id, &text)
         } else {
+            self.token_rate.record_chunk(&text);
             scrollback.push_chunk_to_agent(id, &text)
         }
     }
@@ -1024,6 +1034,7 @@ impl AcpUpdateTracker {
         if meta.is_replay {
             scrollback.push_chunk_to_thinking_deferred(id, text)
         } else {
+            self.token_rate.record_chunk(text);
             scrollback.push_chunk_to_thinking(id, text)
         }
     }

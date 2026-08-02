@@ -132,7 +132,7 @@ impl Theme {
             md_code_bg: rgb(24, 33, 22),
             md_text: FG_DARK,
             link_fg: rgb(150, 200, 160), // #96c8a0 — soft jade for dark bg
-            animation: super::tokyonight::MoonAnimation::Standard,
+            animation: super::tokyonight::MoonAnimation::ForestGlow,
         }
     }
 }

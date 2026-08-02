@@ -158,7 +158,7 @@ pub struct Theme {
 }
 
 /// Animation style for the welcome screen moon logo.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MoonAnimation {
     /// Standard moon rotation (default for most themes)
     Standard,
@@ -172,6 +172,10 @@ pub enum MoonAnimation {
     GrokX,
     /// DeepSeek Blue: whale-shaped ocean wave animation
     OceanWhale,
+    /// Sakura: soft pink glow with falling petal particles
+    SakuraPetals,
+    /// Forest: jade breathing with firefly particles
+    ForestGlow,
 }
 
 impl Theme {

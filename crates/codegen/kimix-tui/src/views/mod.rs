@@ -46,5 +46,6 @@ pub mod suggestion_controller;
 pub mod tasks_pane;
 pub mod timeline;
 pub mod todo_pane;
+pub mod token_rate;
 pub mod turn_status;
 pub mod welcome;
