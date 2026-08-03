@@ -1,0 +1,16 @@
+{
+  "name": "read-offset-limit-relation",
+  "files": {
+    "big.py": "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\n"
+  },
+  "prompt": "big.py has 10 lines (line1 … line10). Use the read_file tool with both offset and limit so you read ONLY lines 3 through 6 inclusive. Then write a file called answer.txt whose entire contents are exactly the first line you read (no extra whitespace or explanation).",
+  "assert": [
+    { "type": "file_exists", "path": "answer.txt" },
+    {
+      "type": "command_succeeds",
+      "cmd": "python3 -c \"d=open('answer.txt').read().strip(); assert d=='line3', repr(d)\""
+    }
+  ],
+  "max_turns": 8,
+  "timeout_sec": 180
+}

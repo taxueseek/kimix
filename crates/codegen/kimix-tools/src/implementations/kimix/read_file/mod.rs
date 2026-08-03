@@ -300,6 +300,13 @@ pub(crate) async fn run_read_file(
     resources: SharedResources,
     streamable_out: Option<&mut bool>,
 ) -> Result<ReadFileOutput, kimix_tool_runtime::ToolError> {
+    // 路径字段反序列化不会因退化 markdown 链接失败；执行前解包。
+    let mut input = input;
+    if let std::borrow::Cow::Owned(clean) =
+        crate::input_repair::sanitize_path_string(&input.path)
+    {
+        input.path = clean;
+    }
     let (cwd, display_cwd, fs, hints_enabled);
     {
         let res = resources.lock().await;

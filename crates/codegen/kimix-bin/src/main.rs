@@ -1237,6 +1237,7 @@ fn main() {
     let result = run_and_shutdown(runtime, async_main(), RUNTIME_SHUTDOWN_GRACE);
     kimix_log::debug_log::flush();
     kimix_sampler::cache_metrics::print_summary();
+    kimix_shell::repair_metrics::flush_summary();
     if let Err(e) = result {
         kimix_tty_utils::restore_native_stderr();
         eprintln!("Error: {e:#}");

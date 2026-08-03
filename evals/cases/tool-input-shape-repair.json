@@ -1,0 +1,17 @@
+{
+  "name": "tool-input-shape-repair",
+  "files": {
+    "names.txt": "alice\nbob\ncarol\n",
+    "report.md": "# Report\n\nPlaceholder.\n"
+  },
+  "prompt": "Read names.txt. Write output.txt containing every name from names.txt, one per line, same order (alice, bob, carol). Do not add extra lines or commentary.",
+  "assert": [
+    { "type": "file_exists", "path": "output.txt" },
+    {
+      "type": "command_succeeds",
+      "cmd": "python3 -c \"d=open('output.txt').read(); assert d.split()==['alice','bob','carol'], repr(d)\""
+    }
+  ],
+  "max_turns": 8,
+  "timeout_sec": 240
+}

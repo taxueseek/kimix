@@ -688,6 +688,8 @@ impl SessionActor {
     ) -> Result<Result<PreparedToolCall, ToolLoop>, acp::Error> {
         let tool_call_id = acp::ToolCallId::new(Arc::from(call.id.clone()));
         let model_id_str = self.current_model_id().await;
+        // 让工具输入修复层遥测带上当前模型维度（进程级缓存，record 时回退）。
+        kimix_tools::input_repair_telemetry::set_current_model(&model_id_str);
         tracing::info!(
             "Model requesting tool: name='{}', call_id='{}'",
             call.function.name,

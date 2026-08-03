@@ -126,10 +126,15 @@ pub struct SearchReplaceTool;
 ///
 /// Concise prompt swapping is done by the caller after this returns.
 pub(crate) async fn run_search_replace(
-    input: SearchReplaceInput,
+    mut input: SearchReplaceInput,
     ctx: &kimix_tool_runtime::ToolCallContext,
     resources: SharedResources,
 ) -> Result<SearchReplaceOutput, kimix_tool_runtime::ToolError> {
+    if let std::borrow::Cow::Owned(clean) =
+        crate::input_repair::sanitize_path_string(&input.file_path)
+    {
+        input.file_path = clean;
+    }
     let cwd_override = ctx
         .extensions
         .get::<kimix_tool_runtime::Cwd>()

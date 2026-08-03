@@ -3,6 +3,7 @@ use crate::{
     implementations::{
         codex, kimix, kimix_concise, kimix_hashline, opencode, skills::types::SkillInfo,
     },
+    input_repair,
     notification::ToolNotificationHandle,
     persistence::ResourcesPersistence,
     reminders::SkillDiscoveryReminder,
@@ -563,6 +564,8 @@ impl ToolRegistryBuilder {
             tool.tool_namespace(),
             kimix_tool_runtime::Tool::id(&tool).as_str()
         );
+        // 修复层遥测需要工具名；insert 会 move name，闭包用 clone。
+        let repair_tool_name = name.clone();
         let namespace = tool.tool_namespace().to_string();
         let id = kimix_tool_runtime::Tool::id(&tool).as_str().to_string();
         let kind = tool.kind();
@@ -592,8 +595,11 @@ impl ToolRegistryBuilder {
                         resources.register_params::<P>();
                     }
                 }),
-                parse_input: Box::new(|json| {
-                    let typed = serde_json::from_value::<T::Args>(json)?;
+                parse_input: Box::new(move |json| {
+                    // validate-then-repair：path-aware 反序列化失败后定点修复。
+                    // 实现见 `input_repair::deserialize_with_repair`（含遥测）。
+                    let (typed, _) =
+                        input_repair::deserialize_with_repair::<T::Args>(json, &repair_tool_name)?;
                     Ok(typed.into())
                 }),
                 register_in_local: Box::new(|lr: &kimix_tool_runtime::LocalRegistry| {

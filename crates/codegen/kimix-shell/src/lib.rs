@@ -9,6 +9,7 @@ pub mod claude_import;
 pub mod claude_import_state;
 pub mod cli_models;
 pub mod config;
+pub mod repair_metrics;
 mod tracing_macros;
 pub use kimix_shell_base::cpu_profile;
 pub use kimix_shell_base::env;
