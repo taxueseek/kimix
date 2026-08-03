@@ -2071,6 +2071,9 @@ impl SessionActor {
         );
         self.signals_handle()
             .record_tool_failure(requested_tool_name);
+        // 失败回流记忆：把失败模式写入记忆并索引，供后续会话 BM25/向量召回。
+        self.record_tool_failure_to_memory(requested_tool_name, &err.to_string())
+            .await;
         let rewriter = self.path_rewriter();
         let err_str = match rewriter.as_ref() {
             Some(rw) => rw.rewrite(&err.to_string()),
@@ -2100,6 +2103,34 @@ impl SessionActor {
         let tool_chat = ConversationItem::tool_result(call_id.to_string(), message);
         crate::session::kimix_recall::push_admitted_tool_result(&self.chat_state_handle, tool_chat);
         vec![]
+    }
+
+    /// Write a tool-failure lesson to memory (best-effort) and reindex it so
+    /// future sessions can recall the failure mode via BM25/vector search.
+    ///
+    /// No-op when memory is disabled (`storage()` returns `None`). Errors are
+    /// logged at debug level and never propagate into the turn loop.
+    async fn record_tool_failure_to_memory(&self, tool_name: &str, error: &str) {
+        let Some(storage) = self.memory.storage() else {
+            return;
+        };
+        match crate::session::memory::hooks::on_tool_failure(
+            &storage,
+            &self.session_info.id.0,
+            tool_name,
+            error,
+        ) {
+            Ok(path) => {
+                self.memory.reindex_and_embed(&path, "tool_failure").await;
+            }
+            Err(e) => {
+                tracing::debug!(
+                    error = %e,
+                    tool = tool_name,
+                    "MEMORY_TOOL_FAILURE_SKIP: lesson write failed"
+                );
+            }
+        }
     }
     async fn send_thought_chunk(&self, text: String, chunk_index: u64) {
         self.send_update(

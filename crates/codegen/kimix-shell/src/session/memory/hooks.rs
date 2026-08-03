@@ -22,8 +22,16 @@
 //!   auto-continue markers are excluded).
 //! - **`save_on_end` config gate:** Skipped when `[memory.session].save_on_end = false`.
 //! - **SIGTERM:** Triggered via `SessionCommand::Shutdown` handler
+use std::path::PathBuf;
+
 use crate::sampling::ConversationItem;
 use crate::session::memory::storage::{MemoryStorage, slugify};
+
+/// Maximum length of the error message embedded in a tool-failure lesson.
+const MAX_LESSON_ERROR_CHARS: usize = 300;
+
+/// Maximum tool-name length in a lesson slug.
+const MAX_LESSON_SLUG_CHARS: usize = 30;
 
 /// Minimum number of *real* user prompts required to save a session summary.
 ///
@@ -50,6 +58,49 @@ pub enum SessionEndResult {
     Written(String),
     /// Hook failed (logged, not fatal).
     Failed(String),
+}
+
+/// Record a tool failure to memory as a structured "lesson" for future recall.
+///
+/// This is the failure-feedback loop: when a tool execution fails (e.g.
+/// `search_replace` anchor miss, bash non-zero exit), the failure mode is
+/// written to the daily session log so a later session doing similar work can
+/// recall it via BM25/vector search and avoid repeating the mistake.
+///
+/// Best-effort and non-blocking: errors are logged and swallowed. No LLM call
+/// is made — the content is a zero-latency structured summary.
+///
+/// Returns the path written (if any), matching [`on_session_end`].
+pub fn on_tool_failure(
+    storage: &MemoryStorage,
+    session_id: &str,
+    tool_name: &str,
+    error_message: &str,
+) -> std::io::Result<PathBuf> {
+    let tool_slug = slugify(tool_name, MAX_LESSON_SLUG_CHARS);
+    let tool_slug = if tool_slug.is_empty() {
+        "tool"
+    } else {
+        &tool_slug
+    };
+    let error_preview: String = error_message
+        .chars()
+        .take(MAX_LESSON_ERROR_CHARS)
+        .collect();
+
+    let mut content = String::new();
+    content.push_str("## Tool Failure Lesson\n\n");
+    content.push_str(&format!(
+        "- **Tool:** `{tool_name}`\n- **Session:** `{session_id}`\n- **Error:** {error_preview}\n"
+    ));
+    content.push_str(
+        "- **Lesson:** this tool call failed; before retrying, verify the current file/content \
+         state (e.g. re-read the file, confirm the anchor string, check the command exit).\n",
+    );
+    content.push('\n');
+
+    let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    storage.write_daily_log(&date, tool_slug, session_id, &content, true)
 }
 
 /// Run the session end hook — save a structured metadata summary to memory.
@@ -643,5 +694,65 @@ mod tests {
             !summary.contains("## Shell Commands"),
             "commands section must not appear"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tool-failure lesson tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_on_tool_failure_writes_lesson() {
+        let tmp = TempDir::new().unwrap();
+        let storage = test_storage(&tmp);
+        storage.ensure_initialized().unwrap();
+
+        let path = on_tool_failure(
+            &storage,
+            "sess-tool-1234",
+            "search_replace",
+            "The string to replace was not found in the file",
+        )
+        .expect("lesson write should succeed");
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("## Tool Failure Lesson"));
+        assert!(content.contains("search_replace"));
+        assert!(content.contains("not found in the file"));
+        assert!(content.contains("before retrying"));
+    }
+
+    #[test]
+    fn test_on_tool_failure_appends_on_same_tool() {
+        let tmp = TempDir::new().unwrap();
+        let storage = test_storage(&tmp);
+        storage.ensure_initialized().unwrap();
+
+        on_tool_failure(&storage, "sess-tool-1234", "bash", "exit code 2").unwrap();
+        on_tool_failure(&storage, "sess-tool-1234", "bash", "exit code 127").unwrap();
+
+        let files = storage.list_memory_files().unwrap();
+        let session_logs: Vec<_> = files
+            .iter()
+            .filter(|f| f.components().any(|c| c.as_os_str() == "sessions"))
+            .collect();
+        assert_eq!(session_logs.len(), 1, "same-tool failures share one log file");
+
+        let content = std::fs::read_to_string(session_logs[0]).unwrap();
+        assert!(content.contains("exit code 2"));
+        assert!(content.contains("exit code 127"));
+    }
+
+    #[test]
+    fn test_on_tool_failure_truncates_long_errors() {
+        let tmp = TempDir::new().unwrap();
+        let storage = test_storage(&tmp);
+        storage.ensure_initialized().unwrap();
+
+        let long_err = "x".repeat(10_000);
+        let path = on_tool_failure(&storage, "sess-tool-1234", "read_file", &long_err).unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        // Tool name + template text present, but not the full 10k error.
+        assert!(content.contains("read_file"));
+        assert!(content.len() < 2_000, "lesson must stay bounded");
     }
 }
