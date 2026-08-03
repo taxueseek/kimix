@@ -4,6 +4,7 @@
 //! instructions, permissions, hooks, skills, agents, plugins, MCP servers,
 //! LSP config, and config.toml sources. Supports `--json` for machine output.
 mod compat;
+mod memtrace;
 
 pub use compat::{CompatEntryStatus, CompatSource, ExternalCompatEntry, ExternalCompatReport};
 use compat::{
@@ -74,6 +75,10 @@ pub struct InspectReport {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub model_override_warnings:
         Vec<crate::agent::config_model_override_parse::ModelOverrideWarning>,
+    /// Per-process memory trace summaries from `<kimix-home>/memtrace/`,
+    /// when any trace files exist.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memtrace: Option<memtrace::MemtraceSummary>,
 }
 
 #[derive(Debug, Serialize)]
@@ -388,6 +393,7 @@ async fn build_report(cwd: &Path) -> InspectReport {
         config_sources: configs,
         external_compat,
         model_override_warnings,
+        memtrace: memtrace::summarize(&memtrace::default_memtrace_dir()),
     }
 }
 
@@ -1460,6 +1466,56 @@ fn print_human(r: &InspectReport) {
     );
 
     print!("{}", render_harness_compatibility(&r.external_compat));
+
+    if let Some(ref memtrace) = r.memtrace {
+        print_memtrace(memtrace);
+    }
+}
+
+/// Human rendering of the per-process memtrace summaries.
+fn print_memtrace(summary: &memtrace::MemtraceSummary) {
+    use kimix_tools::util::truncate::format_bytes;
+    println!();
+    println!("  Memory traces");
+    println!("  {TREE} dir: {}", summary.directory);
+    for f in &summary.files {
+        let pid = f.pid.map(|p| p.to_string()).unwrap_or_else(|| "-".into());
+        let mut event_parts = Vec::new();
+        if f.samples > 0 {
+            event_parts.push(format!("{} samples", f.samples));
+        }
+        if f.purges > 0 {
+            event_parts.push(format!("{} purges", f.purges));
+        }
+        if f.thresholds > 0 {
+            event_parts.push(format!("{} thresholds", f.thresholds));
+        }
+        let events = if event_parts.is_empty() {
+            "no samples".to_owned()
+        } else {
+            event_parts.join(", ")
+        };
+        let peak = match (f.peak_footprint_bytes, f.peak_rss_bytes) {
+            (Some(fp), Some(rss)) => format!(
+                "peak footprint {} / rss {}",
+                format_bytes(fp as usize),
+                format_bytes(rss as usize)
+            ),
+            (Some(fp), None) => format!("peak footprint {}", format_bytes(fp as usize)),
+            (None, Some(rss)) => format!("peak rss {}", format_bytes(rss as usize)),
+            (None, None) => "no gauges".into(),
+        };
+        let latest = f
+            .latest_footprint_bytes
+            .or(f.latest_rss_bytes)
+            .map(|b| format!(", now {}", format_bytes(b as usize)))
+            .unwrap_or_default();
+        println!(
+            "  {TREE} {} \u{2014} pid {pid} \u{00b7} {events}\n      {peak}{latest} \u{00b7} {} on disk",
+            f.file,
+            format_bytes(f.file_size_bytes as usize)
+        );
+    }
 }
 
 #[cfg(test)]

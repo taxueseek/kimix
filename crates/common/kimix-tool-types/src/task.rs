@@ -1153,6 +1153,7 @@ mod tests {
             cwd: None,
             model: None,
             task_id: None,
+            count: None,
         };
         let value = serde_json::to_value(&input).unwrap();
         assert!(value.get("model").is_none());

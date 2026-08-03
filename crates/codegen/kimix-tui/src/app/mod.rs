@@ -680,6 +680,35 @@ fn drain_pending_events_with_timeout(timeout: std::time::Duration) {
         }
     }
 }
+/// Drain pending terminal input events with a hard wall-clock budget.
+///
+/// crossterm's unix event source can busy-loop forever (holding its global
+/// reader mutex) once the controlling pty dies: reads on a closed pty slave
+/// return `EIO` (macOS) or `EOF`, and neither case terminates its internal
+/// read loop, so `event::poll`/`event::read` never return. Teardown must not
+/// hang on that — the drain runs on a helper thread and is abandoned after
+/// `budget` elapses. The process is exiting, so an abandoned thread dies
+/// with it; the only cost in the pathological case is a late `warn!`.
+fn drain_pending_events_bounded(budget: std::time::Duration) {
+    let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+    let handle = std::thread::Builder::new()
+        .name("kimix-teardown-drain".into())
+        .spawn(move || {
+            drain_pending_events_with_timeout(std::time::Duration::from_millis(10));
+            let _ = done_tx.send(());
+        });
+    match handle {
+        Ok(handle) => {
+            if done_rx.recv_timeout(budget).is_err() && !handle.is_finished() {
+                tracing::warn!(
+                    "terminal event drain exceeded {:?} budget; abandoning (dead controlling tty?)",
+                    budget
+                );
+            }
+        }
+        Err(err) => tracing::warn!(error = %err, "failed to spawn teardown event drain"),
+    }
+}
 /// Set the console output code page to UTF-8 and enable
 /// `ENABLE_VIRTUAL_TERMINAL_PROCESSING` on the stderr console handle.
 ///
@@ -1181,7 +1210,9 @@ fn restore_terminal(
     let inline_cursor_row = (!mode.is_fullscreen()).then(|| terminal.viewport_area().bottom());
     drain_writer_thread_before_teardown(terminal, writer_thread);
     emit_terminal_teardown_sequences(mode, inline_cursor_row);
-    drain_pending_events_with_timeout(std::time::Duration::from_millis(10));
+    // Bounded: a dead controlling pty makes crossterm's event poll spin
+    // forever (EIO/EOF read in its unix event source); teardown must exit.
+    drain_pending_events_bounded(std::time::Duration::from_millis(100));
     let _ = terminal::disable_raw_mode();
     signal_handler::mark_restored();
     kimix_crash_handler::disable_terminal_escape_restore();
