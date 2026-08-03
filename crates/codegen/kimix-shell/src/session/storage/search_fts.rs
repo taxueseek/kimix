@@ -36,6 +36,15 @@ pub struct SessionDoc {
     /// Used for delta indexing: on subsequent updates, only bytes after this
     /// offset are parsed and merged with existing content.
     pub last_indexed_offset: u64,
+    /// Unix seconds of `updates.jsonl` mtime at index time.
+    ///
+    /// Together with [`SessionDoc::file_size`] forms the cheap unchanged
+    /// probe used by bootstrap: `updates.jsonl` is append-only, so an
+    /// identical (mtime, size) pair means no new bytes — the full content
+    /// read can be skipped without computing a content hash.
+    pub file_mtime: i64,
+    /// Size of `updates.jsonl` in bytes at index time.
+    pub file_size: u64,
 }
 
 /// State of a previously indexed session, returned by
@@ -215,6 +224,25 @@ impl SessionSearchIndex {
             }
         }
 
+        // Add file_mtime + file_size columns (idempotent migration) — cheap
+        // unchanged probes for bootstrap. Both default to 0 so pre-existing
+        // rows (and rows written by older binaries) never match an on-disk
+        // stat and are re-indexed once on the next bootstrap.
+        for stmt in [
+            "ALTER TABLE session_docs ADD COLUMN file_mtime INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE session_docs ADD COLUMN file_size INTEGER NOT NULL DEFAULT 0",
+        ] {
+            match db.execute(stmt, []) {
+                Ok(_) => {}
+                Err(e) => {
+                    let msg = e.to_string();
+                    if !msg.contains("duplicate column") {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+
         // Persist schema version — but never regress the row a newer
         // generation owns (it would re-trigger that binary's upgrade drop).
         if stored != Some(current) && !owned_by_newer {
@@ -234,15 +262,17 @@ impl SessionSearchIndex {
     /// automatically.
     pub fn upsert_doc(&self, doc: &SessionDoc) -> Result<(), rusqlite::Error> {
         self.db.execute(
-            "INSERT INTO session_docs(session_id, cwd, updated_at, title, content, content_hash, last_indexed_offset)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "INSERT INTO session_docs(session_id, cwd, updated_at, title, content, content_hash, last_indexed_offset, file_mtime, file_size)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT(session_id) DO UPDATE SET
                  cwd = excluded.cwd,
                  updated_at = excluded.updated_at,
                  title = excluded.title,
                  content = excluded.content,
                  content_hash = excluded.content_hash,
-                 last_indexed_offset = excluded.last_indexed_offset",
+                 last_indexed_offset = excluded.last_indexed_offset,
+                 file_mtime = excluded.file_mtime,
+                 file_size = excluded.file_size",
             params![
                 doc.session_id,
                 doc.cwd,
@@ -250,7 +280,9 @@ impl SessionSearchIndex {
                 doc.title,
                 doc.content,
                 doc.content_hash,
-                doc.last_indexed_offset as i64
+                doc.last_indexed_offset as i64,
+                doc.file_mtime,
+                doc.file_size as i64
             ],
         )?;
         Ok(())
@@ -263,8 +295,8 @@ impl SessionSearchIndex {
     /// written between the check and the insert.
     pub fn insert_doc_if_absent(&self, doc: &SessionDoc) -> Result<(), rusqlite::Error> {
         self.db.execute(
-            "INSERT INTO session_docs(session_id, cwd, updated_at, title, content, content_hash, last_indexed_offset)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "INSERT INTO session_docs(session_id, cwd, updated_at, title, content, content_hash, last_indexed_offset, file_mtime, file_size)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT(session_id) DO NOTHING",
             params![
                 doc.session_id,
@@ -273,7 +305,9 @@ impl SessionSearchIndex {
                 doc.title,
                 doc.content,
                 doc.content_hash,
-                doc.last_indexed_offset as i64
+                doc.last_indexed_offset as i64,
+                doc.file_mtime,
+                doc.file_size as i64
             ],
         )?;
         Ok(())
@@ -297,6 +331,30 @@ impl SessionSearchIndex {
                 "SELECT content_hash FROM session_docs WHERE session_id = ?1",
                 params![session_id],
                 |row| row.get(0),
+            )
+            .optional()
+    }
+
+    /// Return the stored `(file_mtime, file_size)` probe for a session, if any.
+    ///
+    /// Bootstrap compares these against a fresh stat of `updates.jsonl`:
+    /// when both match, the file is byte-identical (append-only log) and the
+    /// full content read can be skipped. Rows written by older binaries or
+    /// absent rows return `Ok(None)` — callers must then fall through to a
+    /// full read + content-hash compare.
+    pub fn get_index_metadata(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<(i64, u64)>, rusqlite::Error> {
+        self.db
+            .query_row(
+                "SELECT file_mtime, file_size FROM session_docs WHERE session_id = ?1",
+                params![session_id],
+                |row| {
+                    let mtime: i64 = row.get(0)?;
+                    let size: i64 = row.get(1)?;
+                    Ok((mtime, size.max(0) as u64))
+                },
             )
             .optional()
     }
@@ -335,6 +393,24 @@ impl SessionSearchIndex {
         self.db.execute(
             "UPDATE session_docs SET last_indexed_offset = ?2 WHERE session_id = ?1",
             params![session_id, offset as i64],
+        )?;
+        Ok(())
+    }
+
+    /// Refresh the `(file_mtime, file_size)` probe without touching content
+    /// or hash (no FTS triggers fire). Called on the content-hash-unchanged
+    /// path so a session whose bytes were re-read but matched still records
+    /// fresh metadata — otherwise the mtime+size probe could never match and
+    /// bootstrap would re-read every session forever.
+    pub fn update_index_metadata(
+        &self,
+        session_id: &str,
+        mtime: i64,
+        size: u64,
+    ) -> Result<(), rusqlite::Error> {
+        self.db.execute(
+            "UPDATE session_docs SET file_mtime = ?2, file_size = ?3 WHERE session_id = ?1",
+            params![session_id, mtime, size as i64],
         )?;
         Ok(())
     }
@@ -573,6 +649,8 @@ mod tests {
             content: content.to_string(),
             content_hash: blake3::hash(content.as_bytes()).to_hex().to_string(),
             last_indexed_offset: 0,
+            file_mtime: 0,
+            file_size: 0,
         }
     }
 
@@ -585,6 +663,38 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let _i1 = open(&tmp);
         let _i2 = open(&tmp);
+    }
+
+    /// (file_mtime, file_size) probes must round-trip through upsert and
+    /// survive a reopen (the ALTER migrations are idempotent), and absent
+    /// rows must read back as `None`.
+    #[test]
+    fn test_index_metadata_roundtrip_survives_reopen() {
+        let tmp = TempDir::new().unwrap();
+        let db_path = tmp.path().join("session_search.sqlite");
+        {
+            let index = SessionSearchIndex::open_or_create(&db_path).unwrap();
+            let mut doc = test_doc("m1", "title", "content");
+            doc.file_mtime = 1_700_000_000;
+            doc.file_size = 42;
+            index.upsert_doc(&doc).unwrap();
+            assert_eq!(
+                index.get_index_metadata("m1").unwrap(),
+                Some((1_700_000_000, 42))
+            );
+            assert_eq!(index.get_index_metadata("missing").unwrap(), None);
+        }
+        // Reopen: columns persist (idempotent ALTER), metadata intact.
+        let index = SessionSearchIndex::open_or_create(&db_path).unwrap();
+        assert_eq!(
+            index.get_index_metadata("m1").unwrap(),
+            Some((1_700_000_000, 42))
+        );
+        // Rows written without metadata default to 0s — a fresh stat of a
+        // real file will never match them, forcing a full re-index once.
+        let doc2 = test_doc("m2", "title2", "content2");
+        index.upsert_doc(&doc2).unwrap();
+        assert_eq!(index.get_index_metadata("m2").unwrap(), Some((0, 0)));
     }
 
     fn journal_mode(index: &SessionSearchIndex) -> String {

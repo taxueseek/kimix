@@ -78,6 +78,28 @@ fn should_skip_session(updates_path: &Path, max_size: u64) -> bool {
     }
 }
 
+/// Cheap unchanged probe: `(mtime_secs, size)` of `updates.jsonl`.
+///
+/// `updates.jsonl` is append-only, so a stored (mtime, size) pair that still
+/// matches the file means no new bytes were written — bootstrap can skip the
+/// full content read without computing a content hash. `Ok(None)` when the
+/// file is absent (callers treat it as no content). mtime falling back to 0
+/// (pre-epoch / unreadable) makes the probe never match, forcing a re-read.
+fn file_mtime_size(updates_path: &Path) -> io::Result<Option<(i64, u64)>> {
+    let meta = match std::fs::metadata(updates_path) {
+        Ok(m) => m,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    Ok(Some((mtime, meta.len())))
+}
+
 /// Internal search request (deserialized from the ACP extension params).
 #[derive(Debug, Clone)]
 pub struct SessionSearchRequest {
@@ -512,29 +534,70 @@ async fn upsert_session(
     storage: &dyn StorageAdapter,
     info: &Info,
 ) -> io::Result<UpsertOutcome> {
-    // Single-pass direct file I/O: bypass StorageAdapter and open updates.jsonl
-    // once, extracting prompts, assistant text, and tool metadata in one pass.
-    // Reduces I/O by 3x vs the old 3-call pattern.
-    let (content, bytes_read) = if let Some(updates_path) = storage.updates_file_path(info) {
-        tokio::task::spawn_blocking(move || {
-            collect_all_indexable_content_single_pass(&updates_path)
-        })
-        .await
-        .map_err(io::Error::other)??
-    } else {
+    let Some(updates_path) = storage.updates_file_path(info) else {
         // Storage backend doesn't expose file paths — no content to index
         return Ok(UpsertOutcome::NoContent);
     };
-    let doc = build_session_doc(summary, content, bytes_read);
+
+    // Cheap unchanged probe: same (mtime, size) as last indexed ⇒ no new
+    // bytes (append-only log) ⇒ skip the full content read entirely.
+    let (file_mtime, file_size) = file_mtime_size(&updates_path)?.unwrap_or((0, 0));
+    let session_id = summary.info.id.to_string();
+    let db_path = search_db_path(root_dir);
+    let metadata_match = tokio::task::spawn_blocking({
+        let db_path = db_path.clone();
+        move || -> io::Result<bool> {
+            let index = SessionSearchIndex::open_or_create(&db_path).map_err(sqlite_to_io_error)?;
+            let unchanged = match index
+                .get_index_metadata(&session_id)
+                .map_err(sqlite_to_io_error)?
+            {
+                Some((mtime, size)) if mtime == file_mtime && size == file_size => true,
+                _ => false,
+            };
+            if unchanged {
+                tracing::debug!(
+                    session_id = %session_id,
+                    file_mtime = file_mtime,
+                    file_size = file_size,
+                    "search upsert: unchanged (mtime+size match), skipped content read"
+                );
+            }
+            Ok(unchanged)
+        }
+    })
+    .await
+    .map_err(io::Error::other)??;
+
+    if metadata_match {
+        return Ok(UpsertOutcome::Unchanged { bytes_read: 0 });
+    }
+
+    // Single-pass direct file I/O: bypass StorageAdapter and open updates.jsonl
+    // once, extracting prompts, assistant text, and tool metadata in one pass.
+    // Reduces I/O by 3x vs the old 3-call pattern.
+    let (content, bytes_read) = tokio::task::spawn_blocking(move || {
+        collect_all_indexable_content_single_pass(&updates_path)
+    })
+    .await
+    .map_err(io::Error::other)??;
+    let doc = build_session_doc(summary, content, bytes_read, file_mtime, file_size);
     let db_path = search_db_path(root_dir);
 
     tokio::task::spawn_blocking(move || {
         let index = SessionSearchIndex::open_or_create(&db_path).map_err(sqlite_to_io_error)?;
 
-        // Skip if content hasn't changed
+        // Content-hash compare still guards the rare mtime/size collision
+        // (file touched in place without new bytes). On a hash match the
+        // metadata must still be refreshed — otherwise pre-existing rows
+        // (written before the probe existed) would keep (0,0) probes and
+        // the mtime+size skip could never fire on later bootstraps.
         if let Ok(Some(existing_hash)) = index.get_content_hash(&doc.session_id)
             && existing_hash == doc.content_hash
         {
+            index
+                .update_index_metadata(&doc.session_id, doc.file_mtime, doc.file_size)
+                .map_err(sqlite_to_io_error)?;
             return Ok(UpsertOutcome::Unchanged { bytes_read });
         }
 
@@ -631,7 +694,8 @@ async fn reindex_all(root_dir: &Path, storage: &dyn StorageAdapter) -> io::Resul
             if let Some(ref path) = updates_path
                 && should_skip_session(path, max_file_size)
             {
-                let file_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+                let (file_mtime, file_size) =
+                    file_mtime_size(path).ok().flatten().unwrap_or((0, 0));
                 tracing::warn!(
                     session_id = %session_id,
                     file_size = file_size,
@@ -640,7 +704,10 @@ async fn reindex_all(root_dir: &Path, storage: &dyn StorageAdapter) -> io::Resul
                 );
                 // Insert a title-only placeholder so title search still works;
                 // insert-if-absent so an existing (fuller) row is never touched.
-                let doc = build_session_doc(&summary, String::new(), 0);
+                // The real (mtime, size) is recorded so a later bootstrap whose
+                // file has grown again still re-checks rather than matching a
+                // stale zeroed probe.
+                let doc = build_session_doc(&summary, String::new(), 0, file_mtime, file_size);
                 let db_path = search_db_path(&root);
                 let title_only = tokio::task::spawn_blocking(move || {
                     SessionSearchIndex::open_or_create(&db_path)
@@ -664,22 +731,53 @@ async fn reindex_all(root_dir: &Path, storage: &dyn StorageAdapter) -> io::Resul
             // and root — the outer block retains session_id and progress
             // for post-timeout error reporting.
             match tokio::time::timeout(timeout_dur, async move {
-                // Collect content via spawn_blocking (single-pass I/O)
-                let (content, bytes_read) = if let Some(path) = updates_path {
-                    match tokio::task::spawn_blocking(move || {
-                        collect_all_indexable_content_single_pass(&path)
-                    })
-                    .await
-                    {
-                        Ok(Ok(result)) => result,
-                        Ok(Err(e)) => return Err(e),
-                        Err(e) => return Err(io::Error::other(e)),
-                    }
-                } else {
+                let Some(path) = updates_path else {
                     return Ok(UpsertOutcome::NoContent);
                 };
 
-                let doc = build_session_doc(&summary, content, bytes_read);
+                // Cheap unchanged probe before any file read: same (mtime,
+                // size) as last indexed ⇒ append-only log has no new bytes
+                // ⇒ skip the full content parse — the dominant bootstrap
+                // cost for steady-state sessions.
+                let (file_mtime, file_size) = file_mtime_size(&path)?.unwrap_or((0, 0));
+                let session_id = summary.info.id.to_string();
+                let db_path = search_db_path(&root);
+                let metadata_match = tokio::task::spawn_blocking({
+                    let db_path = db_path.clone();
+                    move || -> io::Result<bool> {
+                        let index = SessionSearchIndex::open_or_create(&db_path)
+                            .map_err(sqlite_to_io_error)?;
+                        Ok(
+                            match index
+                                .get_index_metadata(&session_id)
+                                .map_err(sqlite_to_io_error)?
+                            {
+                                Some((mtime, size)) if mtime == file_mtime && size == file_size => {
+                                    true
+                                }
+                                _ => false,
+                            },
+                        )
+                    }
+                })
+                .await
+                .map_err(io::Error::other)??;
+                if metadata_match {
+                    return Ok(UpsertOutcome::Unchanged { bytes_read: 0 });
+                }
+
+                // Collect content via spawn_blocking (single-pass I/O)
+                let (content, bytes_read) = match tokio::task::spawn_blocking(move || {
+                    collect_all_indexable_content_single_pass(&path)
+                })
+                .await
+                {
+                    Ok(Ok(result)) => result,
+                    Ok(Err(e)) => return Err(e),
+                    Err(e) => return Err(io::Error::other(e)),
+                };
+
+                let doc = build_session_doc(&summary, content, bytes_read, file_mtime, file_size);
                 let db_path = search_db_path(&root);
 
                 // Each task opens its own SessionSearchIndex connection.
@@ -690,6 +788,11 @@ async fn reindex_all(root_dir: &Path, storage: &dyn StorageAdapter) -> io::Resul
                     if let Ok(Some(existing_hash)) = index.get_content_hash(&doc.session_id)
                         && existing_hash == doc.content_hash
                     {
+                        // Refresh the probe so the next bootstrap can skip
+                        // via mtime+size (see upsert_session for rationale).
+                        index
+                            .update_index_metadata(&doc.session_id, doc.file_mtime, doc.file_size)
+                            .map_err(sqlite_to_io_error)?;
                         return Ok(UpsertOutcome::Unchanged { bytes_read });
                     }
                     index.upsert_doc(&doc).map_err(sqlite_to_io_error)?;
@@ -1262,7 +1365,13 @@ fn collect_delta_content(updates_path: &Path, offset: u64) -> io::Result<DeltaRe
     Ok(DeltaResult::Content { text, file_size })
 }
 
-fn build_session_doc(summary: &Summary, content: String, last_indexed_offset: u64) -> SessionDoc {
+fn build_session_doc(
+    summary: &Summary,
+    content: String,
+    last_indexed_offset: u64,
+    file_mtime: i64,
+    file_size: u64,
+) -> SessionDoc {
     let title = summary.display_title().to_owned();
 
     let mut hasher = blake3::Hasher::new();
@@ -1279,6 +1388,8 @@ fn build_session_doc(summary: &Summary, content: String, last_indexed_offset: u6
         content,
         content_hash,
         last_indexed_offset,
+        file_mtime,
+        file_size,
     }
 }
 
@@ -1357,14 +1468,14 @@ mod tests {
     fn test_build_session_doc_hashes_content() {
         let summary = test_summary("test-session", "/workspace", "My session title");
 
-        let doc = build_session_doc(&summary, "prompt text".to_string(), 0);
+        let doc = build_session_doc(&summary, "prompt text".to_string(), 0, 0, 0);
         assert_eq!(doc.session_id, "test-session");
         assert_eq!(doc.title, "My session title");
         assert_eq!(doc.content, "prompt text");
         assert!(!doc.content_hash.is_empty());
 
         // Same content + same title → same hash
-        let doc2 = build_session_doc(&summary, "prompt text".to_string(), 0);
+        let doc2 = build_session_doc(&summary, "prompt text".to_string(), 0, 0, 0);
         assert_eq!(doc.content_hash, doc2.content_hash);
     }
 
@@ -1673,8 +1784,8 @@ mod tests {
         let new = test_summary("s1", "/workspace", "New title");
         let content = "same prompt text".to_string();
 
-        let doc_old = build_session_doc(&old, content.clone(), 0);
-        let doc_new = build_session_doc(&new, content, 0);
+        let doc_old = build_session_doc(&old, content.clone(), 0, 0, 0);
+        let doc_new = build_session_doc(&new, content, 0, 0, 0);
 
         assert_ne!(
             doc_old.content_hash, doc_new.content_hash,
@@ -1686,11 +1797,11 @@ mod tests {
     fn test_build_session_doc_prefers_generated_title() {
         let mut summary = test_summary("s1", "/workspace", "session summary");
         summary.generated_title = Some("Generated Title".to_string());
-        let doc = build_session_doc(&summary, "content".to_string(), 0);
+        let doc = build_session_doc(&summary, "content".to_string(), 0, 0, 0);
         assert_eq!(doc.title, "Generated Title");
 
         summary.generated_title = Some(String::new());
-        let doc2 = build_session_doc(&summary, "content".to_string(), 0);
+        let doc2 = build_session_doc(&summary, "content".to_string(), 0, 0, 0);
         assert_eq!(doc2.title, "session summary");
     }
 
@@ -2042,7 +2153,7 @@ mod tests {
         let db_path = search_db_path(tmp.path());
 
         let summary = test_summary("stub", "/ws", "");
-        let stub = build_session_doc(&summary, String::new(), 0);
+        let stub = build_session_doc(&summary, String::new(), 0, 0, 0);
         {
             let index = SessionSearchIndex::open_or_create(&db_path).unwrap();
             index.upsert_doc(&stub).unwrap();
@@ -2062,6 +2173,132 @@ mod tests {
             index.get_content_hash("stub").unwrap(),
             None,
             "the upgrade drop must clear stub rows so their stale hashes cannot block re-indexing"
+        );
+    }
+
+    // ── mtime+size unchanged probe tests ───────────────────────────────────
+
+    #[test]
+    fn test_file_mtime_size_probe_reports_mtime_and_size() {
+        let lines = vec![acp_update(
+            r#"{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"probe"}}"#,
+        )];
+        let f = write_updates_jsonl(&lines);
+        let (mtime, size) = file_mtime_size(f.path()).unwrap().unwrap();
+        assert!(mtime > 0, "mtime must be a real unix timestamp");
+        assert_eq!(size, std::fs::metadata(f.path()).unwrap().len());
+        assert!(size > 0);
+        // Absent file → None (callers treat as no content).
+        assert!(
+            file_mtime_size(Path::new("/nonexistent/updates.jsonl"))
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    /// End-to-end: an unchanged `updates.jsonl` (same mtime + size) must be
+    /// skipped without any content read (`bytes_read == 0`), and appending a
+    /// new prompt must flip the probe so the content is re-read and re-indexed.
+    #[tokio::test]
+    async fn test_upsert_skips_unchanged_content_via_mtime_size() {
+        use std::io::Write as _;
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        let storage: Box<dyn StorageAdapter> = Box::new(
+            crate::session::storage::jsonl::JsonlStorageAdapter::with_root(root.to_path_buf()),
+        );
+        let info = Info {
+            id: acp::SessionId::new("sid-mtime-1"),
+            cwd: "/ws".to_string(),
+        };
+        let summary = test_summary("sid-mtime-1", "/ws", "Title");
+
+        let updates_path = storage.updates_file_path(&info).unwrap();
+        std::fs::create_dir_all(updates_path.parent().unwrap()).unwrap();
+        let mut f = std::fs::File::create(&updates_path).unwrap();
+        writeln!(
+            f,
+            "{}",
+            acp_update(
+                r#"{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"hello"}}"#
+            )
+        )
+        .unwrap();
+        f.sync_all().unwrap();
+        drop(f);
+
+        // Pass 1: fresh session → full read + index.
+        let out1 = upsert_session(root, &summary, storage.as_ref(), &info)
+            .await
+            .unwrap();
+        assert!(
+            matches!(out1, UpsertOutcome::Indexed { bytes_read } if bytes_read > 0),
+            "first pass must read and index: {out1:?}"
+        );
+
+        // Pass 2: byte-identical file → mtime+size match → no content read.
+        let out2 = upsert_session(root, &summary, storage.as_ref(), &info)
+            .await
+            .unwrap();
+        assert!(
+            matches!(out2, UpsertOutcome::Unchanged { bytes_read: 0 }),
+            "unchanged session must skip the full content read: {out2:?}"
+        );
+
+        // Pass 3: append a prompt → size + mtime change → re-read + re-index.
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&updates_path)
+            .unwrap();
+        writeln!(
+            f,
+            "{}",
+            acp_update(
+                r#"{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"world"}}"#
+            )
+        )
+        .unwrap();
+        f.sync_all().unwrap();
+        drop(f);
+
+        let out3 = upsert_session(root, &summary, storage.as_ref(), &info)
+            .await
+            .unwrap();
+        assert!(
+            matches!(out3, UpsertOutcome::Indexed { bytes_read } if bytes_read > 0),
+            "appended content must be re-read and re-indexed: {out3:?}"
+        );
+
+        // Pass 4: stable again → skip again.
+        let out4 = upsert_session(root, &summary, storage.as_ref(), &info)
+            .await
+            .unwrap();
+        assert!(
+            matches!(out4, UpsertOutcome::Unchanged { bytes_read: 0 }),
+            "steady state must skip again: {out4:?}"
+        );
+
+        // Transition: simulate a row written by an older binary — content
+        // hash present but probe zeroed. The hash-match pass must re-read
+        // and REFRESH the probe; the following pass then skips via mtime+size.
+        SessionSearchIndex::open_or_create(&search_db_path(root))
+            .unwrap()
+            .update_index_metadata("sid-mtime-1", 0, 0)
+            .unwrap();
+        let out5 = upsert_session(root, &summary, storage.as_ref(), &info)
+            .await
+            .unwrap();
+        assert!(
+            matches!(out5, UpsertOutcome::Unchanged { bytes_read } if bytes_read > 0),
+            "hash-match pass must re-read and refresh the probe: {out5:?}"
+        );
+        let out6 = upsert_session(root, &summary, storage.as_ref(), &info)
+            .await
+            .unwrap();
+        assert!(
+            matches!(out6, UpsertOutcome::Unchanged { bytes_read: 0 }),
+            "refreshed probe must enable the mtime+size skip: {out6:?}"
         );
     }
 
