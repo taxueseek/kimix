@@ -11,3 +11,8 @@ releases/kigi-v*
 
 # bench artifacts (regenerable, kept on disk only)
 docs/bench-results/
+
+# python eval harness artifacts
+evals/__pycache__/
+evals/evals/
+**/__pycache__/

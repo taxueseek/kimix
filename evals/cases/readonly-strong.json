@@ -1,0 +1,16 @@
+{
+  "name": "readonly-strong",
+  "files": {
+    "src/main.py": "from src.auth import login\nfrom src.db import connect\n\ndef main():\n    conn = connect()\n    login(conn, \"admin\", \"secret\")\n\nif __name__ == \"__main__\":\n    main()\n",
+    "src/auth.py": "def login(conn, user, password):\n    return conn.authenticate(user, password)\n",
+    "src/db.py": "def connect():\n    return \"fake-conn\"\n"
+  },
+  "prompt": "Answer this question ONLY, do not modify any files: in src/auth.py, what is the name of the second parameter of the login function? Put your answer in a new file answer.txt as a single word.",
+  "assert": [
+    { "type": "file_unchanged" },
+    { "type": "file_exists", "path": "answer.txt" },
+    { "type": "file_contains", "path": "answer.txt", "pattern": "user" }
+  ],
+  "max_turns": 6,
+  "timeout_sec": 180
+}

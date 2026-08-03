@@ -1,0 +1,16 @@
+{
+  "name": "json-edit-preserve",
+  "files": {
+    "config.json": "{\n  \"app\": {\n    \"name\": \"demo\",\n    \"version\": \"1.2.0\",\n    \"debug\": false,\n    \"port\": 8080,\n    \"features\": {\n      \"telemetry\": true,\n      \"dark_mode\": true,\n      \"experimental\": false\n    },\n    \"retries\": 3\n  }\n}\n"
+  },
+  "prompt": "Edit config.json: change debug to true AND retries to 5. The file must remain valid JSON with the same 2-space indentation. Do not change any other values (name must stay demo, version 1.2.0, port 8080, telemetry true, dark_mode true, experimental false).",
+  "assert": [
+    { "type": "file_contains", "path": "config.json", "pattern": "\"debug\": true" },
+    { "type": "file_contains", "path": "config.json", "pattern": "\"retries\": 5" },
+    { "type": "file_contains", "path": "config.json", "pattern": "\"version\": \"1.2.0\"" },
+    { "type": "file_contains", "path": "config.json", "pattern": "\"experimental\": false" },
+    { "type": "command_succeeds", "cmd": "python3 -c \"import json; d=json.load(open('config.json')); a=d['app']; assert a['debug'] is True and a['retries']==5 and a['name']=='demo' and a['port']==8080 and a['features']['telemetry'] is True and a['features']['dark_mode'] is True\"" }
+  ],
+  "max_turns": 8,
+  "timeout_sec": 240
+}

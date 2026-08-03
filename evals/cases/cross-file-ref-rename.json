@@ -1,0 +1,18 @@
+{
+  "name": "cross-file-ref-rename",
+  "files": {
+    "module.py": "def compute_total(items):\n    return sum(items)\n",
+    "main.py": "from module import compute_total\n\nprices = [10, 20, 30]\nprint(compute_total(prices))\n",
+    "utils.py": "from module import compute_total\n\ndef discount_total(items, rate):\n    return compute_total(items) * (1 - rate)\n"
+  },
+  "prompt": "Rename the function compute_total in module.py to calculate_total. You must update ALL call sites in main.py and utils.py so the whole project still runs. Then verify with: python3 -c \"from module import calculate_total; from utils import discount_total; assert calculate_total([1,2,3])==6 and discount_total([1,2,3],0.5)==3.0\"",
+  "assert": [
+    { "type": "file_contains", "path": "module.py", "pattern": "def calculate_total" },
+    { "type": "file_not_contains", "path": "module.py", "pattern": "compute_total" },
+    { "type": "file_not_contains", "path": "main.py", "pattern": "compute_total" },
+    { "type": "file_not_contains", "path": "utils.py", "pattern": "compute_total" },
+    { "type": "command_succeeds", "cmd": "python3 -c \"from module import calculate_total; from utils import discount_total; assert calculate_total([1,2,3])==6 and discount_total([1,2,3],0.5)==3.0\"" }
+  ],
+  "max_turns": 8,
+  "timeout_sec": 240
+}

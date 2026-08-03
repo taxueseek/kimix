@@ -1,0 +1,14 @@
+{
+  "name": "error-recovery",
+  "files": {
+    "buggy.py": "def parse_row(line):\n    parts = line.split(\",\")\n    name = parts[0]\n    value = int(parts[1])\n    return name, value\n\ndef load(path):\n    result = {}\n    with open(path) as f:\n        for line in f:\n            line = line.strip()\n            if not line:\n                continue\n            key, value = parse_row(line)\n            result[key] = value\n    return result\n",
+    "data.csv": "apple,10\npear,20\ncherry,oops\n"
+  },
+  "prompt": "Run: python3 -c \"from buggy import load; print(load('data.csv'))\". It fails because data.csv contains a non-integer value. Fix the program so that bad rows are SKIPPED (with a warning printed to stderr) instead of crashing, and valid rows still load. Then run the command again — it must print {'apple': 10, 'pear': 20} (with possibly a warning line before it).",
+  "assert": [
+    { "type": "file_contains", "path": "buggy.py", "pattern": "try|except" },
+    { "type": "command_succeeds", "cmd": "python3 -c \"from buggy import load; d=load('data.csv'); assert d=={'apple':10,'pear':20}, d\"" }
+  ],
+  "max_turns": 10,
+  "timeout_sec": 300
+}

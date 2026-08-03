@@ -1,0 +1,15 @@
+{
+  "name": "long-output-judgment",
+  "files": {
+    "gen_report.py": "import random\n\nrandom.seed(7)\nlines = []\nlines.append(\"REPORT: daily inventory check\")\nlines.append(\"=\" * 40)\nfor i in range(500):\n    sku = f\"SKU-{1000 + i}\"\n    qty = random.randint(0, 100)\n    status = \"OK\" if qty > 0 else \"OUT\"\n    lines.append(f\"{sku}: qty={qty} status={status}\")\nlines.append(\"=\" * 40)\nlines.append(\"SUMMARY\")\nfor status in (\"OK\", \"OUT\"):\n    count = sum(1 for l in lines if f\"status={status}\" in l)\n    lines.append(f\"{status}: {count}\")\nlines.append(\"FINAL_ANSWER: \" + str(sum(1 for l in lines if \"status=OK\" in l)))\nprint(\"\\n\".join(lines))\n"
+  },
+  "prompt": "Run: python3 gen_report.py. The output is very long (500+ lines). Find the line that starts with 'FINAL_ANSWER:' and write ONLY that number into a new file answer.txt. Do not modify gen_report.py.",
+  "assert": [
+    { "type": "file_exists", "path": "answer.txt" },
+    { "type": "file_contains", "path": "answer.txt", "pattern": "^\\d+$" },
+    { "type": "file_unchanged" },
+    { "type": "command_succeeds", "cmd": "python3 -c \"import random; random.seed(7); s=sum(random.randint(0,100)>0 for _ in range(500)); assert open('answer.txt').read().strip()==str(s)\"" }
+  ],
+  "max_turns": 8,
+  "timeout_sec": 240
+}

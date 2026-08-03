@@ -1,0 +1,16 @@
+{
+  "name": "config-edit-verify",
+  "files": {
+    "settings.ini": "[server]\nhost = 127.0.0.1\nport = 8080\nworkers = 1\ntimeout = 30\n",
+    "verify.py": "import configparser\n\ncfg = configparser.ConfigParser()\ncfg.read(\"settings.ini\")\ns = cfg[\"server\"]\nassert s[\"host\"] == \"127.0.0.1\"\nassert s[\"port\"] == \"8080\"\nassert s[\"timeout\"] == \"30\"\nworkers = int(s[\"workers\"])\nassert workers == 4, f\"workers should be 4, got {workers}\"\nprint(\"OK\")\n"
+  },
+  "prompt": "In settings.ini, change the number of workers from 1 to 4. Keep every other line byte-identical. Then run: python3 verify.py — it must print OK.",
+  "assert": [
+    { "type": "file_contains", "path": "settings.ini", "pattern": "workers = 4" },
+    { "type": "file_contains", "path": "settings.ini", "pattern": "host = 127.0.0.1" },
+    { "type": "file_contains", "path": "settings.ini", "pattern": "timeout = 30" },
+    { "type": "command_succeeds", "cmd": "python3 verify.py" }
+  ],
+  "max_turns": 8,
+  "timeout_sec": 240
+}

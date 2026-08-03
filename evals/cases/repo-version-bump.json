@@ -1,0 +1,12 @@
+{
+  "name": "repo-version-bump",
+  "repo": true,
+  "prompt": "In src/app.py, change the returned version string from \"1.0.0\" to \"1.1.0\". Keep everything else unchanged.",
+  "assert": [
+    { "type": "file_contains", "path": "src/app.py", "pattern": "1\\.1\\.0" },
+    { "type": "file_not_contains", "path": "src/app.py", "pattern": "1\\.0\\.0" },
+    { "type": "command_succeeds", "cmd": "python3 main.py 2>&1 | grep -q 1.1.0" }
+  ],
+  "max_turns": 6,
+  "timeout_sec": 180
+}

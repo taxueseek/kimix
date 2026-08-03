@@ -1,0 +1,17 @@
+{
+  "name": "big-file-local-edit",
+  "files": {
+    "utils.py": "# Collection of small helpers.\n\ndef identity(x):\n    return x\n\ndef add_one(x):\n    return x + 1\n\ndef add_two(x):\n    return x + 2\n\ndef double(x):\n    return x * 2\n\ndef triple(x):\n    return x * 3\n\ndef is_even(x):\n    return x % 2 == 0\n\ndef is_odd(x):\n    return x % 2 == 1\n\ndef square(x):\n    return x * x\n\ndef cube(x):\n    return x ** 3\n\ndef clamp(x, lo, hi):\n    return max(lo, min(hi, x))\n\ndef abs_value(x):\n    return abs(x)\n\ndef sign(x):\n    if x > 0:\n        return 1\n    if x < 0:\n        return -1\n    return 0\n\ndef gcd(a, b):\n    while b:\n        a, b = b, a % b\n    return a\n\ndef lcm(a, b):\n    return a * b // gcd(a, b)\n\ndef factorial(n):\n    if n < 0:\n        raise ValueError(\"n must be non-negative\")\n    result = 1\n    for i in range(2, n + 1):\n        result *= i\n    return result\n\ndef fibonacci(n):\n    a, b = 0, 1\n    for _ in range(n):\n        a, b = b, a + b\n    return a\n\ndef is_prime(n):\n    if n < 2:\n        return False\n    for i in range(2, int(n ** 0.5) + 1):\n        if n % i == 0:\n            return False\n    return True\n\ndef reverse_string(s):\n    return s[::-1]\n\ndef count_vowels(s):\n    return sum(1 for c in s.lower() if c in \"aeiou\")\n"
+  },
+  "prompt": "In utils.py, find the add_two function and change its name to add_two_plus. Update NOTHING else — every other function and line must stay byte-identical. After editing, run: python3 -c \"from utils import add_two_plus, double; assert add_two_plus(1)==3 and double(2)==4\"",
+  "assert": [
+    { "type": "file_contains", "path": "utils.py", "pattern": "def add_two_plus" },
+    { "type": "file_not_contains", "path": "utils.py", "pattern": "def add_two\\(x\\)" },
+    { "type": "file_contains", "path": "utils.py", "pattern": "def triple\\(x\\)" },
+    { "type": "file_contains", "path": "utils.py", "pattern": "def gcd\\(a, b\\)" },
+    { "type": "file_contains", "path": "utils.py", "pattern": "def fibonacci\\(n\\)" },
+    { "type": "command_succeeds", "cmd": "python3 -c \"from utils import add_two_plus, double; assert add_two_plus(1)==3 and double(2)==4\"" }
+  ],
+  "max_turns": 8,
+  "timeout_sec": 240
+}

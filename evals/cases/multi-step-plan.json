@@ -1,0 +1,16 @@
+{
+  "name": "multi-step-plan",
+  "files": {
+    "README.txt": "This project computes average scores.\nBuild it in three steps:\n  1. data_loader.py defines load_scores(path) -> list[int]\n  2. stats.py defines average(scores) using data_loader\n  3. run.py reads scores.txt via stats.average and prints the average\n"
+  },
+  "prompt": "Build a small project step by step. 1) Create data_loader.py with load_scores(path) that reads a text file with one integer per line and returns a list of ints. 2) Create stats.py that imports load_scores from data_loader and defines average(scores) returning sum/len (handle empty by returning 0). 3) Create run.py that loads scores.txt and prints 'Average: <value>'. Create scores.txt with the numbers 10, 20, 30. Finally run: python3 run.py and confirm it prints 'Average: 20.0'.",
+  "assert": [
+    { "type": "file_exists", "path": "data_loader.py" },
+    { "type": "file_exists", "path": "stats.py" },
+    { "type": "file_exists", "path": "run.py" },
+    { "type": "command_succeeds", "cmd": "python3 -c \"from data_loader import load_scores; from stats import average; assert load_scores('scores.txt')==[10,20,30]; assert average([10,20,30])==20.0; assert average([])==0\"" },
+    { "type": "command_succeeds", "cmd": "python3 run.py 2>&1 | grep -q 'Average: 20.0'" }
+  ],
+  "max_turns": 12,
+  "timeout_sec": 300
+}

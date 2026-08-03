@@ -1,0 +1,15 @@
+{
+  "name": "nested-multi-file",
+  "files": {
+    "src/pkg/greeter.py": "def greet(name):\n    return f\"Hello, {name}!\"\n",
+    "src/main.py": "from pkg.greeter import greet\n\nprint(greet(\"World\"))\n",
+    "src/test_main.py": "import sys\nsys.path.insert(0, \".\")\nfrom pkg.greeter import greet\n\ndef test_greet():\n    assert greet(\"Kimix\") == \"Hello, Kimix!\"\n"
+  },
+  "prompt": "The greet function currently returns \"Hello, <name>!\". Change it so it returns \"Hi, <name>!\" instead (only the greeting word changes). Update any references that would break, then verify BOTH of these succeed from the project root: 1) python3 -c \"import sys; sys.path.insert(0,'src'); from pkg.greeter import greet; assert greet('Kimix')=='Hi, Kimix!'\" 2) python3 -c \"import sys; sys.path.insert(0,'src'); from pkg.greeter import greet; assert 'Hi,' in greet('x')\"",
+  "assert": [
+    { "type": "file_contains", "path": "src/pkg/greeter.py", "pattern": "Hi, \\{name\\}" },
+    { "type": "command_succeeds", "cmd": "python3 -c \"import sys; sys.path.insert(0,'src'); from pkg.greeter import greet; assert greet('Kimix')=='Hi, Kimix!'\"" }
+  ],
+  "max_turns": 10,
+  "timeout_sec": 300
+}

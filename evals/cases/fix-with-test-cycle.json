@@ -1,0 +1,13 @@
+{
+  "name": "fix-with-test-cycle",
+  "files": {
+    "store.py": "class Cart:\n    def __init__(self):\n        self._items = {}\n\n    def add(self, name, price, qty=1):\n        self._items[name] = (price, qty)\n\n    def total(self):\n        return sum(price * qty for price, qty in self._items.values())\n",
+    "test_store.py": "from store import Cart\n\ndef test_add_twice_stacks_qty():\n    c = Cart()\n    c.add(\"apple\", 3, 2)\n    c.add(\"apple\", 3, 1)\n    assert c._items[\"apple\"] == (3, 3)\n\ndef test_total():\n    c = Cart()\n    c.add(\"apple\", 3, 2)\n    c.add(\"pear\", 5, 1)\n    assert c.total() == 11\n\ndef test_add_negative_qty_raises():\n    c = Cart()\n    try:\n        c.add(\"pear\", 5, -1)\n        assert False, \"should have raised\"\n    except ValueError:\n        pass\n"
+  },
+  "prompt": "There are bugs in store.py. The test file test_store.py defines the intended behaviour: (1) adding the same item twice should stack quantities, (2) total() should compute price*qty summed, (3) adding with negative qty must raise ValueError. Fix store.py so all three behaviours hold, then run: python3 -m pytest test_store.py -q. If pytest is unavailable, run: python3 -c \"from store import Cart; c=Cart(); c.add('a',3,2); c.add('a',3,1); assert c._items['a']==(3,3)\"",
+  "assert": [
+    { "type": "command_succeeds", "cmd": "python3 -c \"from store import Cart; c=Cart(); c.add('a',3,2); c.add('a',3,1); assert c._items['a']==(3,3); c2=Cart(); c2.add('a',3,2); c2.add('b',5,1); assert c2.total()==11; c3=Cart();\ntry:\n    c3.add('b',5,-1); assert False\nexcept ValueError:\n    pass\"" }
+  ],
+  "max_turns": 10,
+  "timeout_sec": 300
+}
