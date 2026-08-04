@@ -199,11 +199,11 @@ The `--json` report includes the full detail for each skill: its `name`, `descri
 
 ## Bundled and Plugin Skills
 
-Kimix ships with built-in skills and extracts them to `~/.kimix/skills/` on startup -- among them `/create-skill`, `/help`, and `/check-work`. Bundled skills behave like user skills, and a same-named skill in a higher-priority location (local or repo) overrides the bundled copy; `kimix inspect` labels the extracted copies `bundled` so they stay distinguishable from skills you authored yourself. (A plugin skill of the same name does not override it; it stays available under its qualified `plugin:name` form.)
+Kimix ships with built-in skills and extracts them to `~/.kimix/skills/` on startup -- among them `/create-skill`, `/help`, `/check-work`, `/kimix-knowledge` (product map), and `/mod-builder` (author plugins, hooks, slash commands, MCP). Bundled skills behave like user skills, and a same-named skill in a higher-priority location (local or repo) overrides the bundled copy; `kimix inspect` labels the extracted copies `bundled` so they stay distinguishable from skills you authored yourself. (A plugin skill of the same name does not override it; it stays available under its qualified `plugin:name` form.)
 
 Skills can also come from plugins. When you install a plugin that includes skills, they appear alongside your user and project skills. `kimix inspect` labels each plugin-provided skill with its source as `plugin: <name>`.
 
-See the [Plugins guide](09-plugins.md) for more on installing plugins that provide skills.
+See the [Plugins guide](09-plugins.md) for more on installing plugins that provide skills. For end-to-end extension authoring (skills + hooks + MCP as one package), see [Building Extensions (Mods)](25-building-extensions.md).
 
 ---
 

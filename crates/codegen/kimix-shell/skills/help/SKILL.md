@@ -42,10 +42,19 @@ Answer the user's question about Kimix setup, configuration, or features.
    - `19-plan-mode.md` -- Plan mode
    - `20-background-tasks.md` -- Background tasks and monitoring
    - `21-terminal-support.md` -- tmux, SSH, truecolor, clipboard, /terminal-setup
+   - `22-permissions-and-safety.md` -- Permission modes, auto-approve, restrictive hooks
+   - `23-dashboard.md` -- Multi-session dashboard, peek, attach, dispatch
+   - `24-monitoring-usage.md` -- OpenTelemetry usage export
+   - `25-building-extensions.md` -- Author plugins / hooks / slash / skills / MCP ("mods")
    Read the relevant guide(s) for the user's question. If none match, fall back to
    `~/.kimix/README.md` for the comprehensive reference.
+
+   For **how Kimix works as a product** (architecture, extension surface, doc map),
+   load `/kimix-knowledge`. To **build** a plugin/hook/slash/MCP package, load
+   `/mod-builder` and follow `25-building-extensions.md`.
 
 3. To **modify config** for the user, edit `~/.kimix/config.toml` with search_replace.
 
 4. To **create a skill** for the user, create `~/.kimix/skills/<name>/SKILL.md`
    (read `~/.kimix/docs/user-guide/08-skills.md` for the SKILL.md format).
+   For a full plugin/hook/MCP package (Kimix "mod"), use `/mod-builder` instead.

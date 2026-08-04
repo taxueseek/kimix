@@ -9,6 +9,8 @@ pub const CHECK_SKILL_MD: &str = include_str!("../skills/check-work/SKILL.md");
 /// Compiled-in SKILL.md content for headless `--best-of-n` (not extracted as
 /// a bundled skill).
 pub const BEST_OF_N_SKILL_MD: &str = include_str!("../skills/best-of-n/SKILL.md");
+const KIMIX_KNOWLEDGE_SKILL_MD: &str = include_str!("../skills/kimix-knowledge/SKILL.md");
+const MOD_BUILDER_SKILL_MD: &str = include_str!("../skills/mod-builder/SKILL.md");
 
 /// Legacy bundled skill names (renamed or removed).
 ///
@@ -56,6 +58,8 @@ const BUNDLED_SKILLS: &[(&str, &str)] = &[
     ("create-skill", CREATE_SKILL_MD),
     ("code-review", CODE_REVIEW_SKILL_MD),
     ("check-work", CHECK_SKILL_MD),
+    ("kimix-knowledge", KIMIX_KNOWLEDGE_SKILL_MD),
+    ("mod-builder", MOD_BUILDER_SKILL_MD),
 ];
 
 /// True when a discovered skill is the copy `extract_bundled_files` wrote to
@@ -76,8 +80,9 @@ pub(crate) fn is_extracted_bundled_skill(
 /// Resolve the content for a skill, applying any name-specific transforms.
 fn resolve_skill_content(name: &str, raw: &str, kimix_home: &std::path::Path) -> String {
     match name {
-        // Help skill needs path substitution so absolute paths work.
-        "help" => {
+        // Docs-router skills reference `~/.kimix/…`; expand so absolute paths
+        // work when KIMIX_HOME / custom home is not the default.
+        "help" | "kimix-knowledge" | "mod-builder" => {
             let kimix_home_str = format!("{}/", kimix_home.to_string_lossy());
             raw.replace("~/.kimix/", &kimix_home_str)
         }
@@ -413,5 +418,79 @@ mod tests {
             !legacy_dir.exists(),
             "legacy cleanup must run even on same-version fast path"
         );
+    }
+
+    #[test]
+    fn docs_router_skills_expand_kimix_home_placeholder() {
+        let home = std::path::Path::new("/custom/kimix-home");
+        for name in ["help", "kimix-knowledge", "mod-builder"] {
+            let out = resolve_skill_content(
+                name,
+                "read ~/.kimix/docs/user-guide/25-building-extensions.md and ~/.kimix/config.toml",
+                home,
+            );
+            assert!(
+                out.contains("/custom/kimix-home/docs/user-guide/25-building-extensions.md"),
+                "{name}: expected expanded docs path, got {out}"
+            );
+            assert!(
+                out.contains("/custom/kimix-home/config.toml"),
+                "{name}: expected expanded config path, got {out}"
+            );
+            assert!(
+                !out.contains("~/.kimix/"),
+                "{name}: placeholder left unexpanded: {out}"
+            );
+        }
+        // Other skills keep the literal placeholder (no rewrite).
+        let plain = resolve_skill_content("create-skill", "path ~/.kimix/skills/x", home);
+        assert_eq!(plain, "path ~/.kimix/skills/x");
+    }
+
+    #[test]
+    fn extract_ships_kimix_knowledge_and_mod_builder() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tmp.path();
+        extract_bundled_files(home);
+
+        for name in ["kimix-knowledge", "mod-builder"] {
+            let path = home.join(format!("skills/{name}/SKILL.md"));
+            assert!(path.exists(), "{name} must be extracted as a bundled skill");
+            let body = std::fs::read_to_string(&path).unwrap();
+            assert!(
+                body.contains("25-building-extensions.md") || body.contains("mod-builder"),
+                "{name} skill body looks empty or wrong"
+            );
+            // Extracted copy must use the real home path, not the tilde form.
+            let home_prefix = format!("{}/", home.to_string_lossy());
+            assert!(
+                body.contains(&home_prefix) || !body.contains("~/.kimix/"),
+                "{name}: docs-router paths should expand at extract time"
+            );
+            assert!(is_extracted_bundled_skill(name, &path, home));
+        }
+    }
+
+    #[test]
+    fn same_version_fast_path_extracts_missing_new_skills() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tmp.path();
+        extract_bundled_files(home);
+
+        // Pretend an older binary never shipped these two.
+        for name in ["kimix-knowledge", "mod-builder"] {
+            std::fs::remove_dir_all(home.join(format!("skills/{name}"))).unwrap();
+        }
+        let version = kimix_version::VERSION;
+        std::fs::write(home.join(".metadata_version"), version).unwrap();
+
+        extract_bundled_files(home);
+
+        for name in ["kimix-knowledge", "mod-builder"] {
+            assert!(
+                home.join(format!("skills/{name}/SKILL.md")).exists(),
+                "same-version path must backfill missing bundled skill {name}"
+            );
+        }
     }
 }

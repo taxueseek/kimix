@@ -23,6 +23,8 @@ A hook is a shell command or HTTP endpoint that Kimix calls when a specific life
 - **Environment setup**: Export variables at session start.
 - **Custom workflows**: Trigger builds, tests, or deployments on specific events.
 
+To ship hooks with skills and MCP as one installable package, see [Building Extensions (Mods)](25-building-extensions.md) or run `/mod-builder`.
+
 ---
 
 ## Quick Start

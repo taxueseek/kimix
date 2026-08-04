@@ -157,6 +157,21 @@ pub static USER_GUIDE: &[Doc] = &[
         "Permissions and Safety",
         "Tool approval, sandbox, security"
     ),
+    guide!(
+        "23-dashboard.md",
+        "Agent Dashboard",
+        "Overview of sessions, peek, attach, and dispatch"
+    ),
+    guide!(
+        "24-monitoring-usage.md",
+        "Monitoring Usage",
+        "External OpenTelemetry usage and metrics export"
+    ),
+    guide!(
+        "25-building-extensions.md",
+        "Building Extensions (Mods)",
+        "Plugins, hooks, slash commands, skills, and MCP tools"
+    ),
 ];
 
 /// Non-user-guide reference docs. Separate from USER_GUIDE because they
@@ -294,8 +309,15 @@ mod tests {
     fn default_howto_entries_includes_all_user_guide_docs() {
         let entries = default_howto_entries();
         assert_eq!(entries.len(), USER_GUIDE.len() + REFERENCE_DOCS.len());
+        // DocEntry titles go through `tr()` (locale-dependent). Content is the
+        // stable identity that must stay 1:1 with USER_GUIDE order.
         for (i, doc) in USER_GUIDE.iter().enumerate() {
-            assert_eq!(entries[i].title, doc.title, "Entry {} title mismatch", i);
+            assert_eq!(
+                entries[i].content, doc.content,
+                "Entry {} content mismatch ({})",
+                i, doc.filename
+            );
+            assert!(!entries[i].title.is_empty(), "Entry {} empty title", i);
         }
     }
 

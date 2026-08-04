@@ -41,6 +41,7 @@ Customize and extend Kimix.
 | 11 | [Custom Models](11-custom-models.md) | Bring-your-own-key, multi-model routing, and OpenAI/Anthropic-compatible endpoints |
 | 12 | [Project Rules (AGENTS.md)](12-project-rules.md) | Per-directory AGENTS.md instructions and their precedence |
 | 13 | [Memory](13-memory.md) | Cross-session knowledge persistence with `/flush`, `/dream`, and hybrid search |
+| 25 | [Building Extensions (Mods)](25-building-extensions.md) | Author plugins, hooks, slash commands, skills, and MCP tools as Kimix mods |
 
 ---
 
@@ -59,3 +60,5 @@ Automate, script, and integrate Kimix with other systems.
 | 20 | [Background Tasks and Monitoring](20-background-tasks.md) | `background: true`, `/loop`, `monitor`, and `Ctrl+G` to demote |
 | 21 | [Terminal Support and Troubleshooting](21-terminal-support.md) | tmux, SSH, truecolor, clipboard, and OSC 52 |
 | 22 | [Permissions and Safety Controls](22-permissions-and-safety.md) | Permission modes, auto-approved tools, and restrictive PreToolUse hooks |
+| 23 | [Agent Dashboard](23-dashboard.md) | Multi-session overview, peek, attach, and dispatch |
+| 24 | [Monitoring Usage](24-monitoring-usage.md) | OpenTelemetry usage export (alpha) |

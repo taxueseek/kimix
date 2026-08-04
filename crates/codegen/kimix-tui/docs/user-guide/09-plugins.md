@@ -19,6 +19,8 @@ If a plugin includes a `plugin.json` manifest, the manifest can override paths o
 
 For example, a `team-tools` plugin might include a deploy skill, a code-review agent, pre-commit hooks, and a Linear MCP server. Install them together in one step.
 
+Authoring walkthrough (scaffold, recipes, Command Code mod mapping): [Building Extensions (Mods)](25-building-extensions.md). In-session: `/mod-builder` or `/kimix-knowledge`.
+
 ## Environment variables in plugin hooks
 
 Plugin hooks receive two environment variables beyond the standard ones set for every hook:
