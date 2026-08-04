@@ -3,9 +3,72 @@
 //! Uses the git CLI for performance — libgit2's status is 5-10x slower than
 //! the native git binary on large repos due to inefficient index refresh.
 //! Output is prioritized by change type and limited to ~1k characters.
+//!
+//! Both [`git_status`] and [`git_status_short`] share a short TTL cache so
+//! concurrent prompt/user-prefix builds for the same cwd do not re-spawn
+//! `git` within a few seconds. Content is byte-identical to an uncached
+//! call; the prompt already documents this as a point-in-time snapshot.
 use crate::file_system::FsError;
+use parking_lot::Mutex;
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+use std::time::{Duration, Instant};
+
+/// Align with `session::git::GIT_STATUS_CACHE_TTL` — prompt text is a
+/// snapshot, so a few seconds of reuse does not change model semantics.
+const PROMPT_GIT_STATUS_TTL: Duration = Duration::from_secs(2);
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum PromptGitKind {
+    /// Compact multi-line block for system / user prefix (`git_status`).
+    Compact = 0,
+    /// Porcelain short form (`git status --short --branch`).
+    Short = 1,
+}
+
+struct PromptGitCacheEntry {
+    value: String,
+    cached_at: Instant,
+}
+
+impl PromptGitCacheEntry {
+    fn is_fresh(&self, now: Instant) -> bool {
+        now.duration_since(self.cached_at) < PROMPT_GIT_STATUS_TTL
+    }
+}
+
+static PROMPT_GIT_CACHE: LazyLock<Mutex<HashMap<(PathBuf, PromptGitKind), PromptGitCacheEntry>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn prompt_git_cache_get(cwd: &Path, kind: PromptGitKind) -> Option<String> {
+    let cache = PROMPT_GIT_CACHE.lock();
+    let entry = cache.get(&(cwd.to_path_buf(), kind))?;
+    if entry.is_fresh(Instant::now()) {
+        Some(entry.value.clone())
+    } else {
+        None
+    }
+}
+
+fn prompt_git_cache_put(cwd: PathBuf, kind: PromptGitKind, value: String) -> String {
+    let mut cache = PROMPT_GIT_CACHE.lock();
+    cache.insert(
+        (cwd, kind),
+        PromptGitCacheEntry {
+            value: value.clone(),
+            cached_at: Instant::now(),
+        },
+    );
+    value
+}
+
+/// Test / recovery: drop all prompt git status cache entries.
+#[cfg(test)]
+pub(crate) fn clear_prompt_git_status_cache_for_test() {
+    PROMPT_GIT_CACHE.lock().clear();
+}
 
 /// Gets a compact git status for the system prompt using the git CLI.
 ///
@@ -15,12 +78,22 @@ use std::path::{Path, PathBuf};
 /// 3. Staged files (if any)
 ///
 /// Total output is capped at ~1k characters.
+///
+/// Results are cached for [`PROMPT_GIT_STATUS_TTL`] per working directory.
 pub async fn git_status(working_directory: impl Into<PathBuf>) -> Result<String, FsError> {
     let working_directory = working_directory.into();
+    if let Some(hit) = prompt_git_cache_get(&working_directory, PromptGitKind::Compact) {
+        return Ok(hit);
+    }
 
-    tokio::task::spawn_blocking(move || git_status_impl(&working_directory))
+    let cwd = working_directory.clone();
+    let result = tokio::task::spawn_blocking(move || git_status_impl(&working_directory))
         .await
-        .map_err(|e| FsError::Other(format!("git status task failed: {}", e)))?
+        .map_err(|e| FsError::Other(format!("git status task failed: {}", e)))?;
+    match result {
+        Ok(s) => Ok(prompt_git_cache_put(cwd, PromptGitKind::Compact, s)),
+        Err(e) => Err(e),
+    }
 }
 
 /// Matches Node's default `execFile` `maxBuffer` (1 MiB). This cap is
@@ -70,10 +143,16 @@ fn collapse_status_spaces(s: &str) -> String {
 /// line followed by the file change list (or just `## <branch>` on a clean
 /// tree). This matches the body embedded in the `<git_status>` block
 /// byte-for-byte.
+///
+/// Results are cached for [`PROMPT_GIT_STATUS_TTL`] per working directory.
 pub async fn git_status_short(working_directory: impl Into<PathBuf>) -> Result<String, FsError> {
     let working_directory = working_directory.into();
+    if let Some(hit) = prompt_git_cache_get(&working_directory, PromptGitKind::Short) {
+        return Ok(hit);
+    }
 
-    tokio::task::spawn_blocking(move || {
+    let cwd = working_directory.clone();
+    let result = tokio::task::spawn_blocking(move || {
         let output = kimix_tty_utils::git_command()
             .args(["status", "--short", "--branch"])
             .current_dir(&working_directory)
@@ -104,7 +183,12 @@ pub async fn git_status_short(working_directory: impl Into<PathBuf>) -> Result<S
         )))
     })
     .await
-    .map_err(|e| FsError::Other(format!("git status --short --branch task failed: {}", e)))?
+    .map_err(|e| FsError::Other(format!("git status --short --branch task failed: {}", e)))?;
+
+    match result {
+        Ok(s) => Ok(prompt_git_cache_put(cwd, PromptGitKind::Short, s)),
+        Err(e) => Err(e),
+    }
 }
 
 fn git_status_impl(working_directory: &Path) -> Result<String, FsError> {
@@ -285,5 +369,53 @@ mod tests {
     fn collapse_status_spaces_preserves_newlines() {
         assert_eq!(collapse_status_spaces("a\n\n\nb"), "a\n\n\nb");
         assert_eq!(collapse_status_spaces(""), "");
+    }
+
+    #[test]
+    fn prompt_git_cache_entry_freshness() {
+        let now = Instant::now();
+        let fresh = PromptGitCacheEntry {
+            value: "ok".into(),
+            cached_at: now,
+        };
+        assert!(fresh.is_fresh(now));
+        assert!(fresh.is_fresh(now + Duration::from_millis(500)));
+        assert!(!fresh.is_fresh(now + PROMPT_GIT_STATUS_TTL + Duration::from_millis(1)));
+    }
+
+    #[test]
+    fn prompt_git_cache_put_get_roundtrip() {
+        clear_prompt_git_status_cache_for_test();
+        let cwd = PathBuf::from("/tmp/kimix-prompt-git-cache-test");
+        let out = prompt_git_cache_put(
+            cwd.clone(),
+            PromptGitKind::Compact,
+            "## main\nnothing to commit".into(),
+        );
+        assert_eq!(out, "## main\nnothing to commit");
+        assert_eq!(
+            prompt_git_cache_get(&cwd, PromptGitKind::Compact).as_deref(),
+            Some("## main\nnothing to commit")
+        );
+        // Different kind must not collide.
+        assert!(prompt_git_cache_get(&cwd, PromptGitKind::Short).is_none());
+        clear_prompt_git_status_cache_for_test();
+    }
+
+    /// Two sequential calls for the same cwd within TTL return identical
+    /// bytes (cache hit). Skips when cwd is not a git worktree.
+    #[tokio::test]
+    async fn git_status_short_cache_hit_is_byte_identical() {
+        clear_prompt_git_status_cache_for_test();
+        let cwd = std::env::current_dir().expect("cwd");
+        let a = match git_status_short(&cwd).await {
+            Ok(s) => s,
+            Err(_) => return, // not a git repo in this environment
+        };
+        let b = git_status_short(&cwd)
+            .await
+            .expect("second call must hit cache");
+        assert_eq!(a, b);
+        clear_prompt_git_status_cache_for_test();
     }
 }

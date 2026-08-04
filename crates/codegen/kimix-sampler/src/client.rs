@@ -82,8 +82,12 @@ fn deserialize_response_event(data: &str) -> Result<rs::ResponseStreamEvent> {
                 {
                     tools.retain(|t| serde_json::from_value::<rs::Tool>(t.clone()).is_ok());
                 }
-                if let Ok(mut event) = serde_json::from_value::<rs::ResponseStreamEvent>(value) {
-                    apply_terminal_event_overrides(&mut event, data);
+                // Clone for from_value so the same Value can feed terminal
+                // overrides — avoids a third full JSON parse on this path.
+                if let Ok(mut event) =
+                    serde_json::from_value::<rs::ResponseStreamEvent>(value.clone())
+                {
+                    apply_terminal_event_overrides(&mut event, data, Some(&value));
                     return Ok(event);
                 }
             }
@@ -95,7 +99,10 @@ fn deserialize_response_event(data: &str) -> Result<rs::ResponseStreamEvent> {
             return Err(SamplingError::Serialization(first_err));
         }
     };
-    apply_terminal_event_overrides(&mut event, data);
+    // Happy path: typed deserialize already succeeded. Terminal events still
+    // need one Value pass for fields async_openai omits; non-terminal returns
+    // immediately inside apply without re-parsing.
+    apply_terminal_event_overrides(&mut event, data, None);
     Ok(event)
 }
 
@@ -120,15 +127,32 @@ fn deserialize_response_event(data: &str) -> Result<rs::ResponseStreamEvent> {
 /// - `context_details` is absent (older backends / non-loop responses),
 /// - or either of `context_details.{input_tokens, output_tokens}` is
 ///   missing — we don't guess the missing half.
-fn apply_terminal_event_overrides(event: &mut rs::ResponseStreamEvent, data: &str) {
+/// Apply terminal-only usage overrides from the wire JSON.
+///
+/// When `preparsed` is `Some`, reuses that `Value` (recovery path already
+/// parsed once). When `None`, parses `data` only if the event is terminal —
+/// non-terminal events return before any `from_str`.
+fn apply_terminal_event_overrides(
+    event: &mut rs::ResponseStreamEvent,
+    data: &str,
+    preparsed: Option<&serde_json::Value>,
+) {
     let response = match event {
         rs::ResponseStreamEvent::ResponseCompleted(e) => &mut e.response,
         rs::ResponseStreamEvent::ResponseIncomplete(e) => &mut e.response,
         _ => return,
     };
-    // Re-parse for fields async_openai's types omit (context total, cost ticks).
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(data) else {
-        return;
+    // Fields async_openai's types omit (context total, cost ticks).
+    let owned;
+    let value = match preparsed {
+        Some(v) => v,
+        None => match serde_json::from_str::<serde_json::Value>(data) {
+            Ok(v) => {
+                owned = v;
+                &owned
+            }
+            Err(_) => return,
+        },
     };
     // Stash cost ticks in metadata for stream_responses.
     if let Some(ticks) = kimix_sampling_types::reported_cost_ticks(
@@ -144,7 +168,7 @@ fn apply_terminal_event_overrides(event: &mut rs::ResponseStreamEvent, data: &st
     let Some(usage) = response.usage.as_mut() else {
         return;
     };
-    let Some(total) = extract_context_total(&value) else {
+    let Some(total) = extract_context_total(value) else {
         return;
     };
     usage.total_tokens = total;
