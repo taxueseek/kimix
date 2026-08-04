@@ -755,12 +755,19 @@ impl AgentView {
                 }
                 if self.active_pane == AgentPane::Prompt {
                     let event = self.prompt.handle_mouse(mouse);
-                    if matches!(event, PromptEvent::Edited)
+                    let edited = matches!(event, PromptEvent::Edited);
+                    if edited
                         && let Some(eff) = self.notify_suggestion_text_changed()
                     {
                         self.pending_effects.push(eff);
                     }
-                    InputOutcome::Changed
+                    // Mouse-up with no edit is a pure no-op — do not force
+                    // a full-frame redraw (composer often under the cursor).
+                    if edited {
+                        InputOutcome::Changed
+                    } else {
+                        InputOutcome::Unchanged
+                    }
                 } else {
                     InputOutcome::Unchanged
                 }
@@ -827,18 +834,29 @@ impl AgentView {
                 }
                 let mut changed =
                     new_hover != self.hovered_entry || new_prompt_hover != self.hovered_prompt;
-                if new_hover.is_some()
-                    && old_mouse_pos != self.last_mouse_pos
-                    && let Some(idx) = new_hover
-                    && let Some(entry) = self.scrollback.get(idx)
-                    && (entry.block.is_user_prompt()
-                        || matches!(
-                            entry.block,
-                            crate::scrollback::block::RenderBlock::AgentMessage(_)
-                                | crate::scrollback::block::RenderBlock::Btw(_)
-                        )
-                        || entry.hook_data.as_ref().is_some_and(|hd| hd.has_content()))
-                {
+                // Timestamp expands only in the right gutter of timestamp-
+                // bearing blocks. Full-frame repaint only on enter/leave of
+                // that visual state — pure motion over message bodies must
+                // not force redraw (herdr-style mouse-motion gate).
+                let show_ts = self.scrollback.appearance().show_timestamps;
+                let sb = self.pane_areas.scrollback;
+                let in_ts_gutter = show_ts
+                    && sb.width > 0
+                    && mouse.column >= sb.x + sb.width.saturating_sub(10);
+                let ts_eligible = new_hover.is_some_and(|idx| {
+                    self.scrollback.get(idx).is_some_and(|entry| {
+                        entry.block.is_user_prompt()
+                            || matches!(
+                                entry.block,
+                                crate::scrollback::block::RenderBlock::AgentMessage(_)
+                                    | crate::scrollback::block::RenderBlock::Btw(_)
+                            )
+                            || entry.hook_data.as_ref().is_some_and(|hd| hd.has_content())
+                    })
+                });
+                let ts_hover_now = ts_eligible && in_ts_gutter;
+                if ts_hover_now != self.timestamp_hover_active {
+                    self.timestamp_hover_active = ts_hover_now;
                     changed = true;
                 }
                 self.hovered_entry = new_hover;
@@ -1234,6 +1252,92 @@ mod tests {
             other => panic!("expected SubmitFollowUp, got {other:?}"),
         }
     }
+    /// Pure mouse motion over a message body must not force a full-frame
+    /// redraw. Only enter/leave of the timestamp right-gutter (or a hover
+    /// entry change) yields `Changed` — the herdr-style motion gate.
+    #[test]
+    fn mouse_moved_over_message_body_is_unchanged_without_ts_gutter() {
+        use crate::app::agent_view::test_fixtures::make_agent;
+        use crate::scrollback::RenderBlock;
+
+        let mut agent = make_agent();
+        agent
+            .scrollback
+            .push_block(RenderBlock::agent_message("hello world line\nsecond line"));
+        agent.pane_areas.scrollback = Rect::new(0, 0, 80, 20);
+        agent.pane_areas.prompt = Rect::new(0, 20, 80, 4);
+        // Ensure timestamps on so the old path would have forced redraw.
+        let mut appearance = agent.scrollback.appearance().clone();
+        appearance.show_timestamps = true;
+        agent.scrollback.set_appearance(appearance);
+        agent.scrollback.prepare_layout(80, 20);
+
+        let (entry_area, _, _) = agent
+            .scrollback
+            .entry_screen_area(0, agent.pane_areas.scrollback)
+            .expect("entry 0 must be on screen after prepare_layout");
+        let body_row = entry_area.y;
+        let body_col = entry_area.x + 5;
+        let gutter_col = entry_area.x + entry_area.width.saturating_sub(5);
+
+        // First move establishes hover (Changed for hover entry).
+        let first = agent.handle_mouse(&MouseEvent {
+            kind: MouseEventKind::Moved,
+            column: body_col,
+            row: body_row,
+            modifiers: KeyModifiers::empty(),
+        });
+        assert!(
+            agent.hovered_entry.is_some(),
+            "precondition: pointer must hit a hoverable entry (got {first:?}, area={entry_area:?})"
+        );
+        // Second move still over body (not right gutter) → Unchanged.
+        let outcome = agent.handle_mouse(&MouseEvent {
+            kind: MouseEventKind::Moved,
+            column: body_col.saturating_add(8),
+            row: body_row,
+            modifiers: KeyModifiers::empty(),
+        });
+        assert!(
+            matches!(outcome, InputOutcome::Unchanged),
+            "motion over message body must not force redraw, got {outcome:?}"
+        );
+
+        // Enter right gutter → Changed (timestamp expand).
+        let outcome = agent.handle_mouse(&MouseEvent {
+            kind: MouseEventKind::Moved,
+            column: gutter_col,
+            row: body_row,
+            modifiers: KeyModifiers::empty(),
+        });
+        assert!(
+            matches!(outcome, InputOutcome::Changed),
+            "enter timestamp gutter must redraw, got {outcome:?}"
+        );
+        // Stay in gutter → Unchanged.
+        let outcome = agent.handle_mouse(&MouseEvent {
+            kind: MouseEventKind::Moved,
+            column: gutter_col.saturating_add(2).min(entry_area.x + entry_area.width - 1),
+            row: body_row,
+            modifiers: KeyModifiers::empty(),
+        });
+        assert!(
+            matches!(outcome, InputOutcome::Unchanged),
+            "motion inside timestamp gutter must not force redraw, got {outcome:?}"
+        );
+        // Leave gutter → Changed (collapse).
+        let outcome = agent.handle_mouse(&MouseEvent {
+            kind: MouseEventKind::Moved,
+            column: body_col,
+            row: body_row,
+            modifiers: KeyModifiers::empty(),
+        });
+        assert!(
+            matches!(outcome, InputOutcome::Changed),
+            "leave timestamp gutter must redraw, got {outcome:?}"
+        );
+    }
+
     /// Double-click on a `[Pasted: N lines]` chip expands it into plain
     /// editable text; the first click only places the cursor on the chip.
     #[test]

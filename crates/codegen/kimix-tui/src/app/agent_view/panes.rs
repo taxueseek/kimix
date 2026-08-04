@@ -638,18 +638,29 @@ impl AgentView {
                 if self.question_view.is_some() {
                     return;
                 }
-                let kind = if lines > 0 {
-                    MouseEventKind::ScrollDown
+                // Pointer usually rests on the composer. When the textarea
+                // has no vertical overflow, wheel must scroll the conversation
+                // — otherwise the gesture is swallowed (TextArea returns
+                // Nothing) and users never reach prior turns unless they
+                // carefully hit-test the scrollback pane.
+                if self.prompt.can_consume_vertical_scroll() {
+                    let kind = if lines > 0 {
+                        MouseEventKind::ScrollDown
+                    } else {
+                        MouseEventKind::ScrollUp
+                    };
+                    let event = MouseEvent {
+                        kind,
+                        column: col,
+                        row,
+                        modifiers: KeyModifiers::NONE,
+                    };
+                    self.prompt.handle_mouse(&event);
+                } else if lines > 0 {
+                    self.scrollback.scroll_down(lines as u16);
                 } else {
-                    MouseEventKind::ScrollUp
-                };
-                let event = MouseEvent {
-                    kind,
-                    column: col,
-                    row,
-                    modifiers: KeyModifiers::NONE,
-                };
-                self.prompt.handle_mouse(&event);
+                    self.scrollback.scroll_up((-lines) as u16);
+                }
             }
         }
     }
@@ -723,6 +734,91 @@ mod scroll_granularity_tests {
         assert_eq!(
             agent.prompt.suggestions.dropdown.selected, 0,
             "-3-line wheel notch must move the completion selection by exactly -1"
+        );
+    }
+
+    /// Wheel over an empty/short prompt must scroll conversation history, not
+    /// be swallowed by the composer (and must not open prompt-history browse —
+    /// that path is keyboard-only: Up on empty Normal prompt).
+    #[test]
+    fn wheel_over_short_prompt_falls_through_to_scrollback() {
+        use crate::scrollback::RenderBlock;
+
+        let mut agent = make_agent();
+        for i in 0..30 {
+            agent
+                .scrollback
+                .push_block(RenderBlock::user_prompt(format!("q-{i}")));
+            agent
+                .scrollback
+                .push_block(RenderBlock::agent_message(format!(
+                    "answer line one for {i}\nanswer line two for {i}\nanswer line three for {i}"
+                )));
+        }
+        agent.scrollback.prepare_layout(80, 12);
+        agent.scrollback.enable_follow_mode();
+        agent.scrollback.handle_follow_mode();
+        let offset_before = agent.scrollback.scroll_offset();
+        assert!(
+            offset_before > 0,
+            "precondition: follow pins near bottom (offset={offset_before})"
+        );
+
+        agent.prompt.set_text("");
+        agent.pane_areas.prompt = Rect::new(0, 20, 80, 5);
+        agent.pane_areas.scrollback = Rect::new(0, 0, 80, 20);
+        // textarea_area default is zero → can_consume_vertical_scroll=false
+
+        assert!(!agent.prompt.can_consume_vertical_scroll());
+        assert!(!agent.prompt.history_search.is_active());
+
+        agent.handle_scroll(-3, 10, 22);
+
+        assert!(
+            !agent.prompt.history_search.is_active(),
+            "wheel must not open prompt history browse"
+        );
+        assert!(
+            agent.scrollback.scroll_offset() < offset_before,
+            "wheel over short prompt must scroll conversation up (offset {offset_before} → {})",
+            agent.scrollback.scroll_offset()
+        );
+    }
+
+    #[test]
+    fn wheel_over_overflowing_prompt_stays_on_composer() {
+        use crate::scrollback::RenderBlock;
+
+        let mut agent = make_agent();
+        for i in 0..30 {
+            agent
+                .scrollback
+                .push_block(RenderBlock::user_prompt(format!("q-{i}")));
+            agent
+                .scrollback
+                .push_block(RenderBlock::agent_message(format!("a-{i}\nmore\nmore")));
+        }
+        agent.scrollback.prepare_layout(80, 12);
+        agent.scrollback.enable_follow_mode();
+        agent.scrollback.handle_follow_mode();
+        let offset_before = agent.scrollback.scroll_offset();
+
+        agent.prompt.set_text("line1\nline2\nline3\nline4\nline5");
+        agent.prompt.set_textarea_area_for_test(Rect::new(0, 20, 40, 2));
+        agent.pane_areas.prompt = Rect::new(0, 20, 80, 5);
+        agent.pane_areas.scrollback = Rect::new(0, 0, 80, 20);
+
+        assert!(
+            agent.prompt.can_consume_vertical_scroll(),
+            "precondition: overflowing composer consumes wheel"
+        );
+
+        agent.handle_scroll(-3, 10, 22);
+
+        assert_eq!(
+            agent.scrollback.scroll_offset(),
+            offset_before,
+            "overflowing composer must keep wheel; scrollback unchanged"
         );
     }
 }

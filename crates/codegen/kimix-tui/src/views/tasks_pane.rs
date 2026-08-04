@@ -1059,9 +1059,17 @@ impl TasksPane {
 
     // -- Tick ----------------------------------------------------------------
 
+    /// Advance spinner clock. Returns `true` only when a running row's glyph
+    /// frame changes (same `SPINNER_DIVISOR` dwell as turn-status / dashboard).
+    /// Callers must not full-repaint the app between frames.
     pub fn tick(&mut self) -> bool {
-        self.tick += 1;
-        self.entries.iter().any(|e| e.is_running())
+        if !self.needs_tick() {
+            return false;
+        }
+        let prev_frame = self.tick / SPINNER_DIVISOR;
+        self.tick = self.tick.wrapping_add(1);
+        let new_frame = self.tick / SPINNER_DIVISOR;
+        new_frame != prev_frame
     }
 
     pub fn tick_count(&self) -> u64 {
@@ -3101,6 +3109,39 @@ mod tests {
         assert!(
             !label.contains("(next") && !label.contains("(running") && !label.contains("(queued"),
             "unknown schedule should have no status suffix: {label}"
+        );
+    }
+
+    /// Spinner glyph only changes every SPINNER_DIVISOR ticks — `tick()` must
+    /// return true once per frame advance, not every metronome beat.
+    #[test]
+    fn tick_redraws_only_on_spinner_frame() {
+        let mut pane = TasksPane::new();
+        assert!(!pane.tick(), "empty pane never redraws for spinner");
+
+        let mut bg = BTreeMap::new();
+        bg.insert(
+            "t1".into(),
+            make_bg_task("t1", "sleep 60", BgTaskStatus::Running),
+        );
+        pane.sync(
+            &bg,
+            &HashMap::new(),
+            &HashMap::new(),
+            None,
+            &HashSet::new(),
+        );
+        assert!(pane.needs_tick());
+
+        let mut redraws = 0usize;
+        for _ in 0..SPINNER_DIVISOR {
+            if pane.tick() {
+                redraws += 1;
+            }
+        }
+        assert_eq!(
+            redraws, 1,
+            "exactly one glyph frame change per SPINNER_DIVISOR ticks"
         );
     }
 }

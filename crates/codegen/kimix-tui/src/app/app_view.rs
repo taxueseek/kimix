@@ -188,7 +188,8 @@ pub enum TickDemand {
     /// Nothing animates or polls: the event loop parks (zero wakeups).
     None,
     /// Only low-frequency work is pending (welcome logo shimmer at ~12fps,
-    /// the macOS Cmd link-hover poll): tick at [`SLOW_TICK_INTERVAL`].
+    /// macOS Cmd link-hover poll, turn-status / MCP / btw spinners,
+    /// dashboard busy-session rows): tick at [`SLOW_TICK_INTERVAL`].
     Slow,
     /// Real animation is on screen: tick at the configured animation fps.
     Fast,
@@ -3698,10 +3699,17 @@ impl AppView {
         if matches!(self.active_view, ActiveView::AgentDashboard)
             && let Some(d) = self.dashboard.as_mut()
         {
+            // Spinner glyph only changes every SPINNER_DIVISOR ticks (~7.5fps).
+            // Don't full-repaint the dashboard between frames.
+            let div = crate::views::turn_status::SPINNER_DIVISOR;
+            let prev_frame = d.spinner_tick / div;
             d.spinner_tick = d.spinner_tick.wrapping_add(1);
-            needs_redraw = true;
-            d.dispatch.poll_file_search();
-            d.peek_reply.poll_file_search();
+            let new_frame = d.spinner_tick / div;
+            if new_frame != prev_frame {
+                needs_redraw = true;
+            }
+            needs_redraw |= d.dispatch.poll_file_search();
+            needs_redraw |= d.peek_reply.poll_file_search();
         }
         if let Some(pending) = &self.pending_action
             && pending.expired()
@@ -3714,10 +3722,17 @@ impl AppView {
         }
         let mut bootstrap_commands_update: Option<Vec<agent_client_protocol::AvailableCommand>> =
             None;
+        // Only poll edit-HL workers that have outstanding jobs. Polling every
+        // agent/subagent every tick was pure overhead once pending is empty,
+        // and multi-session layouts paid it on the hot path.
         for agent in self.agents.values_mut() {
-            needs_redraw |= agent.edit_hl_tick();
+            if agent.edit_hl_needs_tick() {
+                needs_redraw |= agent.edit_hl_tick();
+            }
             for child in agent.subagent_views.values_mut() {
-                needs_redraw |= child.edit_hl_tick();
+                if child.edit_hl_needs_tick() {
+                    needs_redraw |= child.edit_hl_tick();
+                }
             }
         }
         if let ActiveView::Agent(id) = self.active_view
@@ -3752,7 +3767,10 @@ impl AppView {
                 agent.btw_state,
                 Some(crate::views::btw_overlay::BtwOverlayState::Loading { .. })
             ) && spinner_frame_tick;
-            needs_redraw |= agent.drain_blocked();
+            // Drain-blocked diamond pulse is driven by the same low-rate
+            // spinner cadence — full 30fps repaint is pure waste for a
+            // ~1.3s sin² period.
+            needs_redraw |= agent.drain_blocked() && spinner_frame_tick;
             if agent.acp_synced_generation != agent.session.available_commands_generation {
                 agent.prompt.sync_acp_commands(
                     &agent.session.available_commands,
@@ -3978,8 +3996,10 @@ impl AppView {
     /// [`TickDemand::Fast`] runs at the configured animation fps (default
     /// 30). [`TickDemand::Slow`] runs at [`SLOW_TICK_INTERVAL`] and is used
     /// when the only reasons to tick are low-frequency by construction —
-    /// the ~12fps welcome logo shimmer and the macOS Cmd link-hover poll —
-    /// so an app that *looks* idle doesn't spin a 30fps loop for them.
+    /// welcome logo shimmer, macOS Cmd link-hover poll, turn-status /
+    /// MCP / btw / tasks-pane spinners (repaint already gated by spinner
+    /// frame divisor), and dashboard busy-session status rows — so an app
+    /// that only needs a slow glyph does not spin a 30fps loop.
     pub fn tick_demand(&self) -> TickDemand {
         if self.pending_action.is_some() {
             return TickDemand::Fast;
@@ -4014,22 +4034,13 @@ impl AppView {
                 let Some(agent) = self.agents.get(&id) else {
                     return TickDemand::None;
                 };
-                let fast = agent.scrollback.needs_animation()
+                // High-rate work: visible wave accents, search, media, drag,
+                // toasts, permissions — anything that benefits from ~30fps.
+                let must_fast = agent.scrollback.needs_animation()
                     || agent.todo.list_state.needs_tick()
                     || agent.todo.badge_needs_tick()
-                    || agent.tasks.needs_tick()
                     || agent.acp_synced_generation != agent.session.available_commands_generation
-                    || !agent.session.state.is_idle()
                     || agent.session.loading_replay
-                    || agent
-                        .mcp_init_progress
-                        .as_ref()
-                        .is_some_and(McpInitProgress::is_visible)
-                    || matches!(
-                        agent.btw_state,
-                        Some(crate::views::btw_overlay::BtwOverlayState::Loading { .. })
-                    )
-                    || agent.drain_blocked()
                     || agent.prompt.file_search.context().is_some()
                     || agent.prompt.history_search.is_active()
                     || agent.scrollback_search.is_some()
@@ -4066,8 +4077,26 @@ impl AppView {
                             || child.image_load_rx.is_some()
                             || child.mermaid_needs_tick()
                     });
-                if fast {
+                if must_fast {
                     return TickDemand::Fast;
+                }
+                // Turn-status / MCP / btw / drain-blocked diamonds / tasks-pane
+                // spinners only need spinner-cadence repaint (~3–4fps after
+                // SPINNER_DIVISOR). Slow (~12fps) is enough; streaming content
+                // still arrives via event-driven draws, not this metronome.
+                let spinner_only = !agent.session.state.is_idle()
+                    || agent
+                        .mcp_init_progress
+                        .as_ref()
+                        .is_some_and(McpInitProgress::is_visible)
+                    || matches!(
+                        agent.btw_state,
+                        Some(crate::views::btw_overlay::BtwOverlayState::Loading { .. })
+                    )
+                    || agent.drain_blocked()
+                    || agent.tasks.needs_tick();
+                if spinner_only {
+                    return TickDemand::Slow;
                 }
                 if cfg!(target_os = "macos")
                     && (agent.needs_link_modifier_poll()
@@ -4081,18 +4110,23 @@ impl AppView {
                 TickDemand::None
             }
             ActiveView::AgentDashboard => {
+                let dash_search = self.dashboard.as_ref().is_some_and(|d| {
+                    d.dispatch.file_search.context().is_some()
+                        || d.peek_reply.file_search.context().is_some()
+                });
+                if dash_search {
+                    return TickDemand::Fast;
+                }
+                // Status row spinners for busy sessions — Slow is enough
+                // (redraw already gated on SPINNER_DIVISOR in tick()).
                 let agents_need = self.agents.values().any(|agent| {
                     !agent.session.state.is_idle()
                         || !agent.permission_queue.is_empty()
                         || agent.session.loading_replay
                         || agent.subagent_sessions.values().any(|info| !info.finished)
                 });
-                let dash_search = self.dashboard.as_ref().is_some_and(|d| {
-                    d.dispatch.file_search.context().is_some()
-                        || d.peek_reply.file_search.context().is_some()
-                });
-                if agents_need || dash_search {
-                    TickDemand::Fast
+                if agents_need {
+                    TickDemand::Slow
                 } else {
                     TickDemand::None
                 }
@@ -4764,6 +4798,98 @@ pub(crate) mod tests {
         assert!(app.needs_animation(), "slow still counts as animating");
         app.session_picker_content_loading = true;
         assert_eq!(app.tick_demand(), TickDemand::Fast);
+    }
+    /// A busy turn with no visible running scrollback entries only needs the
+    /// turn-status spinner — Slow (~12fps), not Fast (30fps). Streaming
+    /// content still draws from events.
+    #[test]
+    fn tick_demand_busy_turn_spinner_only_is_slow() {
+        let mut app = test_app_with_agent();
+        let id = super::super::agent::AgentId(0);
+        assert_eq!(app.tick_demand(), TickDemand::None, "idle parks");
+        app.agents.get_mut(&id).unwrap().session.state = AgentState::TurnRunning;
+        assert!(
+            !app.agents[&id].scrollback.needs_animation(),
+            "fixture: no visible running entries"
+        );
+        assert_eq!(
+            app.tick_demand(),
+            TickDemand::Slow,
+            "busy turn without viewport animations must not spin 30fps"
+        );
+        assert!(app.needs_animation());
+    }
+    /// Dashboard with a busy background agent: status spinners only → Slow.
+    #[test]
+    fn tick_demand_dashboard_busy_agent_is_slow() {
+        let mut app = test_app_with_agent();
+        let id = super::super::agent::AgentId(0);
+        app.active_view = ActiveView::AgentDashboard;
+        app.dashboard = Some(crate::views::dashboard::DashboardState::new());
+        app.agents.get_mut(&id).unwrap().session.state = AgentState::TurnRunning;
+        assert_eq!(
+            app.tick_demand(),
+            TickDemand::Slow,
+            "busy session rows on the dashboard are spinner-only"
+        );
+    }
+
+    /// Running background-task rows only need the tasks-pane spinner — Slow,
+    /// not Fast. Glyph changes are already gated by SPINNER_DIVISOR in
+    /// `TasksPane::tick`.
+    #[test]
+    fn tick_demand_running_tasks_spinner_only_is_slow() {
+        use crate::app::agent::{BgTaskState, BgTaskStatus};
+        use std::collections::{BTreeMap, HashMap, HashSet};
+        use std::time::SystemTime;
+
+        let mut app = test_app_with_agent();
+        let id = super::super::agent::AgentId(0);
+        assert_eq!(app.tick_demand(), TickDemand::None, "idle parks");
+        {
+            let agent = app.agents.get_mut(&id).unwrap();
+            let mut bg = BTreeMap::new();
+            bg.insert(
+                "t1".into(),
+                BgTaskState {
+                    task_id: "t1".into(),
+                    tool_call_id: String::new(),
+                    command: "sleep 60".into(),
+                    description: None,
+                    cwd: String::new(),
+                    output_file: String::new(),
+                    status: BgTaskStatus::Running,
+                    start_time: SystemTime::now(),
+                    end_time: None,
+                    exit_code: None,
+                    signal: None,
+                    stdout: String::new(),
+                    stdout_line_count: 0,
+                    truncated: false,
+                    pending_kill: false,
+                    kill_requested_at: None,
+                    scrollback_entry_id: None,
+                    is_monitor: false,
+                    restored_from_replay: false,
+                },
+            );
+            agent.tasks.sync(
+                &bg,
+                &HashMap::new(),
+                &HashMap::new(),
+                None,
+                &HashSet::new(),
+            );
+            assert!(
+                agent.tasks.needs_tick(),
+                "precondition: running bg task demands spinner ticks"
+            );
+        }
+        assert_eq!(
+            app.tick_demand(),
+            TickDemand::Slow,
+            "running tasks must not force 30fps"
+        );
     }
     /// An idle agent view demands no ticks at all; the macOS Cmd link-hover
     /// poll (when it is the only pending work) demands Slow, never Fast.

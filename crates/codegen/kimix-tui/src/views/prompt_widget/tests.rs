@@ -4550,3 +4550,25 @@
         let buf = draw_bordered(11, &title_test_style(Some("my session")));
         assert_eq!(buf_text_at(&buf, 1, 10, 0), "\u{2500}".repeat(9));
     }
+
+    /// Pure mouse motion / no-op mouse events must not report Edited — callers
+    /// gate full-frame redraw on Edited (e.g. mouse-up over the composer).
+    #[test]
+    fn mouse_nothing_is_ignored() {
+        use crossterm::event::{MouseEvent, MouseEventKind};
+        use ratatui::layout::Rect;
+
+        let mut pw = PromptWidget::new();
+        pw.set_textarea_area_for_test(Rect::new(0, 0, 40, 5));
+        let moved = MouseEvent {
+            kind: MouseEventKind::Moved,
+            column: 2,
+            row: 1,
+            modifiers: KeyModifiers::NONE,
+        };
+        assert_eq!(
+            pw.handle_mouse(&moved),
+            PromptEvent::Ignored,
+            "no-op mouse motion must not force Edited/redraw"
+        );
+    }

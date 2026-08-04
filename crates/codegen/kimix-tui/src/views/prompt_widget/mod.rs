@@ -1384,6 +1384,27 @@ impl PromptWidget {
         self.textarea_area
     }
 
+    /// Whether the composer can consume a vertical wheel event itself.
+    ///
+    /// True only when wrapped content exceeds the last-rendered textarea
+    /// viewport (same condition TextArea uses for ScrollUp/Down). Empty or
+    /// short composers return false so callers can fall through to
+    /// conversation scrollback — the common chat TUI expectation when the
+    /// pointer rests over the prompt.
+    pub fn can_consume_vertical_scroll(&self) -> bool {
+        let area = self.textarea_area;
+        if area.width == 0 || area.height == 0 {
+            return false;
+        }
+        self.textarea.desired_height(area.width) > area.height
+    }
+
+    /// Test-only: set the last-rendered textarea rect used by mouse routing.
+    #[cfg(test)]
+    pub fn set_textarea_area_for_test(&mut self, area: Rect) {
+        self.textarea_area = area;
+    }
+
     /// Compute the content width inside the chrome (if any).
     fn content_width(&self, area_width: u16, style: &PromptStyle) -> u16 {
         if style.chrome {
@@ -2060,6 +2081,11 @@ impl PromptWidget {
             .textarea
             .handle_mouse(*mouse, self.textarea_area, self.textarea_state);
 
+        // Track hover enter/leave so pure motion that only changes image-chip
+        // hover can still request a redraw — without treating every no-op
+        // mouse event as Edited (which forced full-frame repaints on Up/drag
+        // over a still cursor).
+        let hover_before = self.hovered_image_element_id;
         while let Some(event) = self.textarea.poll_element_event() {
             match event.kind {
                 TextElementEventKind::HoverEnter => {
@@ -2080,6 +2106,7 @@ impl PromptWidget {
                 TextElementEventKind::Click => {}
             }
         }
+        let hover_changed = hover_before != self.hovered_image_element_id;
 
         match action {
             MouseAction::CursorPlaced
@@ -2091,7 +2118,8 @@ impl PromptWidget {
                 self.update_file_search_context();
                 PromptEvent::Edited
             }
-            MouseAction::Nothing => PromptEvent::Edited,
+            MouseAction::Nothing if hover_changed => PromptEvent::Edited,
+            MouseAction::Nothing => PromptEvent::Ignored,
         }
     }
 

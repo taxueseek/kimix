@@ -824,6 +824,10 @@ pub struct AgentView {
     pub pane_areas: PaneAreas,
     /// Entry index currently hovered by the mouse (for dimmed selection box).
     pub hovered_entry: Option<usize>,
+    /// Whether the pointer is in the timestamp expand zone of a hoverable
+    /// entry (right gutter). Edge-triggered: only enter/leave forces a
+    /// full-frame redraw — pure motion over message bodies must not.
+    pub timestamp_hover_active: bool,
     /// Pending markdown text drag before the pointer crosses the drag threshold.
     pub pending_text_drag: Option<PendingTextDrag>,
     /// Active markdown text drag selection.
