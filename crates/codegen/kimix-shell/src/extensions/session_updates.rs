@@ -195,7 +195,11 @@ fn try_stream_tail_page(request: &Request, updates_path: &Path) -> io::Result<Op
             lines,
             total_count,
             has_more,
-            prompt_starts,
+            // `prompt_starts` was tracked 1-indexed for the line-range math
+            // above, but the wire field holds indices into the updates array
+            // (0-based), matching `compute_prompt_starts` on the full-scan
+            // path. Convert at the boundary so both paths agree.
+            prompt_starts: prompt_starts.iter().map(|&n| n - 1).collect(),
         }))
     } else {
         // Negative-offset path: ring buffer, only keep last N lines in memory.

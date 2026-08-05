@@ -2331,8 +2331,10 @@ mod tests {
         );
 
         let repo_str = repo_root.to_str().unwrap_or_default();
+        // `.claude` surfaces are compat-gated; `all_on()` pins the historical
+        // multi-vendor discovery behavior this regression test targets.
         let skills =
-            list_skills_with_options(Some(repo_str), None, tmp.path(), CompatConfig::default())
+            list_skills_with_options(Some(repo_str), None, tmp.path(), CompatConfig::all_on())
                 .await;
         let names: Vec<&str> = skills.iter().map(|s| s.name.as_str()).collect();
 
@@ -2409,7 +2411,7 @@ mod tests {
 
         let repo_str = repo_root.to_str().unwrap_or_default();
         let raw =
-            list_skills_with_options(Some(repo_str), None, tmp.path(), CompatConfig::default())
+            list_skills_with_options(Some(repo_str), None, tmp.path(), CompatConfig::all_on())
                 .await;
 
         let deploy_entries: Vec<_> = raw.iter().filter(|s| s.name == "deploy").collect();

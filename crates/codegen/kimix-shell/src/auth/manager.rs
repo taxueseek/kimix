@@ -120,26 +120,7 @@ const PERMANENT_FAILURE_TTL: StdDuration = StdDuration::from_secs(300);
 /// [`keyring_enabled`] gate (env kill-switch, cfg(test) mock toggle) layers
 /// on top at each call site.
 fn keyring_path_scoped_for(path: &Path, scope: &str) -> bool {
-    #[cfg(test)]
-    if TEST_FORCE_KEYRING_PATH_SCOPE.with(|flag| flag.get()) {
-        return scope == KIMI_CODE_OAUTH_SCOPE;
-    }
     scope == KIMI_CODE_OAUTH_SCOPE && path == kimix_config::default_kimix_home().join("auth.json")
-}
-
-// Test seam: pretend managers on this thread are rooted at the default
-// install so keyring behavior can be exercised against the mock keyring
-// from a tempdir. Thread-local for the same reason as the mock-keyring
-// toggle: no leakage into concurrently running persistence tests.
-#[cfg(test)]
-thread_local! {
-    static TEST_FORCE_KEYRING_PATH_SCOPE: std::cell::Cell<bool> =
-        const { std::cell::Cell::new(false) };
-}
-
-#[cfg(test)]
-pub(crate) fn set_test_force_keyring_path_scope(on: bool) {
-    TEST_FORCE_KEYRING_PATH_SCOPE.with(|flag| flag.set(on));
 }
 
 pub struct AuthManager {

@@ -79,6 +79,7 @@ which = { workspace = true }
 chrono = { workspace = true }
 futures-util = { workspace = true }
 kimix-sandbox = { path = "../kimix-sandbox", default-features = false }
+kimix-exec-protocol = { path = "../kimix-exec-protocol" }
 kimix-file-utils = { path = "../kimix-file-utils" }
 
 [target.'cfg(unix)'.dependencies]

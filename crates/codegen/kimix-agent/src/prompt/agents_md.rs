@@ -317,7 +317,9 @@ mod tests {
         fs::create_dir_all(&claude_dir).unwrap();
         fs::write(claude_dir.join("CLAUDE.md"), "# Project instructions").unwrap();
 
-        let files = find_agent_files(tmp.path(), &CompatConfig::default().agent_filenames());
+        // `.claude/` surfaces are gated behind the claude.agents compat cell;
+        // `all_on()` pins the historical all-vendors discovery behavior.
+        let files = find_agent_files(tmp.path(), &CompatConfig::all_on().agent_filenames());
         assert!(
             files
                 .iter()
@@ -334,7 +336,8 @@ mod tests {
         fs::write(rules_dir.join("style.md"), "# Style rules").unwrap();
         fs::write(rules_dir.join("safety.md"), "# Safety rules").unwrap();
 
-        let files = find_rules_files(tmp.path(), &CompatConfig::default().rules_dirs());
+        // `.claude/rules` is gated behind the claude.rules compat cell.
+        let files = find_rules_files(tmp.path(), &CompatConfig::all_on().rules_dirs());
         assert_eq!(files.len(), 2);
         assert!(files[0].to_string_lossy().contains("safety.md"));
         assert!(files[1].to_string_lossy().contains("style.md"));
@@ -601,7 +604,7 @@ mod tests {
         let configs = read_agents_config_with_options(
             repo_root.to_str().unwrap(),
             None,
-            CompatConfig::default(),
+            CompatConfig::all_on(),
         )
         .await;
 
@@ -634,7 +637,7 @@ mod tests {
         let configs = read_agents_config_with_options(
             repo_root.to_str().unwrap(),
             None,
-            CompatConfig::default(),
+            CompatConfig::all_on(),
         )
         .await;
 

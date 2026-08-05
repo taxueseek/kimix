@@ -102,6 +102,9 @@ pub(crate) struct AgentRebuildSpec {
     pub prompt_audience: PromptAudience,
     pub role_instructions: Option<String>,
     pub persona_instructions: Option<String>,
+    /// Taste section: learned coding preferences rendered as a `<taste>` block
+    /// appended to the system prompt (see `kimix_agent` render path).
+    pub taste_section: Option<String>,
     pub skills_config: SkillsConfig,
     /// Resolved vendor-compat config (from `Config::compat_resolved`), threaded
     /// into skills / rules / AGENTS.md discovery via the builder.
@@ -194,6 +197,7 @@ impl AgentRebuildSpec {
             prompt_audience,
             role_instructions,
             persona_instructions,
+            taste_section,
             skills_config,
             compat,
             context_window_tokens,
@@ -253,6 +257,7 @@ impl AgentRebuildSpec {
         .with_persona_summaries(persona_summaries.clone())
         .with_prompt_audience(*prompt_audience)
         .with_role_instructions(role_instructions.clone())
+        .with_taste_section(taste_section.clone())
         .with_persona_instructions(persona_instructions.clone())
         .with_skills_config(skills_config.clone())
         .with_compat_config(*compat)
@@ -388,6 +393,7 @@ pub(crate) fn test_rebuild_spec_default() -> Arc<AgentRebuildSpec> {
         prompt_audience: PromptAudience::Primary,
         role_instructions: None,
         persona_instructions: None,
+        taste_section: None,
         skills_config: SkillsConfig::default(),
         compat: CompatConfig::default(),
         context_window_tokens: 256_000,

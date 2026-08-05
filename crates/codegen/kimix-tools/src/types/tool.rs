@@ -96,6 +96,7 @@ pub enum ToolKind {
     UseTool,
     Monitor,
     GoalUpdate,
+    Taste,
     #[serde(other)]
     Other,
 }

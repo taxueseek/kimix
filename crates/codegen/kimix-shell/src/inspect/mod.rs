@@ -1532,7 +1532,8 @@ mod tests {
 
         let human = render_harness_compatibility(&report);
 
-        assert!(human.contains("skills     on   (default)"), "{human}");
+        // Terminal-minimal default: unconfigured cells render OFF (default).
+        assert!(human.contains("skills     OFF  (default)"), "{human}");
         assert!(human.contains("rules      OFF  (config)"), "{human}");
         assert!(
             !human.contains("Defaults shown; remote may override."),

@@ -90,6 +90,7 @@ pub enum ToolInput {
     SchedulerDelete(crate::implementations::kimix::scheduler::delete::SchedulerDeleteInput),
     SchedulerList(crate::implementations::kimix::scheduler::list::SchedulerListInput),
     UpdateGoal(UpdateGoalInput),
+    Taste(crate::implementations::kimix::taste::TasteInput),
     /// Dynamic input for runtime-registered tools (MCP, etc.)
     Dynamic(serde_json::Value),
 }

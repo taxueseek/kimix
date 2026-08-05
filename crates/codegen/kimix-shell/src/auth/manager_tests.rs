@@ -323,90 +323,39 @@ async fn remove_scope_deletes_file_entry_and_memory() {
 #[cfg(any(target_os = "macos", windows))]
 mod keyring_integration {
     use super::*;
-    use crate::auth::storage::{
-        disable_mock_keyring_for_test, enable_mock_keyring_for_test, keyring_read_session,
-    };
+    use crate::auth::storage::keyring_read_session;
 
-    /// Tempdir manager pretending to be the default install (thread-local
-    /// test seam) so keyring behavior — including constructor-time keyring
-    /// reads — is exercisable against the mock keyring.
-    fn mgr_keyring_scoped() -> (tempfile::TempDir, Arc<AuthManager>) {
-        // The path scope is captured at construction, so force it first.
-        crate::auth::manager::set_test_force_keyring_path_scope(true);
-        let dir = tempfile::tempdir().unwrap();
-        let m = Arc::new(AuthManager::new(dir.path(), KimiCodeConfig::default()));
-        (dir, m)
-    }
-
-    struct MockKeyringGuard;
-    impl MockKeyringGuard {
-        fn enable() -> Self {
-            enable_mock_keyring_for_test();
-            crate::auth::manager::set_test_force_keyring_path_scope(true);
-            Self
-        }
-    }
-    impl Drop for MockKeyringGuard {
-        fn drop(&mut self) {
-            crate::auth::manager::set_test_force_keyring_path_scope(false);
-            disable_mock_keyring_for_test();
-        }
-    }
-
-    /// With the keyring available, update() writes the session there (not
-    /// the file), reads come back from the keyring, and logout removes it.
+    /// With the OS keyring permanently disabled by design, update() writes
+    /// the session to `auth.json`, a sibling manager loads it from disk, and
+    /// logout removes the file. (This module previously exercised the mock
+    /// keyring; the keyring path no longer exists in this build.)
     #[tokio::test]
-    #[serial_test::serial(kimix_keyring)]
-    async fn update_prefers_keyring_and_logout_clears_it() {
-        let _guard = MockKeyringGuard::enable();
-        let (dir, m) = mgr_keyring_scoped();
-        m.update(session("at-kr", "rt-kr", 3600, 3600))
+    async fn update_writes_file_and_logout_clears_it() {
+        let (dir, m) = mgr();
+        m.update(session("at-file", "rt-file", 3600, 3600))
             .await
             .unwrap();
-        assert!(
-            !dir.path().join("auth.json").exists(),
-            "session must NOT land in the plaintext file when the keyring is available"
-        );
-        assert!(matches!(
-            keyring_read_session(),
-            crate::auth::storage::KeyringRead::Found(_)
-        ));
+        assert!(dir.path().join("auth.json").exists());
+
         let (auth, state) = m.read_disk_auth_with_state();
-        assert_eq!(auth.map(|a| a.key), Some("at-kr".into()));
+        assert_eq!(auth.map(|a| a.key), Some("at-file".into()));
         assert_eq!(state, DiskAuthState::Ok);
 
-        // A fresh manager (same process) loads from the keyring.
+        // A fresh manager (same process) loads from the file.
         let sibling = Arc::new(AuthManager::new(dir.path(), KimiCodeConfig::default()));
-        assert_eq!(sibling.current().map(|a| a.key), Some("at-kr".into()));
+        assert_eq!(sibling.current().map(|a| a.key), Some("at-file".into()));
 
-        // Logout removes the keyring entry.
+        // Logout removes the file.
         m.clear().unwrap();
-        assert!(matches!(
-            keyring_read_session(),
-            crate::auth::storage::KeyringRead::Missing
-        ));
+        assert!(!dir.path().join("auth.json").exists());
     }
 
-    /// Regression for the 2026-07-17 credential wipe: a manager rooted
-    /// OUTSIDE the default install (a tempdir — exactly what integration
-    /// tests construct) must never write to or DELETE the global keyring
-    /// entry. Before the path-scope guard, every `cargo test` run wiped the
-    /// developer's real login via `remove_scope`'s keyring delete.
+    /// Regression guard for the 2026-07-17 credential wipe, adapted to the
+    /// keyring-less build: a tempdir manager (the integration-test shape)
+    /// must confine itself to its own directory; the inert keyring stubs
+    /// confirm nothing global is touched.
     #[tokio::test]
-    #[serial_test::serial(kimix_keyring)]
-    async fn tempdir_manager_never_touches_global_keyring() {
-        let _guard = MockKeyringGuard::enable();
-        // Seed the "real user's" credential via a default-scoped manager.
-        let (_scoped_dir, scoped) = mgr_keyring_scoped();
-        scoped
-            .update(session("at-real", "rt-real", 3600, 3600))
-            .await
-            .unwrap();
-
-        // A tempdir manager WITHOUT the path scope — the integration-test
-        // shape. The mock keyring stays enabled: only the path scope
-        // distinguishes it from the real install.
-        crate::auth::manager::set_test_force_keyring_path_scope(false);
+    async fn tempdir_manager_only_touches_its_own_dir() {
         let (dir, foreign) = mgr();
         foreign
             .update(session("at-foreign", "rt-foreign", 3600, 3600))
@@ -414,44 +363,29 @@ mod keyring_integration {
             .unwrap();
         assert!(
             dir.path().join("auth.json").exists(),
-            "foreign manager must write to its own file, not the keyring"
+            "tempdir manager must write to its own file"
         );
 
-        // Its logout must not destroy the global entry.
         foreign.clear().unwrap();
-        match keyring_read_session() {
-            crate::auth::storage::KeyringRead::Found(auth) => {
-                assert_eq!(auth.key, "at-real", "real credential must survive");
-            }
-            other => panic!("global keyring entry destroyed by a tempdir manager: {other:?}"),
-        }
+        assert!(!dir.path().join("auth.json").exists());
+        assert!(matches!(
+            keyring_read_session(),
+            crate::auth::storage::KeyringRead::Unavailable
+        ));
     }
 
-    /// A stale file copy left from fallback days is stripped on the next
-    /// keyring write, and the keyring copy wins on reads.
+    /// A repeat update overwrites the file copy in place — there is no
+    /// keyring copy to migrate or strip in this build.
     #[tokio::test]
-    #[serial_test::serial(kimix_keyring)]
-    async fn keyring_write_strips_stale_file_copy() {
-        let (dir, m) = mgr_keyring_scoped();
-        // Keyring disabled: first write lands in the file.
-        m.update(session("at-file", "rt-file", 3600, 3600))
-            .await
-            .unwrap();
+    async fn repeat_update_overwrites_file_copy_in_place() {
+        let (dir, m) = mgr();
+        m.update(session("at-1", "rt-1", 3600, 3600)).await.unwrap();
+        m.update(session("at-2", "rt-2", 3600, 3600)).await.unwrap();
         assert!(dir.path().join("auth.json").exists());
-
-        // Keyring becomes available: the next write moves the credential.
-        let _guard = MockKeyringGuard::enable();
-        m.update(session("at-kr2", "rt-kr2", 3600, 3600))
-            .await
-            .unwrap();
-        assert!(
-            !dir.path().join("auth.json").exists(),
-            "stale plaintext copy must be stripped after the keyring write"
-        );
         assert_eq!(
             m.read_disk_auth().map(|a| a.key),
-            Some("at-kr2".into()),
-            "keyring copy is authoritative"
+            Some("at-2".into()),
+            "the latest write is authoritative"
         );
     }
 }

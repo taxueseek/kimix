@@ -404,6 +404,20 @@ pub(super) const BUILTIN_COMMANDS: &[BuiltinCommand] = &[
             }
         },
     },
+    BuiltinCommand {
+        name: "taste",
+        description: "Show, refresh, or re-mine the learned coding preferences",
+        argument_hint: Some("show | learn | status"),
+        aliases: &["prefs"],
+        gate: BuiltinGate::AlwaysOn,
+        resolve: |args| {
+            match args.trim().to_lowercase().as_str() {
+                "" | "show" | "status" => BuiltinAction::TasteShow,
+                "learn" => BuiltinAction::TasteLearn,
+                _ => BuiltinAction::TasteShow,
+            }
+        },
+    },
 ];
 
 /// Split a trailing `--budget <tokens>` flag off a `/goal` objective.
@@ -838,6 +852,8 @@ pub(super) enum BuiltinAction {
     GoalPause,
     GoalResume,
     GoalClear,
+    TasteShow,
+    TasteLearn,
 }
 
 impl BuiltinAction {
@@ -870,6 +886,8 @@ impl BuiltinAction {
             | BuiltinAction::GoalPause
             | BuiltinAction::GoalResume
             | BuiltinAction::GoalClear => "goal",
+            BuiltinAction::TasteShow => "taste",
+            BuiltinAction::TasteLearn => "taste",
         }
     }
 
@@ -898,6 +916,7 @@ impl BuiltinAction {
             BuiltinAction::MemoryBrowse => false,
             BuiltinAction::MemoryToggle { .. } => true,
             BuiltinAction::GoalSet { .. } => true,
+            BuiltinAction::TasteShow | BuiltinAction::TasteLearn => true,
             BuiltinAction::GoalStatus
             | BuiltinAction::GoalPause
             | BuiltinAction::GoalResume
@@ -1732,6 +1751,7 @@ mod tests {
                 "session-info",
                 "feedback",
                 "goal",
+                "taste",
                 "loop",
                 "commit",
                 "deploy",

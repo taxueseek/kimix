@@ -197,6 +197,38 @@ fn record_stream_request_failure(err: &reqwest::Error) {
     span.record("error", err.to_string().as_str());
 }
 
+/// Inject hosted (server-side) tools into a ChatCompletions `tools` array.
+///
+/// The typed `ChatCompletionRequest` carries `hosted_tools` out-of-band
+/// (`#[serde(skip)]`); this appends the backend-specific wire entries after
+/// the request body is serialized, so a ChatCompletions model's *own* hosted
+/// search (OpenCode-Go `{"type":"web_search"}`, etc.) reaches the server —
+/// mirroring what the Responses path already does via `rs::Tool::WebSearch`.
+///
+/// `XSearch` has no ChatCompletions wire shape (Responses-extension only),
+/// so it is skipped here rather than emitting an unknown tool entry that the
+/// server would reject.
+fn inject_hosted_chat_tools(body: &mut serde_json::Value, hosted: &[kimix_sampling_types::conversation::HostedTool]) {
+    if hosted.is_empty() {
+        return;
+    }
+    // 确保 tools 数组存在，再逐个追加 hosted 条目。
+    if body.get("tools").and_then(serde_json::Value::as_array).is_none() {
+        body["tools"] = serde_json::Value::Array(Vec::new());
+    }
+    let tools = body["tools"].as_array_mut().expect("just ensured");
+    for tool in hosted {
+        match tool {
+            kimix_sampling_types::conversation::HostedTool::WebSearch { .. } => {
+                tools.push(serde_json::json!({ "type" : "web_search" }));
+            }
+            kimix_sampling_types::conversation::HostedTool::XSearch => {
+                // Responses-extension only; not expressible here.
+            }
+        }
+    }
+}
+
 fn extract_retry_after(headers: &reqwest::header::HeaderMap) -> Option<u64> {
     headers
         .get(reqwest::header::RETRY_AFTER)
@@ -860,6 +892,8 @@ impl SamplingClient {
         BoxStream<'static, Result<ChatCompletionChunk>>,
         Option<ResponseModelMetadata>,
     )> {
+        // 捕获 hosted tools（apply_defaults 会 move request）。
+        let hosted_tools = request.hosted_tools.clone();
         let payload = self.apply_defaults(request)?;
         let model_id = payload.model.clone().unwrap_or_default();
 
@@ -880,6 +914,12 @@ impl SamplingClient {
             tracing::error!("Failed to serialize chat/completions request: {}", e);
             SamplingError::Serialization(e)
         })?;
+        // Hosted tools (server-side `web_search` / `x_search`): append to the
+        // `tools` array after the typed request renders. ChatCompletions
+        // expresses hosted search as a bare `{"type": "web_search"}` entry
+        // (OpenAI/OpenCode-Go dialect); the same `hosted_tools` the Responses
+        // path injects as `rs::Tool::WebSearch`.
+        inject_hosted_chat_tools(&mut request_body, &hosted_tools);
         crate::kimi_compat::adapt_chat_completions_body(
             &mut request_body,
             self.prompt_cache_key.as_deref(),
@@ -1000,7 +1040,12 @@ impl SamplingClient {
                             data = %data,
                         );
 
-                        if let Some(stream_error) = try_parse_stream_error(data) {
+                        // Cheap gate: ErrorResponse requires a top-level
+                        // "error" key, so chunks without it can skip the
+                        // full error-parse on the per-token hot path.
+                        if let Some(stream_error) =
+                            data.contains("\"error\"").then(|| try_parse_stream_error(data)).flatten()
+                        {
                             Some(Err(stream_error))
                         } else {
                             Some(
@@ -1098,8 +1143,10 @@ impl SamplingClient {
         kimix_sampling_types::patch_reasoning_text_types(&mut request_body);
         // Inject prompt-cache key so prefix caches stick to the session.
         if let Some(ref key) = self.prompt_cache_key {
-            request_body["prompt_cache_key"] =
-                serde_json::Value::String(key[..key.len().min(64)].to_string());
+            // Byte-slicing a `str` panics on a non-char boundary; truncate on
+            // char boundaries so non-ASCII keys cannot crash the request path.
+            let truncated: String = key.chars().take(64).collect();
+            request_body["prompt_cache_key"] = serde_json::Value::String(truncated);
         }
         let http_request = self.post(self.endpoint("responses")).json(&request_body);
 
@@ -1368,7 +1415,9 @@ impl SamplingClient {
                         };
                         if swallow {
                             Some(None)
-                        } else if let Some(stream_error) = try_parse_stream_error(data) {
+                        } else if let Some(stream_error) =
+                            data.contains("\"error\"").then(|| try_parse_stream_error(data)).flatten()
+                        {
                             Some(Some(Err(stream_error)))
                         } else {
                             Some(Some(deserialize_response_event(data)))
@@ -1657,7 +1706,10 @@ impl SamplingClient {
                             data = %data,
                         );
 
-                        if let Some(stream_error) = try_parse_stream_error(data) {
+                        // Cheap gate: see chat_completions backend above.
+                        if let Some(stream_error) =
+                            data.contains("\"error\"").then(|| try_parse_stream_error(data)).flatten()
+                        {
                             Some(Err(stream_error))
                         } else {
                             Some(
@@ -1974,6 +2026,46 @@ mod tests {
     /// expected wire format: all ChatCompletionRequest fields flattened at
     /// top level, plus `stream: true` and `stream_options.include_usage: true`.
     #[test]
+    fn hosted_web_search_injected_into_chat_tools() {
+        let mut body = serde_json::json!({
+            "model": "m",
+            "tools": [{ "type" : "function", "function" : { "name" : "read_file" } }],
+        });
+        inject_hosted_chat_tools(
+            &mut body,
+            &[kimix_sampling_types::conversation::HostedTool::WebSearch {
+                allowed_domains: None,
+            }],
+        );
+        let tools = body["tools"].as_array().expect("tools array");
+        assert_eq!(tools.len(), 2);
+        assert_eq!(tools[1], serde_json::json!({ "type" : "web_search" }));
+
+        // XSearch 无 ChatCompletions 形态 → 跳过不注入。
+        let mut body2 = serde_json::json!({ "model" : "m", "tools" : [] });
+        inject_hosted_chat_tools(
+            &mut body2,
+            &[kimix_sampling_types::conversation::HostedTool::XSearch],
+        );
+        assert_eq!(body2["tools"].as_array().unwrap().len(), 0);
+
+        // 无 tools 数组时自动创建。
+        let mut body3 = serde_json::json!({ "model" : "m" });
+        inject_hosted_chat_tools(
+            &mut body3,
+            &[kimix_sampling_types::conversation::HostedTool::WebSearch {
+                allowed_domains: None,
+            }],
+        );
+        assert_eq!(body3["tools"][0], serde_json::json!({ "type" : "web_search" }));
+
+        // 空 hosted → 不动。
+        let mut body4 = serde_json::json!({ "model" : "m", "tools" : [{ "type" : "function" }] });
+        inject_hosted_chat_tools(&mut body4, &[]);
+        assert_eq!(body4["tools"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
     fn streaming_chat_request_serializes_correctly() {
         let request = ChatCompletionRequest {
             model: Some("test-model".into()),
@@ -1996,6 +2088,7 @@ mod tests {
             x_kimix_agent_id: None,
             x_kimix_deployment_id: None,
             x_kimix_user_id: None,
+            hosted_tools: vec![],
             trace: None,
         };
 

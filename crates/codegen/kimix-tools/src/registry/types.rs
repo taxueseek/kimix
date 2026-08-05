@@ -699,6 +699,8 @@ impl ToolRegistryBuilder {
         }
         b.register::<crate::implementations::memory::search_tool::MemorySearchImpl>();
         b.register::<crate::implementations::memory::get_tool::MemoryGetImpl>();
+        b.register::<kimix::TasteTool>();
+        b.register::<kimix::TasteTool>();
         b.register::<crate::implementations::search_tool::SearchTool>();
         b.register_with_params::<
                 crate::implementations::use_tool::UseTool,

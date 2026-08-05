@@ -790,6 +790,7 @@ impl SessionActor {
             error.status_code == Some(404) && detailed_message.contains("does not exist");
         let is_auth_401 =
             error.status_code == Some(401) || matches!(error.kind, SamplingErrorKind::Auth);
+        let is_quota_403 = error.is_quota_exceeded();
         let detailed_message = if is_model_404 || is_auth_401 {
             let current_model = self
                 .chat_state_handle
@@ -820,6 +821,18 @@ impl SessionActor {
                 msg.push_str("\n  Switch models with /model or start a new session.");
             }
             msg
+        } else {
+            detailed_message
+        };
+        // 配额 403（如 Kimi 订阅用量耗尽）追加明确指引，避免被当作
+        // "check your API key" 类认证问题处理。
+        let detailed_message = if is_quota_403 {
+            format!(
+                "{detailed_message}\n\nQuota exhausted: the provider has reached \
+                 its usage limit for this billing cycle. Top up the subscription \
+                 or wait for the cycle reset — or switch to another model with \
+                 /model (e.g. one with its own API key)."
+            )
         } else {
             detailed_message
         };

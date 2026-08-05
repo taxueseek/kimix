@@ -19,7 +19,7 @@ pub use self::doom_loop::{
 };
 pub use self::error::{
     EmptyReason, EmptyResponseContext, ResponseModelMetadata, Result, SamplingError,
-    is_context_length_error,
+    is_context_length_error, is_quota_denial,
 };
 pub use self::types::*;
 

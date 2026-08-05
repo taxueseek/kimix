@@ -40,6 +40,8 @@ members = [
     "crates/codegen/kimix-sampler",
     "crates/codegen/kimix-sampling-types",
     "crates/codegen/kimix-sandbox",
+    "crates/codegen/kimix-exec-protocol",
+    "crates/codegen/kimix-exec-server",
     "crates/codegen/kimix-shared",
     "crates/codegen/kimix-shell",
     "crates/codegen/kimix-shell-base",
@@ -77,7 +79,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.18"
+version = "0.1.19"
 edition = "2024"
 license = "Apache-2.0"
 
@@ -269,6 +271,8 @@ kimix-agent-memory = { path = "crates/codegen/kimix-agent-memory" }
 kimix-memory = { path = "crates/codegen/kimix-agent-memory" }
 kimix-mermaid = { path = "crates/codegen/kimix-mermaid" }
 kimix-models = { path = "crates/codegen/kimix-models" }
+kimix-exec-protocol = { path = "crates/codegen/kimix-exec-protocol" }
+kimix-exec-server = { path = "crates/codegen/kimix-exec-server" }
 kimix-sampler = { path = "crates/codegen/kimix-sampler" }
 kimix-shared = { path = "crates/codegen/kimix-shared" }
 kimix-shell = { path = "crates/codegen/kimix-shell" }

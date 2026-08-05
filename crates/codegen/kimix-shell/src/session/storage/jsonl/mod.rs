@@ -345,10 +345,32 @@ impl JsonlStorageAdapter {
     /// appends skip the open/stat syscalls. Torn-tail check runs only when the
     /// file length changed since last append (e.g. external truncation = torn write).
     /// Normal path: write + flush (2 syscalls). Torn path: metadata + seek + read + write + flush.
+    #[cfg_attr(not(unix), allow(unused_mut))]
     async fn append_jsonl_line(&self, path: PathBuf, mut line: Vec<u8>) -> io::Result<()> {
         debug_assert!(line.ends_with(b"\n"), "JSONL record must end with \\n");
-        let (mut file, last_len) = get_or_open_cached(&self.file_cache, &path).await?;
-        let len = file.metadata().await?.len();
+        let (mut file, mut last_len) = get_or_open_cached(&self.file_cache, &path).await?;
+        let mut handle_meta = file.metadata().await?;
+        // A rename-based rewrite (write_jsonl, persist_chat_history_jsonl_sync,
+        // or an external process) swaps the inode underneath the cached
+        // handle; appending through it would write into an unlinked file —
+        // silent data loss. Compare inodes and reopen when they diverge.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt as _;
+            if let Ok(path_meta) = tokio::fs::metadata(&path).await
+                && path_meta.ino() != handle_meta.ino()
+            {
+                file = tokio::fs::OpenOptions::new()
+                    .read(true)
+                    .create(true)
+                    .append(true)
+                    .open(&path)
+                    .await?;
+                handle_meta = file.metadata().await?;
+                last_len = 0; // force the torn-tail check on the new file
+            }
+        }
+        let len = handle_meta.len();
         // 文件长度与上次不同（可能被外部截断）时，检查 torn tail
         if len > 0 && len != last_len {
             use tokio::io::{AsyncReadExt as _, AsyncSeekExt as _};
@@ -383,7 +405,13 @@ impl JsonlStorageAdapter {
         }
         let tmp = path.with_extension("jsonl.tmp");
         tokio::fs::write(&tmp, &content).await?;
-        tokio::fs::rename(&tmp, &path).await
+        tokio::fs::rename(&tmp, &path).await?;
+        // The rename replaced the file: any cached append handle still points
+        // at the old (now unlinked) inode, and its cached length is stale.
+        // Evict so the next append re-opens the new file (last_len=0 forces
+        // the torn-tail check) instead of silently writing into the void.
+        let _ = self.file_cache.lock().await.remove(&path);
+        Ok(())
     }
     fn read_jsonl<T: serde::de::DeserializeOwned>(&self, path: PathBuf) -> io::Result<Vec<T>> {
         if !path.exists() {

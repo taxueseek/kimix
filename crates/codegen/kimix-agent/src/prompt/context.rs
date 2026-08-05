@@ -119,6 +119,11 @@ pub struct PromptContext {
     pub memory_global_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory_workspace_path: Option<String>,
+    /// Taste section: learned coding preferences from
+    /// `~/.kimix/taste/taste.md`, rendered as a `<taste>` block appended to
+    /// the system prompt. `None` = no taste block (no store / disabled).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub taste_section: Option<String>,
     /// Role instructions to include in the system prompt.
     /// Moved from the user task prompt so they're part of durable identity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -184,6 +189,7 @@ impl Default for PromptContext {
             memory_enabled: false,
             memory_global_path: None,
             memory_workspace_path: None,
+            taste_section: None,
             role_instructions: None,
             persona_instructions: None,
             os_name: None,
@@ -204,8 +210,10 @@ impl PromptContext {
     }
     /// AGENTS.md content for injection as a prepended user message.
     ///
-    /// - Subagents and primary sessions both get the full block, so a child
+    /// - Subagents and primary sessions both get the block, so a child
     ///   verifier sees the same project instructions as the main agent.
+    ///   Oversized files are truncated at [`agents_md`] 's per-file limit
+    ///   with a marker pointing to the full path for on-demand reads.
     pub fn agents_md_user_reminder(&self) -> Option<String> {
         self.format_agents_md_section()
     }
@@ -293,7 +301,18 @@ impl PromptContext {
                 tool_bridge.render_prompt(body, &placeholders).await?
             }
         };
-        Some(prompt)
+        // Taste block: appended so a preference store is always visible to
+        // the model regardless of template version. Empty section → skipped.
+        match &self.taste_section {
+            Some(section) if !section.trim().is_empty() => {
+                let mut p = prompt;
+                p.push_str("\n\n<taste>\n");
+                p.push_str(section.trim());
+                p.push_str("\n</taste>");
+                Some(p)
+            }
+            _ => Some(prompt),
+        }
     }
 }
 #[cfg(test)]
@@ -314,6 +333,7 @@ mod tests {
             memory_enabled: false,
             memory_global_path: None,
             memory_workspace_path: None,
+            taste_section: None,
             role_instructions: None,
             persona_instructions: None,
             os_name: None,
@@ -599,6 +619,7 @@ mod tests {
             memory_enabled: true,
             memory_global_path: None,
             memory_workspace_path: None,
+            taste_section: None,
             role_instructions: None,
             persona_instructions: None,
             os_name: None,
@@ -644,7 +665,7 @@ mod tests {
         );
     }
     #[test]
-    fn child_prompt_delivers_full_agents_md() {
+    fn child_prompt_delivers_truncated_agents_md_with_marker() {
         use crate::prompt::agents_md::AgentConfigFile;
         let mut ctx = child_general_purpose_context();
         ctx.agents_md_files = vec![AgentConfigFile {
@@ -654,13 +675,19 @@ mod tests {
         }];
         assert_eq!(ctx.audience, super::PromptAudience::Subagent);
         let reminder = ctx.agents_md_user_reminder().unwrap();
+        // Oversized AGENTS.md is capped per-file with a truncation marker
+        // directing the child to read the full file on demand.
         assert!(
-            reminder.contains(&"X".repeat(5000)),
-            "child must receive full AGENTS.md content"
+            reminder.contains(&"X".repeat(4000)),
+            "child must receive the AGENTS.md prefix"
         );
         assert!(
-            !reminder.contains("truncated"),
-            "child AGENTS.md must not be truncated"
+            !reminder.contains(&"X".repeat(5000)),
+            "child AGENTS.md must be capped at the per-file limit"
+        );
+        assert!(
+            reminder.contains("truncated"),
+            "child AGENTS.md truncation must be signposted"
         );
     }
     #[test]

@@ -380,36 +380,36 @@ impl AgentView {
                         InputOutcome::Changed
                     }
                     Some(AgentPane::Prompt) => {
-                        let was_collapsed = self.active_pane != AgentPane::Prompt
-                            && self.scrollback.appearance().prompt.collapse_unfocused;
+                        // Always place caret on click, including the click that
+                        // expands a `collapse_unfocused` prompt. Skipping place
+                        // on first expand left the caret stuck at end-of-buffer
+                        // (one-click mid-draft edit felt "boxed"/locked).
                         self.set_active_pane(AgentPane::Prompt, false);
                         self.btw_focused = false;
-                        if !was_collapsed {
-                            if matches!(self.prompt.handle_mouse(mouse), PromptEvent::Edited) {
-                                self.prompt.refresh_slash(&self.session.models);
-                                if let Some(eff) = self.notify_suggestion_text_changed() {
-                                    self.pending_effects.push(eff);
-                                }
+                        if matches!(self.prompt.handle_mouse(mouse), PromptEvent::Edited) {
+                            self.prompt.refresh_slash(&self.session.models);
+                            if let Some(eff) = self.notify_suggestion_text_changed() {
+                                self.pending_effects.push(eff);
                             }
-                            let now = std::time::Instant::now();
-                            if let Some(last) = self.last_prompt_click_ms
-                                && now.duration_since(last).as_millis() < MULTI_CLICK_TIMEOUT_MS
-                            {
-                                if self.prompt.file_ref_near_cursor()
-                                    && let Some((path, initial_range)) =
-                                        self.prompt.file_ref_element_at_cursor()
-                                {
-                                    self.prompt.textarea.begin_undo_group();
-                                    self.open_line_viewer(
-                                        &std::path::PathBuf::from(path),
-                                        initial_range,
-                                    );
-                                } else if self.prompt.expand_paste_element_at_cursor() {
-                                    self.prompt.refresh_slash(&self.session.models);
-                                }
-                            }
-                            self.last_prompt_click_ms = Some(now);
                         }
+                        let now = std::time::Instant::now();
+                        if let Some(last) = self.last_prompt_click_ms
+                            && now.duration_since(last).as_millis() < MULTI_CLICK_TIMEOUT_MS
+                        {
+                            if self.prompt.file_ref_near_cursor()
+                                && let Some((path, initial_range)) =
+                                    self.prompt.file_ref_element_at_cursor()
+                            {
+                                self.prompt.textarea.begin_undo_group();
+                                self.open_line_viewer(
+                                    &std::path::PathBuf::from(path),
+                                    initial_range,
+                                );
+                            } else if self.prompt.expand_paste_element_at_cursor() {
+                                self.prompt.refresh_slash(&self.session.models);
+                            }
+                        }
+                        self.last_prompt_click_ms = Some(now);
                         InputOutcome::Changed
                     }
                     Some(AgentPane::Tasks) => {
@@ -1378,4 +1378,219 @@ mod tests {
         );
         assert_eq!(agent.prompt.textarea.text(), text);
     }
+
+    /// Click mid-draft in the focused prompt must place the caret at the
+    /// hit character — not leave it stuck at end-of-buffer.
+    #[test]
+    fn click_mid_prompt_places_cursor() {
+        use crate::app::agent_view::test_fixtures::make_agent;
+        use crate::views::prompt_widget::PromptStyle;
+        let mut agent = make_agent();
+        agent.active_pane = AgentPane::Prompt;
+        agent.prompt.set_text("hello world");
+        // Cursor starts at end after set_text clamp from 0... actually set_text clamps existing cursor
+        agent.prompt.set_cursor(agent.prompt.textarea.text().len());
+        assert_eq!(agent.prompt.textarea.cursor(), 11);
+
+        let area = Rect::new(0, 10, 40, 5);
+        agent.pane_areas.prompt = area;
+        agent.pane_areas.scrollback = Rect::new(0, 0, 40, 10);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 40, 20));
+        let style = PromptStyle {
+            chrome: false,
+            vpad_top: 0,
+            focused: true,
+            show_prefix: true,
+            ..Default::default()
+        };
+        agent.prompt.draw(&mut buf, area, None, &style, None);
+        let ta = agent.prompt.textarea_area();
+        assert!(ta.width > 0 && ta.height > 0, "textarea_area must be set by draw: {ta:?}");
+
+        // Click on the space between hello and world (byte 5 / display col 5 within text after prefix)
+        // text is "hello world", space at index 5, display col 5
+        let click = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: ta.x + 5,
+            row: ta.y,
+            modifiers: KeyModifiers::empty(),
+        };
+        let outcome = agent.handle_mouse(&click);
+        assert!(
+            matches!(outcome, InputOutcome::Changed),
+            "mid-prompt click must redraw, got {outcome:?}"
+        );
+        assert_eq!(
+            agent.prompt.textarea.cursor(),
+            5,
+            "caret must move to click position (got {})",
+            agent.prompt.textarea.cursor()
+        );
+    }
+
+    /// Production chrome (borders + pad + prefix + vpad) must still place
+    /// the caret mid-draft — hit geometry uses last-draw `textarea_area`.
+    #[test]
+    fn click_mid_prompt_places_cursor_with_production_chrome() {
+        use crate::app::agent_view::test_fixtures::make_agent;
+        use crate::views::prompt_widget::PromptStyle;
+        let mut agent = make_agent();
+        agent.active_pane = AgentPane::Prompt;
+        agent.prompt.set_text("hello world");
+        agent.prompt.set_cursor(agent.prompt.textarea.text().len());
+        assert_eq!(agent.prompt.textarea.cursor(), 11);
+
+        // Match agent_view/render.rs production PromptStyle (chrome + borders).
+        let area = Rect::new(0, 10, 60, 6);
+        agent.pane_areas.prompt = area;
+        agent.pane_areas.scrollback = Rect::new(0, 0, 60, 10);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 60, 20));
+        let style = PromptStyle {
+            focused: true,
+            show_prefix: true,
+            vpad_top: 1,
+            chrome: true,
+            chrome_pad_left: 2,
+            chrome_pad_right: 2,
+            show_accent_line: false,
+            show_borders: true,
+            ..Default::default()
+        };
+        agent.prompt.draw(&mut buf, area, None, &style, None);
+        let ta = agent.prompt.textarea_area();
+        assert!(
+            ta.width > 0 && ta.height > 0,
+            "production chrome must yield a text hit area: {ta:?}"
+        );
+        assert!(
+            ta.x >= area.x + 2,
+            "textarea must sit inside chrome pad (ta={ta:?}, area={area:?})"
+        );
+
+        let click = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: ta.x + 5,
+            row: ta.y,
+            modifiers: KeyModifiers::empty(),
+        };
+        let outcome = agent.handle_mouse(&click);
+        assert!(
+            matches!(outcome, InputOutcome::Changed),
+            "production chrome mid-prompt click must redraw, got {outcome:?}"
+        );
+        assert_eq!(
+            agent.prompt.textarea.cursor(),
+            5,
+            "caret must move under production chrome (got {})",
+            agent.prompt.textarea.cursor()
+        );
+    }
+
+    /// First click on a collapsed (`collapse_unfocused`) prompt must expand
+    /// *and* place the caret — not leave it stuck at end-of-buffer.
+    #[test]
+    fn first_click_on_collapsed_prompt_places_cursor() {
+        use crate::app::agent_view::test_fixtures::make_agent;
+        use crate::views::prompt_widget::PromptStyle;
+        let mut agent = make_agent();
+        // Scrollback focused → prompt collapsed when collapse_unfocused.
+        agent.active_pane = AgentPane::Scrollback;
+        let mut appearance = agent.scrollback.appearance().clone();
+        appearance.prompt.collapse_unfocused = true;
+        agent.scrollback.set_appearance(appearance);
+
+        agent.prompt.set_text("hello world");
+        agent.prompt.set_cursor(agent.prompt.textarea.text().len());
+        assert_eq!(agent.prompt.textarea.cursor(), 11);
+
+        let area = Rect::new(0, 10, 40, 5);
+        agent.pane_areas.prompt = area;
+        agent.pane_areas.scrollback = Rect::new(0, 0, 40, 10);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 40, 20));
+        // Unfocused draw (collapsed visual), but textarea_area still set.
+        let style = PromptStyle {
+            chrome: false,
+            vpad_top: 0,
+            focused: false,
+            show_prefix: true,
+            ..Default::default()
+        };
+        agent.prompt.draw(&mut buf, area, None, &style, None);
+        let ta = agent.prompt.textarea_area();
+        assert!(ta.width > 0 && ta.height > 0, "textarea_area must be set: {ta:?}");
+
+        let click = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: ta.x + 5,
+            row: ta.y,
+            modifiers: KeyModifiers::empty(),
+        };
+        let outcome = agent.handle_mouse(&click);
+        assert!(
+            matches!(outcome, InputOutcome::Changed),
+            "collapsed-prompt click must redraw, got {outcome:?}"
+        );
+        assert_eq!(
+            agent.active_pane,
+            AgentPane::Prompt,
+            "first click must focus prompt"
+        );
+        assert_eq!(
+            agent.prompt.textarea.cursor(),
+            5,
+            "first expand click must also place caret (got {})",
+            agent.prompt.textarea.cursor()
+        );
+    }
+
+    /// Keyboard Left/Right must move the caret mid-draft (not locked at end).
+    #[test]
+    fn prompt_arrow_keys_move_cursor() {
+        use crate::app::agent_view::test_fixtures::make_agent;
+        use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+        let mut agent = make_agent();
+        agent.active_pane = AgentPane::Prompt;
+        agent.prompt.set_text("abcdef");
+        agent.prompt.set_cursor(6);
+        let left = KeyEvent {
+            code: KeyCode::Left,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::empty(),
+        };
+        let ev = agent.prompt.handle_key(&left);
+        assert!(matches!(ev, PromptEvent::Edited), "Left must report Edited, got {ev:?}");
+        assert_eq!(agent.prompt.textarea.cursor(), 5);
+        let left2 = agent.prompt.handle_key(&left);
+        assert!(matches!(left2, PromptEvent::Edited));
+        assert_eq!(agent.prompt.textarea.cursor(), 4);
+    }
+
+    /// Full `handle_prompt_key` path (action registry) must not steal bare Left
+    /// when Prompt is focused with a non-empty draft.
+    #[test]
+    fn prompt_left_via_handle_prompt_key_moves_cursor() {
+        use crate::app::agent_view::test_fixtures::make_agent;
+        use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+        let mut agent = make_agent();
+        agent.active_pane = AgentPane::Prompt;
+        agent.prompt.set_text("abcdef");
+        agent.prompt.set_cursor(6);
+        let left = KeyEvent {
+            code: KeyCode::Left,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::empty(),
+        };
+        let outcome = agent.handle_prompt_key_for_test(&left);
+        assert!(
+            matches!(outcome, InputOutcome::Changed),
+            "Left through registry path must edit, got {outcome:?}"
+        );
+        assert_eq!(agent.prompt.textarea.cursor(), 5);
+        let outcome2 = agent.handle_prompt_key_for_test(&left);
+        assert!(matches!(outcome2, InputOutcome::Changed));
+        assert_eq!(agent.prompt.textarea.cursor(), 4);
+    }
+
 }

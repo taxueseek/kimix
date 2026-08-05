@@ -349,7 +349,14 @@ pub fn format_sampling_error(err: &SamplingError, retry_count: Option<u32>) -> S
         } => {
             let status_hint = match status.as_u16() {
                 400 => " (bad request - check your input)",
-                401 | 403 => " (authentication issue - check your API key)",
+                401 => " (authentication issue - check your API key)",
+                403 => {
+                    if err.is_quota_exceeded() {
+                        " (quota exhausted - top up or wait for the billing cycle reset)"
+                    } else {
+                        " (forbidden - the provider rejected this request)"
+                    }
+                }
                 404 => " (endpoint not found - check model configuration)",
                 413 => " (request too large - try /compact or start new session)",
                 429 => " (rate limited - please wait and retry)",
@@ -936,6 +943,36 @@ mod tests {
             classify_error(&err, 0, 15, RATE_LIMIT_RETRY_THRESHOLD),
             RetryDecision::RetryWithClientRebuild { .. }
         ));
+    }
+
+    #[test]
+    fn quota_403_is_classified_and_formatted_distinctly() {
+        let quota_err = SamplingError::Api {
+            status: StatusCode::FORBIDDEN,
+            message: "access_terminated_error: You've reached your usage limit for \
+                 this billing cycle. Your quota will be refreshed in the next cycle."
+                .into(),
+            model_metadata: None,
+            retry_after_secs: None,
+            should_retry: None,
+        };
+        assert!(quota_err.is_quota_exceeded());
+        assert!(!quota_err.is_auth_error(), "quota 403 must never trigger token refresh");
+        let formatted = format_sampling_error(&quota_err, None);
+        assert!(formatted.contains("quota exhausted"), "got: {formatted}");
+        assert!(!formatted.contains("check your API key"), "must not mislead: {formatted}");
+
+        // Generic 403 (e.g. content-safety) stays forbidden, not quota.
+        let generic = SamplingError::Api {
+            status: StatusCode::FORBIDDEN,
+            message: "content filtered".into(),
+            model_metadata: None,
+            retry_after_secs: None,
+            should_retry: None,
+        };
+        assert!(!generic.is_quota_exceeded());
+        let formatted_g = format_sampling_error(&generic, None);
+        assert!(formatted_g.contains("forbidden"), "got: {formatted_g}");
     }
 
     #[test]

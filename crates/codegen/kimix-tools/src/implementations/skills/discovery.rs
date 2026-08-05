@@ -1530,14 +1530,17 @@ model: test-model
         let file = sub.join("file.rs");
         std::fs::write(&file, "fn main() {}").unwrap();
 
-        // claude.skills ON → both discovered.
+        // claude.skills ON → both discovered. Vendor surfaces are gated OFF
+        // in `CompatConfig::default()`, so enable the cell explicitly.
+        let mut compat_on = CompatConfig::default();
+        compat_on.claude.skills = true;
         let mut checked = HashSet::new();
         let on = discover_skills_for_paths(
             &[file.as_path()],
             &repo,
             Some(repo.as_path()),
             &mut checked,
-            CompatConfig::default(),
+            compat_on,
         );
         let names_on: Vec<&str> = on.iter().map(|s| s.name.as_str()).collect();
         assert!(

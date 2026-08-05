@@ -1671,7 +1671,9 @@ mod tests {
         let _g = MarkerGuard;
         refresh_marker_cache(false);
         let dir = tempfile::tempdir().unwrap();
-        let compat = kimix_tools::types::compat::CompatConfig::default();
+        // Vendor hook surfaces are gated off in `CompatConfig::default()`;
+        // `all_on()` pins the historical all-vendors discovery behavior.
+        let compat = kimix_tools::types::compat::CompatConfig::all_on();
         let paths = crate::util::hooks::discover_hook_source_paths(Some(dir.path()), &compat);
         let project_strs: Vec<String> = paths
             .project
@@ -1691,7 +1693,9 @@ mod tests {
         let _g = MarkerGuard;
         refresh_marker_cache(false);
         let dir = tempfile::tempdir().unwrap();
-        let compat = kimix_tools::types::compat::CompatConfig::default();
+        // Vendor hook surfaces are gated off in `CompatConfig::default()`;
+        // `all_on()` pins the historical all-vendors discovery behavior.
+        let compat = kimix_tools::types::compat::CompatConfig::all_on();
         let paths = crate::util::hooks::discover_hook_source_paths(Some(dir.path()), &compat);
         let global_strs: Vec<String> = paths
             .global

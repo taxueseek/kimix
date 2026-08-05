@@ -24,6 +24,7 @@ pub mod read_file;
 pub mod scheduler;
 pub mod search_replace;
 pub(crate) mod storage;
+pub mod taste;
 pub mod task;
 pub mod task_output;
 pub mod todo;
@@ -48,6 +49,7 @@ pub use scheduler::create::{
 pub use scheduler::delete::{SCHEDULER_DELETE_TOOL_NAME, SchedulerDeleteTool};
 pub use scheduler::list::SchedulerListTool;
 pub use search_replace::SearchReplaceTool;
+pub use taste::TasteTool;
 pub use task::TaskTool;
 pub use task_output::{GetTerminalCommandOutputTool, TaskOutputTool, WaitTasksTool};
 pub use todo::TodoWriteTool;

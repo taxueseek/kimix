@@ -81,6 +81,7 @@ pub struct AgentBuilder {
     memory_enabled: bool,
     memory_global_path: Option<String>,
     memory_workspace_path: Option<String>,
+    taste_section: Option<String>,
     is_non_interactive: bool,
     system_prompt_label: String,
     /// When true, use compact tool registration (L1+L2 only, skip duplicate variants).
@@ -242,6 +243,7 @@ impl AgentBuilder {
             memory_enabled: false,
             memory_global_path: None,
             memory_workspace_path: None,
+            taste_section: None,
             is_non_interactive: false,
             system_prompt_label: crate::prompt::context::DEFAULT_SYSTEM_PROMPT_LABEL.to_string(),
             // Terminal default: L1+L2 only. Opt out via with_compact_mode(false)
@@ -373,6 +375,13 @@ impl AgentBuilder {
         self.memory_enabled = enabled;
         self
     }
+    /// Set the taste section (learned coding preferences) injected into the
+    /// system prompt as a `<taste>` block. `None` disables the block.
+    pub fn with_taste_section(mut self, section: Option<String>) -> Self {
+        self.taste_section = section;
+        self
+    }
+
     pub fn with_memory_paths(
         mut self,
         global_path: Option<String>,
@@ -1201,6 +1210,7 @@ labeling 口径.\n",
             memory_enabled: self.memory_enabled,
             memory_global_path: self.memory_global_path,
             memory_workspace_path: self.memory_workspace_path,
+            taste_section: self.taste_section,
             role_instructions: self.role_instructions,
             persona_instructions: self.persona_instructions,
             os_name: Some(std::env::consts::OS.to_string()),

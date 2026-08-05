@@ -2102,6 +2102,9 @@ impl From<ConversationRequest> for ChatCompletionRequest {
             x_kimix_agent_id: req.x_kimix_agent_id,
             x_kimix_deployment_id: req.x_kimix_deployment_id,
             x_kimix_user_id: req.x_kimix_user_id,
+            // 透传 hosted tools：ChatCompletions 后端在序列化时把它们注入
+            // tools 数组（与 Responses 路径对齐），避免丢失模型自带搜索。
+            hosted_tools: req.hosted_tools,
             trace: None,
         }
     }

@@ -8540,7 +8540,10 @@ hooks = "unrelated malformed field"
         let resolved = resolve_compat_sessions_from_raw(Ok(&raw), None);
         assert!(!resolved.cursor.sessions);
         assert!(!resolved.claude.sessions);
-        assert!(resolved.codex.sessions);
+        // Terminal-minimal defaults are all-off, so an untouched codex cell
+        // resolves false; the unrelated malformed `hooks` field must not
+        // disable anything further.
+        assert!(!resolved.codex.sessions);
     }
     #[test]
     #[serial]
@@ -8633,9 +8636,11 @@ hooks = true
             ..Default::default()
         };
         let resolved = resolve_compat_sessions_from_raw(Ok(&raw), Some(&remote));
-        assert!(resolved.cursor.sessions);
+        // Defaults are terminal-minimal (all-off); the remote key only
+        // overrides its own cell (claude stays false either way here).
+        assert!(!resolved.cursor.sessions);
         assert!(!resolved.claude.sessions);
-        assert!(resolved.codex.sessions);
+        assert!(!resolved.codex.sessions);
     }
     #[test]
     #[serial]
@@ -8657,7 +8662,9 @@ hooks = true
             }
         }
         let remote = remote_settings_with(CompatRemoteKey::CursorSkills, false);
-        assert!(CompatConfig::default().cursor.skills);
+        // Terminal-minimal default is already off; an explicit remote `false`
+        // must keep it off (no accidental re-enable through the remote path).
+        assert!(!CompatConfig::default().cursor.skills);
         assert!(
             !resolve_compat_config(&CompatConfigToml::default(), Some(&remote))
                 .cursor

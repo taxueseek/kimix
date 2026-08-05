@@ -28,9 +28,13 @@ pub fn emit_to_scrollback<T: TerminalLike>(terminal: &mut T, content: &str) -> i
     // Use zero-copy line segmentation
     let segments = split_into_line_segments(content, terminal_width);
 
-    // Calculate where viewport will end up after content
-    let new_viewport_y =
-        (viewport_area.y + segments.len() as u16).min(size.height - viewport_area.height);
+    // Calculate where viewport will end up after content. Saturating ops:
+    // during a resize the viewport area can transiently exceed the terminal
+    // size, and plain u16 arithmetic would panic (debug) or wrap (release).
+    let new_viewport_y = viewport_area
+        .y
+        .saturating_add(segments.len().min(u16::MAX as usize) as u16)
+        .min(size.height.saturating_sub(viewport_area.height));
 
     // Position from viewport top and clear from this position down
     queue!(

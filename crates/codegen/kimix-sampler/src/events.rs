@@ -249,6 +249,15 @@ impl From<&SamplingError> for SamplingErrorInfo {
     }
 }
 
+impl SamplingErrorInfo {
+    /// Whether this failure is a quota/billing denial (403 + quota message).
+    /// Mirrors [`SamplingError::is_quota_exceeded`] for the serializable
+    /// mirror so downstream surfaces (CLI errors, gRPC) classify identically.
+    pub fn is_quota_exceeded(&self) -> bool {
+        kimix_sampling_types::is_quota_denial(self.status_code.unwrap_or(0), &self.message)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

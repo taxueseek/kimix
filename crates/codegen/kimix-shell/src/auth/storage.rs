@@ -29,11 +29,6 @@ pub(crate) fn keyring_enabled() -> bool {
     false
 }
 
-#[cfg(test)]
-pub(crate) fn enable_mock_keyring_for_test() {}
-#[cfg(test)]
-pub(crate) fn disable_mock_keyring_for_test() {}
-
 pub(crate) fn keyring_read_session() -> KeyringRead {
     KeyringRead::Unavailable
 }
@@ -555,21 +550,6 @@ mod keyring_tests {
     use super::*;
     use chrono::Utc;
 
-    /// RAII teardown so a panicking test doesn't leave the process-global
-    /// test-keyring toggle enabled for later tests.
-    struct MockKeyringGuard;
-    impl MockKeyringGuard {
-        fn enable() -> Self {
-            enable_mock_keyring_for_test();
-            Self
-        }
-    }
-    impl Drop for MockKeyringGuard {
-        fn drop(&mut self) {
-            disable_mock_keyring_for_test();
-        }
-    }
-
     fn session_auth(key: &str, rt: &str) -> KimiAuth {
         KimiAuth {
             key: key.into(),
@@ -582,41 +562,19 @@ mod keyring_tests {
         }
     }
 
+    /// The OS keyring is permanently disabled in this build ("no macOS
+    /// keychain, no prompts"): credentials live only in `auth.json`. The
+    /// keyring entry points are inert stubs — reads report `Unavailable`,
+    /// writes/deletes are no-op successes so logout and migration paths stay
+    /// best-effort. Pin that contract so a future re-enable is a deliberate
+    /// change, not an accident.
     #[test]
-    #[serial_test::serial(kimix_keyring)]
-    fn keyring_session_roundtrip() {
-        let _guard = MockKeyringGuard::enable();
-        // Fresh mock store: nothing there yet.
-        assert!(matches!(keyring_read_session(), KeyringRead::Missing));
-
-        keyring_write_session(&session_auth("at-1", "rt-1")).unwrap();
-        let KeyringRead::Found(read) = keyring_read_session() else {
-            panic!("expected Found after write");
-        };
-        assert_eq!(read.key, "at-1");
-        assert_eq!(read.refresh_token.as_deref(), Some("rt-1"));
-        assert_eq!(read.expires_in, Some(3600));
-
-        // Overwrite rotates in place.
-        keyring_write_session(&session_auth("at-2", "rt-2")).unwrap();
-        let KeyringRead::Found(read) = keyring_read_session() else {
-            panic!("expected Found after rotate");
-        };
-        assert_eq!(read.key, "at-2");
-
-        // Delete is idempotent.
-        keyring_delete_session().unwrap();
-        assert!(matches!(keyring_read_session(), KeyringRead::Missing));
-        keyring_delete_session().unwrap();
-    }
-
-    #[test]
-    #[serial_test::serial(kimix_keyring)]
-    fn keyring_disabled_reads_unavailable() {
-        disable_mock_keyring_for_test();
+    fn keyring_permanently_disabled_by_design() {
+        assert!(!keyring_enabled());
         assert!(matches!(keyring_read_session(), KeyringRead::Unavailable));
-        assert!(keyring_write_session(&session_auth("a", "r")).is_err());
-        // Delete when disabled is a no-op success (logout stays best-effort).
+        keyring_write_session(&session_auth("a", "r")).unwrap();
+        // A write must not silently create a readable entry.
+        assert!(matches!(keyring_read_session(), KeyringRead::Unavailable));
         keyring_delete_session().unwrap();
     }
 }

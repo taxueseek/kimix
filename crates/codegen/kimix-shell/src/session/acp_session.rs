@@ -594,6 +594,12 @@ pub(crate) struct SessionActor {
     /// Goal mode orchestration tracker. Session-scoped state for the
     /// Design-Execute-Verify loop. Modeled after `plan_mode` above.
     pub(crate) goal_tracker: Arc<parking_lot::Mutex<crate::session::goal_tracker::GoalTracker>>,
+    /// Turn-continuation state machine (empty / max-token-cut / dangling-intent
+    /// detection). Shared as `Arc<Mutex>` because the turn loop holds
+    /// `&Arc<Self>`; parking_lot (non-async) is fine — the lock is never held
+    /// across an await.
+    pub(crate) continuation:
+        Arc<parking_lot::Mutex<crate::session::continuation::ContinuationProvider>>,
     /// `task_id`s of background tasks (and monitors) that originated during
     /// the goal turn — either spawned by the goal model itself or reparented
     /// from a harness verifier/planner subagent on its exit. Their late

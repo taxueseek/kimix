@@ -577,7 +577,10 @@ impl SessionActor {
         let usage_hint = {
             let estimated_tokens = self.chat_state_handle.get_estimated_total_tokens().await;
             let sampling = self.chat_state_handle.get_sampling_config().await;
-            let context_window = sampling.as_ref().map(|c| c.context_window.get()).unwrap_or(0);
+            let context_window = sampling
+                .as_ref()
+                .map(|c| c.context_window.get())
+                .unwrap_or(0);
             let max_effective = self
                 .rebuild_spec
                 .compaction_policy
@@ -1820,6 +1823,10 @@ impl SessionActor {
             let turn_refused = stop_reason == Some(kimix_sampling_types::StopReason::ContentFilter);
             let refusal_explanation = response.stop_message.clone();
             let final_answer_text = json_schema.is_some().then(|| response.assistant_text());
+            // Capture the assistant text before `response.items` is moved below;
+            // the continuation decision itself is taken only when the round ends
+            // without tool calls (see the `tool_calls.is_empty()` branch).
+            let last_assistant_text = response.assistant_text();
             for item in response.items {
                 match item {
                     kimix_sampling_types::ConversationItem::Assistant(_) => {
@@ -1867,6 +1874,56 @@ impl SessionActor {
                 .await;
             }
             if tool_calls.is_empty() {
+                // Turn-continuation: the model ended with no tool calls. If it
+                // was cut by the token limit, promised an action it never
+                // performed, or produced nothing, inject a synthetic user
+                // message and keep the loop alive (bounded per class).
+                let continuation_prompt = {
+                    // A content-filter refusal is deterministic — retrying with
+                    // an "empty response" nudge would loop against the filter.
+                    // End the turn instead.
+                    let signal = crate::session::continuation::TurnEndSignal {
+                        had_visible_content: !last_assistant_text.trim().is_empty(),
+                        stop_reason,
+                        last_assistant_text,
+                        had_tool_calls: false,
+                    };
+                    if turn_refused {
+                        None
+                    } else {
+                        match self.continuation.lock().provide(&signal) {
+                            crate::session::continuation::ContinuationOutcome::Continue {
+                                kind,
+                                prompt,
+                            } => {
+                                tracing::info!(
+                                    session_id = % self.session_info.id,
+                                    continuation = kind.as_str(),
+                                    counters = ? self.continuation.lock().counters(),
+                                    "turn-continuation: injecting continuation prompt"
+                                );
+                                Some(prompt)
+                            }
+                            crate::session::continuation::ContinuationOutcome::EmptyBudgetExhausted {
+                                attempts,
+                            } => {
+                                tracing::warn!(
+                                    session_id = % self.session_info.id,
+                                    attempts,
+                                    "turn-continuation: empty-response budget exhausted; ending turn"
+                                );
+                                None
+                            }
+                            crate::session::continuation::ContinuationOutcome::EndTurn => None,
+                        }
+                    }
+                };
+                if let Some(prompt) = continuation_prompt {
+                    let item =
+                        kimix_sampling_types::conversation::ConversationItem::auto_continue(prompt);
+                    self.chat_state_handle.push_user_message(item);
+                    continue;
+                }
                 if !schema_ok
                     && !turn_refused
                     && let Some(gate_cfg) = self.todo_gate_policy()
@@ -2035,6 +2092,10 @@ impl SessionActor {
                 }
                 _ => {}
             }
+            // A round that produced tool calls is productive: reset the
+            // empty/intent continuation counters (length is preserved — a
+            // truncation can recur across tool rounds).
+            self.continuation.lock().on_tool_turn();
             let next_turn = tool_turn_count + 1;
             if let Some(limit) = self.max_turns
                 && next_turn > limit

@@ -230,6 +230,12 @@ fn repair_kind_name(kind: &RepairKind) -> &'static str {
         RepairKind::ObjectPlaceholderUnwrapped => "object_placeholder_unwrapped",
         RepairKind::BareStringWrapped => "bare_string_wrapped",
         RepairKind::MarkdownLinkUnwrapped => "markdown_link_unwrapped",
+        RepairKind::CoerceStringToNumber => "coerce_string_to_number",
+        RepairKind::CoerceStringToBoolean => "coerce_string_to_boolean",
+        RepairKind::WrapBareScalarAsArray => "wrap_bare_scalar_as_array",
+        RepairKind::StripMarkdownLinkFromPath => "strip_markdown_link_from_path",
+        RepairKind::RenameAliasedField => "rename_aliased_field",
+        RepairKind::DropUnknownKey => "drop_unknown_key",
     }
 }
 
@@ -247,6 +253,31 @@ mod tests {
         assert_eq!(
             repair_kind_name(&RepairKind::BareStringWrapped),
             "bare_string_wrapped"
+        );
+        // 新增的韧性修复类型
+        assert_eq!(
+            repair_kind_name(&RepairKind::CoerceStringToNumber),
+            "coerce_string_to_number"
+        );
+        assert_eq!(
+            repair_kind_name(&RepairKind::CoerceStringToBoolean),
+            "coerce_string_to_boolean"
+        );
+        assert_eq!(
+            repair_kind_name(&RepairKind::WrapBareScalarAsArray),
+            "wrap_bare_scalar_as_array"
+        );
+        assert_eq!(
+            repair_kind_name(&RepairKind::StripMarkdownLinkFromPath),
+            "strip_markdown_link_from_path"
+        );
+        assert_eq!(
+            repair_kind_name(&RepairKind::RenameAliasedField),
+            "rename_aliased_field"
+        );
+        assert_eq!(
+            repair_kind_name(&RepairKind::DropUnknownKey),
+            "drop_unknown_key"
         );
     }
 

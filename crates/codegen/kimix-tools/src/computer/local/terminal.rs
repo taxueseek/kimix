@@ -371,6 +371,12 @@ impl ProcessState {
     ///
     /// The two halves are re-joined by `to_result()` with a separator.
     fn maybe_truncate(&mut self) {
+        // Cheap gate: char count never exceeds byte count, so a buffer within
+        // the byte limit cannot need truncation. This avoids a full UTF-8
+        // decode + allocation on every poll tick for the common case.
+        if self.output_buffer.len() <= self.output_byte_limit {
+            return;
+        }
         let s = String::from_utf8_lossy(&self.output_buffer);
         let char_count = s.chars().count();
         if char_count <= self.output_byte_limit {
@@ -1386,14 +1392,21 @@ impl LocalTerminalActor {
         let waiter_keys: Vec<String> = self.completion_waiters.keys().cloned().collect();
         let mut timed_out_tasks: Vec<String> = Vec::new();
         for task_id in waiter_keys {
-            let snapshot = match self.processes.get(&task_id) {
-                Some(p) => Some(p.to_task_snapshot(&task_id).await),
-                None => None,
-            };
+            // Compute the snapshot lazily: `to_task_snapshot` can read up to
+            // the full retained output file, so doing it per task per tick —
+            // before any deadline is even checked — is wasted I/O while no
+            // waiter has expired.
+            let mut snapshot = None;
             if let Some(waiters) = self.completion_waiters.get_mut(&task_id) {
                 let mut i = 0;
                 while i < waiters.len() {
                     if now >= waiters[i].deadline {
+                        if snapshot.is_none() {
+                            snapshot = match self.processes.get(&task_id) {
+                                Some(p) => Some(p.to_task_snapshot(&task_id).await),
+                                None => None,
+                            };
+                        }
                         let waiter = waiters.swap_remove(i);
                         let _ = waiter.reply.send(snapshot.clone());
                         timed_out_tasks.push(task_id.clone());

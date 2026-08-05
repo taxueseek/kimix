@@ -200,11 +200,13 @@ mod tests {
 
         assert!(!report.remote_settings_loaded);
         assert_eq!(report.cells.len(), 13);
+        // Terminal-minimal defaults: every vendor cell resolves OFF from
+        // `CompatSource::Default` when nothing configures it.
         assert!(
             report
                 .cells
                 .iter()
-                .all(|cell| cell.enabled && cell.source == CompatSource::Default)
+                .all(|cell| !cell.enabled && cell.source == CompatSource::Default)
         );
         assert_eq!(
             report
@@ -225,7 +227,7 @@ mod tests {
             serde_json::json!({
                 "vendor": "codex",
                 "surface": "sessions",
-                "enabled": true,
+                "enabled": false,
                 "source": "default"
             })
         );
@@ -246,7 +248,8 @@ mod tests {
         assert!(!rules.enabled);
         assert_eq!(rules.source, CompatSource::Config);
         let agents = entry(&report, "cursor", "agents");
-        assert!(agents.enabled);
+        // Unconfigured cell: terminal-minimal default is OFF.
+        assert!(!agents.enabled);
         assert_eq!(agents.source, CompatSource::Default);
     }
 

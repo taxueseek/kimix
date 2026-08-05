@@ -243,6 +243,9 @@ async fn test_e2e_idle_resume_refreshes_model_metadata() {
                         "/tmp/test-session",
                     )),
                 )),
+                continuation: Arc::new(parking_lot::Mutex::new(
+                    crate::session::continuation::ContinuationProvider::default(),
+                )),
                 goal_turn_task_ids: parking_lot::Mutex::new(std::collections::HashSet::new()),
                 goal_continuation_streak: std::sync::atomic::AtomicU32::new(0),
                 goal_blocked_streak: std::sync::atomic::AtomicU32::new(0),

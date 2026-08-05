@@ -715,6 +715,7 @@ pub(crate) async fn spawn_session_actor(
         prompt_audience,
         role_instructions: role_instructions.clone(),
         persona_instructions: persona_instructions.clone(),
+        taste_section: crate::session::taste::render_taste_section(),
         skills_config: skills_config.clone(),
         compat,
         context_window_tokens,
@@ -1094,6 +1095,9 @@ pub(crate) async fn spawn_session_actor(
         goal_harness_enabled: std::sync::atomic::AtomicBool::new(false),
         goal_harness_availability_reconciled: std::sync::atomic::AtomicBool::new(false),
         goal_tracker,
+        continuation: Arc::new(parking_lot::Mutex::new(
+            crate::session::continuation::ContinuationProvider::default(),
+        )),
         goal_turn_task_ids: parking_lot::Mutex::new(std::collections::HashSet::new()),
         goal_continuation_streak: std::sync::atomic::AtomicU32::new(0),
         goal_blocked_streak: std::sync::atomic::AtomicU32::new(0),

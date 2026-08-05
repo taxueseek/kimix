@@ -1,0 +1,10 @@
+[package]
+license = "Apache-2.0"
+name = "kimix-exec-protocol"
+version.workspace = true
+edition.workspace = true
+description = "JSON-RPC protocol types for the Kimix out-of-process exec sandbox server"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

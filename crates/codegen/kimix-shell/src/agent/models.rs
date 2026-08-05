@@ -3595,6 +3595,11 @@ mod tests {
             supports_reasoning_effort: false,
             reasoning_efforts: Vec::new(),
             capabilities: Vec::new(),
+            // 默认关闭 hosted backend search：不同后端的 hosted `web_search`
+            // wire 形态不一（Responses rs::Tool::WebSearch / ChatCompletions
+            // {"type":"web_search"} / 私有代理可能只认 function）。只有
+            // 明确支持 hosted 搜索的模型才在 `[model.xxx]` 显式开启
+            // `supports_backend_search = true`。
             supports_backend_search: false,
             auth_source: None,
             compactions_remaining: None,

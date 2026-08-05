@@ -147,16 +147,17 @@ fn stale_source_reminder() -> ConversationItem {
          - stale-source-skill: from the source session.\n</system-reminder>",
     )
 }
-/// Regression: a zero-turn agent rebuild INTO a Kimix/Default agent
-/// must re-inject the baseline skill `<system-reminder>`. `initialize()`
-/// is otherwise the only place skills are surfaced for the Kimix agent, so
-/// before the fix a switch into such an agent — whose rebuilt bridge holds
-/// a pending `BaselineChange` — dropped the skill listing for a no-tool first
-/// turn. Drives the real `inject_baseline_skill_reminder` seam that
-/// `handle_rebuild_agent_for_definition` calls; deleting the drain/inject makes
-/// this fail.
+/// Router-only baseline drain: `seed_skill_discovery` sets `router_only(true)`
+/// (production default — the skill index lives on disk in SKILL-ROUTER.md, so
+/// the full table is no longer dumped at session start). A zero-turn rebuild
+/// INTO a Kimix/Default agent must therefore drain the pending
+/// `BaselineChange` WITHOUT appending the bulk skill table, while still
+/// requesting a slash-command refresh. Drives the real
+/// `inject_baseline_skill_reminder` seam that
+/// `handle_rebuild_agent_for_definition` calls; deleting the drain makes the
+/// last assertion fail (the baseline would remain pending).
 #[tokio::test(flavor = "current_thread")]
-async fn rebuild_reinjects_baseline_skill_reminder_for_non_cursor() {
+async fn rebuild_drains_baseline_without_bulk_reminder_when_router_only() {
     let local = tokio::task::LocalSet::new();
     local
         .run_until(async {
@@ -168,40 +169,39 @@ async fn rebuild_reinjects_baseline_skill_reminder_for_non_cursor() {
                 ConversationItem::system("SP"),
                 ConversationItem::user("PREFIX"),
             ];
-            actor
+            let effects = actor
                 .inject_baseline_skill_reminder(&mut conversation)
-                .await;
+                .await
+                .expect("pending baseline must drain to effects");
+            assert!(
+                effects.send_available_commands,
+                "slash catalog must still refresh after the baseline drain",
+            );
             assert_eq!(
                 conversation.len(),
-                3,
-                "non-cursor rebuild must append the baseline skill reminder",
+                2,
+                "router-only baseline must not append the bulk skill table",
             );
-            let reminder = conversation.last().expect("conversation is non-empty");
+            // Drained: a second inject has nothing pending.
             assert!(
-                matches!(reminder, ConversationItem::User(u) if u.synthetic_reason ==
-                Some(SyntheticReason::SystemReminder)),
-                "appended item must be a system-reminder user message",
-            );
-            let text = reminder.text_content();
-            assert!(
-                text.contains("The following skills are available for use:"),
-                "reminder must carry the kimix skill catalog header:\n{text}",
-            );
-            assert!(
-                text.contains("regression-baseline-skill"),
-                "reminder must list the seeded skill:\n{text}",
+                actor
+                    .inject_baseline_skill_reminder(&mut conversation)
+                    .await
+                    .is_none(),
+                "baseline must be drained by the first inject",
             );
         })
         .await;
 }
-/// Idempotency / no-duplication: a reminder-using -> reminder-using zero-turn rebuild
-/// inherits the source session's baseline skill `<system-reminder>` (which
-/// `rewrite_zero_turn_prefix` keeps for a reminder-using target). The helper must
-/// strip that stale reminder and inject exactly one fresh listing -- not append
-/// a second catalog. Pins the double-listing bug: without the strip the count
-/// is 2; without the inject the surviving reminder is the stale one.
+/// Router-only idempotency: a reminder-using -> reminder-using zero-turn
+/// rebuild inherits the source session's stale baseline `<system-reminder>`
+/// (which `rewrite_zero_turn_prefix` keeps for a reminder-using target). The
+/// helper must strip that stale reminder; under `router_only` no fresh bulk
+/// listing replaces it — the catalog is advertised via slash commands and the
+/// on-disk SKILL-ROUTER.md index. Pins the strip: without it the stale
+/// reminder survives and `skill_reminder_count` stays 1.
 #[tokio::test(flavor = "current_thread")]
-async fn rebuild_injects_exactly_one_reminder_when_source_reminder_present() {
+async fn rebuild_strips_stale_reminder_without_replacement_when_router_only() {
     let local = tokio::task::LocalSet::new();
     local
         .run_until(async {
@@ -219,28 +219,17 @@ async fn rebuild_injects_exactly_one_reminder_when_source_reminder_present() {
                 .await;
             assert_eq!(
                 skill_reminder_count(&conversation),
-                1,
-                "exactly one baseline skill reminder must remain (no double-listing)",
+                0,
+                "stale reminder must be stripped; router-only injects no bulk replacement",
             );
-            let text = conversation
-                .iter()
-                .rev()
-                .find_map(|item| match item {
-                    ConversationItem::User(u)
-                        if u.synthetic_reason == Some(SyntheticReason::SystemReminder) =>
-                    {
-                        Some(item.text_content())
-                    }
-                    _ => None,
-                })
-                .expect("a skill reminder remains");
-            assert!(
-                text.contains("regression-baseline-skill"),
-                "the surviving reminder must be the freshly injected listing:\n{text}",
+            assert_eq!(
+                conversation.len(),
+                2,
+                "non-reminder items must be preserved",
             );
             assert!(
-                !text.contains("stale-source-skill"),
-                "the inherited stale reminder must have been stripped:\n{text}",
+                conversation[1].text_content().contains("PREFIX"),
+                "the user prefix item must survive the strip",
             );
         })
         .await;

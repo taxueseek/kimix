@@ -10,6 +10,32 @@ use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, SamplingError>;
 
+/// Whether `(status, message)` describe a quota/billing denial.
+///
+/// Shared by [`SamplingError::is_quota_exceeded`] and
+/// `SamplingErrorInfo::is_quota_exceeded` (sampler) so both the rich error
+/// and its serializable mirror classify identically. Kimi and several
+/// OpenAI-compatible gateways return 403 with `access_terminated_error` /
+/// `usage limit` / `quota` / `billing cycle` when a subscription cap is hit.
+pub fn is_quota_denial(status: u16, message: &str) -> bool {
+    if status != 403 {
+        return false;
+    }
+    let m = message.to_ascii_lowercase();
+    [
+        "access_terminated_error",
+        "usage limit",
+        "quota",
+        "billing cycle",
+        "billing",
+        "insufficient_quota",
+        "out of credits",
+        "exceeded your current quota",
+    ]
+    .iter()
+    .any(|needle| m.contains(needle))
+}
+
 /// Why the model's response was classified as "empty" by [`ConversationResponse::empty_reason`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -168,6 +194,28 @@ impl SamplingError {
                     ..
                 }
         )
+    }
+
+    /// Whether this is a **quota/billing** denial rather than an auth or
+    /// policy denial.
+    ///
+    /// Kimi (and several OpenAI-compatible gateways) return HTTP 403 with an
+    /// `access_terminated_error` / `usage limit` / `quota` / `billing cycle`
+    /// message when a subscription's usage cap for the current billing period
+    /// is exhausted. Distinguishing this from a generic 403 matters because:
+    ///
+    /// - The surface must tell the user to **top up / wait for the cycle
+    ///   reset** instead of "check your API key".
+    /// - It must never be misread as an auth error (no OIDC refresh storm),
+    ///   which `is_auth_error` already guarantees by only matching 401.
+    pub fn is_quota_exceeded(&self) -> bool {
+        let SamplingError::Api {
+            status, message, ..
+        } = self
+        else {
+            return false;
+        };
+        is_quota_denial(status.as_u16(), message)
     }
 
     pub fn is_rate_limited(&self) -> bool {

@@ -14,6 +14,12 @@ default-run = "kimix"
 name = "kimix"
 path = "src/main.rs"
 
+# 测试构建名：同一 composition root，用于在终端以 `kimixi` 实测
+# 韧性增强功能（不覆盖正式安装的 `kimix`）。
+[[bin]]
+name = "kimixi"
+path = "src/main.rs"
+
 [lints]
 workspace = true
 

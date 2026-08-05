@@ -567,6 +567,8 @@ impl StreamingLocalTerminalRunner {
         let mut stderr_tmp = [0u8; READ_BUFFER_SIZE];
         let mut last_sent_len = 0usize;
         let mut truncated = false;
+        let mut state_snapshot_len = usize::MAX; // force first-tick refresh
+        let mut state_snapshot_truncated = false;
         let mut ticker = tokio::time::interval(notification_interval());
         // Compute an absolute deadline so the timeout fires as a competing
         // branch inside `tokio::select!`.  This ensures the timeout is checked
@@ -694,18 +696,30 @@ impl StreamingLocalTerminalRunner {
                 }
                 _ = ticker.tick() => {
                     // Truncation only affects in-memory buffer, NOT the file
-                    // File already has all bytes written immediately on read
-                    if truncate_buffer(&mut output_buf, request.output_byte_limit) {
+                    // File already has all bytes written immediately on read.
+                    // Truncation drops bytes from the FRONT: shift the delta
+                    // offset by the removed count instead of resetting to 0
+                    // (resetting resends the surviving tail the client
+                    // already received — duplicated output).
+                    let removed = truncate_buffer(&mut output_buf, request.output_byte_limit);
+                    if removed > 0 {
                         truncated = true;
-                        last_sent_len = 0;
+                        last_sent_len = last_sent_len.saturating_sub(removed);
                     }
 
-                    {
+                    // Only refresh the shared snapshot when the buffer
+                    // actually changed; an unconditional per-tick
+                    // `Arc::from(slice)` is an O(n) copy every 100ms.
+                    let snapshot_stale = state_snapshot_len != output_buf.len()
+                        || state_snapshot_truncated != truncated;
+                    if snapshot_stale {
                         let mut state = output_state.lock().await;
                         // Shared snapshot for mid-run waiters; Arc so the tick
                         // only bumps a refcount when readers hold an old view.
                         state.output = std::sync::Arc::from(output_buf.as_slice());
                         state.truncated = truncated;
+                        state_snapshot_len = output_buf.len();
+                        state_snapshot_truncated = truncated;
                     }
 
                     if output_buf.len() > last_sent_len {
@@ -1050,7 +1064,10 @@ async fn take_child_io(
 ///
 /// This function ensures we don't split UTF-8 characters when truncating
 /// by using char_indices to find a valid character boundary.
-fn truncate_buffer(buf: &mut Vec<u8>, limit: usize) -> bool {
+/// Truncate `buf` to `limit` bytes, dropping from the front on a char
+/// boundary. Returns the number of bytes removed (0 when within limit) so
+/// callers can shift delta-tracking offsets into the new buffer coordinates.
+fn truncate_buffer(buf: &mut Vec<u8>, limit: usize) -> usize {
     if buf.len() > limit {
         // Convert to string to work with character boundaries
         let s = String::from_utf8_lossy(buf);
@@ -1066,9 +1083,9 @@ fn truncate_buffer(buf: &mut Vec<u8>, limit: usize) -> bool {
         // Slice from that boundary and update buffer
         *buf = s[start_idx..].as_bytes().to_vec();
 
-        true
+        start_idx
     } else {
-        false
+        0
     }
 }
 
@@ -1234,7 +1251,7 @@ async fn run_output_collector(
                 }
             }
             _ = ticker.tick() => {
-                truncated |= truncate_buffer(&mut output_buf, output_byte_limit);
+                truncated |= truncate_buffer(&mut output_buf, output_byte_limit) > 0;
 
                 {
                     let mut state = output_state.lock().await;

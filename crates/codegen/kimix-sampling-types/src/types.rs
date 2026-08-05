@@ -105,6 +105,14 @@ pub struct ChatCompletionRequest {
     #[serde(skip)]
     pub x_kimix_user_id: Option<String>,
 
+    /// Hosted (server-side) tools requested for this turn (e.g. `web_search`,
+    /// `x_search`). Serialized into the `tools` array by the sampler client
+    /// after the typed request is rendered — the wire shape differs per
+    /// backend (Responses `rs::Tool::WebSearch` vs ChatCompletions
+    /// `{"type":"web_search"}`), so the typed struct carries them out-of-band.
+    #[serde(skip)]
+    pub hosted_tools: Vec<crate::conversation::HostedTool>,
+
     /// Optional opaque tracing context (e.g., where to persist the finalized request payload).
     /// This is intentionally not serialized or deserialized.
     /// Consumers downcast via `trace.as_ref().unwrap().as_any().downcast_ref::<T>()`.
@@ -135,6 +143,7 @@ impl ChatCompletionRequest {
             x_kimix_agent_id: None,
             x_kimix_deployment_id: None,
             x_kimix_user_id: None,
+            hosted_tools: vec![],
             trace: None,
         }
     }
@@ -161,6 +170,7 @@ impl ChatCompletionRequest {
             x_kimix_agent_id: None,
             x_kimix_deployment_id: None,
             x_kimix_user_id: None,
+            hosted_tools: vec![],
             trace: None,
         }
     }

@@ -750,6 +750,52 @@ impl SessionActor {
                 self.send_slash_command_output(&msg).await;
                 ok_end_turn(0, None)
             }
+            BuiltinAction::TasteShow => {
+                match crate::session::taste::render_taste_section() {
+                    Some(section) => {
+                        self.send_slash_command_output(&format!(
+                            "Learned preferences:\n\n{section}"
+                        ))
+                        .await;
+                    }
+                    None => {
+                        self.send_slash_command_output(
+                            "No preferences learned yet. Record one with the `taste` tool, \
+                             or run /taste learn to mine them from git history.",
+                        )
+                        .await;
+                    }
+                }
+                ok_end_turn(0, None)
+            }
+            BuiltinAction::TasteLearn => {
+                let repo_dir = self.session_info.cwd.clone();
+                let msg = match crate::session::taste::collect_git_signals(
+                    std::path::Path::new(&repo_dir),
+                    50,
+                    50,
+                ) {
+                    Ok(signals) if signals.is_empty() => {
+                        "No correction signals found in recent git history.".to_string()
+                    }
+                    Ok(signals) => {
+                        let repo_name = std::path::Path::new(&repo_dir)
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| "workspace".to_string());
+                        let lines = crate::session::taste::render_learnings(&signals, &repo_name, 20);
+                        if lines.is_empty() {
+                            "No learnings derived from git signals.".to_string()
+                        } else {
+                            format!("Mined {} correction signal(s) from git history:\n\n{}",
+                                signals.len(), lines.join("\n"))
+                        }
+                    }
+                    Err(e) => format!("Taste learning requires a git repository: {e}"),
+                };
+                self.send_slash_command_output(&msg).await;
+                ok_end_turn(0, None)
+            }
             BuiltinAction::GoalPause => {
                 let current_tokens = self.chat_state_handle.get_total_tokens().await as i64;
                 use crate::session::goal_tracker::{GoalPauseReason, GoalStatus};

@@ -75,6 +75,7 @@ pub use util::mcp_truncate::{
 pub mod attribution;
 
 pub mod bridge;
+pub mod exec_server;
 pub mod input_repair;
 pub mod input_repair_telemetry;
 pub mod computer;

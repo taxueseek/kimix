@@ -819,6 +819,9 @@ mod tests {
         fs::write(rules_dir.join("style.md"), "# Style rules").unwrap();
 
         let mut tracker = AgentsMdTracker::new();
+        // `.claude/` surfaces are gated off in `CompatConfig::default()`;
+        // `all_on()` pins the historical all-vendors discovery behavior.
+        tracker.set_compat(CompatConfig::all_on());
         tracker
             .seed(vec![], Some(root.to_path_buf()), vec![], None)
             .await;
@@ -845,6 +848,9 @@ mod tests {
         fs::write(rules_dir.join("style.md"), "# Style").unwrap();
 
         let mut tracker = AgentsMdTracker::new();
+        // `.claude/` surfaces are gated off in `CompatConfig::default()`;
+        // `all_on()` pins the historical all-vendors discovery behavior.
+        tracker.set_compat(CompatConfig::all_on());
         tracker
             .seed(vec![], Some(root.to_path_buf()), vec![], None)
             .await;
@@ -870,6 +876,9 @@ mod tests {
         fs::write(claude_dir.join("CLAUDE.md"), "# Project instructions").unwrap();
 
         let mut tracker = AgentsMdTracker::new();
+        // `.claude/` surfaces are gated off in `CompatConfig::default()`;
+        // `all_on()` pins the historical all-vendors discovery behavior.
+        tracker.set_compat(CompatConfig::all_on());
         tracker
             .seed(vec![], Some(root.to_path_buf()), vec![], None)
             .await;

@@ -375,6 +375,11 @@ pub(crate) const MAX_ARGS_IN_ERROR: usize = 2_000;
 ///    is itself invalid JSON — e.g. a missing `"` before a key name.  This
 ///    lets the model fix a one-character typo rather than regenerating a
 ///    thousand-line file.
+/// 4. A **field-name suggestion** when a top-level argument key matches the
+///    tool's field alias table (e.g. `path` for `read_file` whose schema uses
+///    `target_file`) or is otherwise not a known parameter.  Open-source
+///    models frequently emit opencode/Claude-style field names; naming the
+///    canonical replacement directly fixes the next attempt.
 pub(super) fn build_tool_parse_error_message(
     function_name: &str,
     err: &kimix_tool_runtime::ToolError,
@@ -403,6 +408,25 @@ pub(super) fn build_tool_parse_error_message(
             "\n\nNote: the arguments above contain invalid JSON — {json_err}\n\
              Please fix the syntax and retry."
         ));
+    }
+
+    // Field-name guidance: check every top-level key against the alias table.
+    // Even when arguments are valid JSON, serde can reject unknown fields —
+    // telling the model which name to use cuts a full retry cycle.
+    let mut suggestions: Vec<String> = Vec::new();
+    if let Ok(serde_json::Value::Object(map)) =
+        serde_json::from_str::<serde_json::Value>(raw_arguments)
+    {
+        for key in map.keys() {
+            if let Some(canonical) =
+                kimix_tools::input_repair::canonical_field_name(function_name, key)
+            {
+                suggestions.push(format!("`{key}` → `{canonical}`"));
+            }
+        }
+    }
+    if !suggestions.is_empty() {
+        msg.push_str(&format!("\n\nField name hints: {}", suggestions.join(", ")));
     }
 
     msg
