@@ -91,6 +91,11 @@ pub struct AcpConnection {
     /// mode builds a dedicated one off the same local `auth.json`. Either way it
     /// resolves a fresh bearer per request via the refresh chain.
     pub auth_manager: std::sync::Arc<kimix_shell::auth::AuthManager>,
+    /// In-process agent worker thread. `Some` after [`connect`]; `None` in
+    /// leader mode (agent lives in another process). Hand to
+    /// [`spawn::AgentShutdownGuard`] so quit joins the worker and session
+    /// actors flush before process exit.
+    pub agent_thread: Option<std::thread::JoinHandle<anyhow::Result<()>>>,
 }
 
 /// CLI flags that affect agent configuration, threaded from PagerArgs.
@@ -230,6 +235,7 @@ pub async fn connect(cancel: &CancellationToken, flags: ConnectFlags) -> Result<
         cancel_rewind_enabled,
         session_recap_available,
         auth_manager,
+        agent_thread: Some(spawned.thread_handle),
     })
 }
 
@@ -341,6 +347,8 @@ pub async fn connect_via_leader(
         cancel_rewind_enabled,
         session_recap_available,
         auth_manager,
+        // Leader mode: agent is out-of-process; nothing to join on quit.
+        agent_thread: None,
     })
 }
 

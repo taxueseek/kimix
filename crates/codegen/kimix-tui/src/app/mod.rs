@@ -491,7 +491,7 @@ pub async fn run(
         default_yolo_mode: launch_yolo.yolo,
         default_auto_mode: launch_auto && !launch_yolo.yolo,
     };
-    let connection = if use_leader {
+    let mut connection = if use_leader {
         let conn = crate::acp::connect_via_leader(&cancel, connect_flags, &raw_config).await?;
         tracing::info!(
             elapsed_ms = startup_start.elapsed().as_millis() as u64,
@@ -506,6 +506,13 @@ pub async fn run(
         );
         conn
     };
+    // Join the in-process agent worker (and flush session actors) on every
+    // exit path — including `?` bail after this point. Leader mode hands
+    // `None` for the thread; the guard is then cancel-only.
+    let agent_guard = crate::acp::spawn::AgentShutdownGuard::new(
+        cancel.clone(),
+        connection.agent_thread.take(),
+    );
     let mut config_watcher = crate::appearance::ConfigWatcher::start().await?;
     let alt_screen_config_mode = config_watcher.current().alt_screen;
     let term_ctx = crate::terminal::terminal_context();
@@ -598,7 +605,9 @@ pub async fn run(
     .await;
     crate::unified_log::flush_blocking().await;
     let _ = restore_terminal(terminal, writer_thread, screen_mode);
-    cancel.cancel();
+    // Drop before kill_all so session actors finish SessionEnd / memory save
+    // while their child processes still exist if hooks need them.
+    drop(agent_guard);
     kimix_tty_utils::global_process_scope().kill_all();
     match result {
         Ok(run_result) => {

@@ -31,7 +31,7 @@ use kimix_shell::util::config as cli_config;
 
 use crate::client_identity::{HEADLESS_CLIENT_TYPE, PAGER_CLIENT_VERSION};
 use crate::model_state::{EffortTokenError, ModelState};
-use crate::spawn::spawn_kimix_shell;
+use crate::spawn::{AgentShutdownGuard, spawn_kimix_shell};
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -932,6 +932,10 @@ pub async fn run_single_turn(
             anyhow::bail!("{msg}");
         }
     };
+    // Scope-end drop cancels + joins the worker so session actors flush
+    // (SessionEnd / memory) even on early `bail!` after this point.
+    let _agent_guard =
+        AgentShutdownGuard::new(cancel.clone(), Some(spawned.thread_handle));
     let (acp_tx, mut acp_rx) = (spawned.channel.tx, spawned.channel.rx);
     crate::unified_log::init(acp_tx.clone());
     crate::unified_log::info(

@@ -2136,8 +2136,9 @@ impl acp::Agent for MvpAgent {
                 // persistence actors without their channel-close flush,
                 // losing the tail of a conversation when the user quits
                 // mid-turn. Bounded per session (5s) inside
-                // `flush_all_sessions`.
-                self.flush_all_sessions().await;
+                // `flush_all_session_persistence`. Does not Shutdown actors —
+                // other leader clients may still be live.
+                self.flush_all_session_persistence().await;
                 crate::extensions::to_ext_response(
                     Ok(serde_json::json!({ "ok" : true })),
                 )

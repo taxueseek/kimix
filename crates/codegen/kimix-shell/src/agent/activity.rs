@@ -30,6 +30,13 @@ use std::time::Duration;
 use crate::session::pending_interaction::PendingInteractions;
 use crate::session::{SessionCommand, SessionHandle};
 
+/// Bound on in-process quit flush ([`AgentActivity::flush_all_sessions`]).
+///
+/// Shared by leader auto-update, relaunch, and pager/headless
+/// `AgentShutdownGuard` so every teardown path waits the same budget for
+/// session actors (SessionEnd hooks + memory save) before process exit.
+pub const SESSION_FLUSH_GRACE: Duration = Duration::from_secs(10);
+
 /// How often [`AgentActivity::flush_all_sessions`] re-polls actors that have
 /// not yet exited.
 const FLUSH_POLL: Duration = Duration::from_millis(50);

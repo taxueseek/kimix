@@ -1334,14 +1334,16 @@ impl MvpAgent {
         }
     }
 
-    /// Flush every live session's persistence buffer (leader shutdown path).
+    /// Flush every live session's persistence buffer (leader RPC path).
     ///
-    /// Called before the leader process exits so buffered writes (chat
-    /// messages, session updates) survive the runtime teardown — a direct
-    /// process exit drops the persistence actors without running their
-    /// channel-close flush, which is what previously lost the tail of a
-    /// conversation when the user quit mid-turn.
-    pub(crate) async fn flush_all_sessions(&self) {
+    /// Used by `kimix/internal/flush_sessions`: send `FlushComplete` per
+    /// session so buffered writes hit disk **without** shutting down the
+    /// session actors (the leader may keep serving other clients).
+    ///
+    /// Distinct from [`Self::flush_all_sessions`], which sends
+    /// `SessionCommand::Shutdown` and waits for actors to exit — that path
+    /// is for process quit (pager / headless / auto-update).
+    pub(crate) async fn flush_all_session_persistence(&self) {
         let ids: Vec<acp::SessionId> = self.sessions.borrow().keys().cloned().collect();
         if ids.is_empty() {
             return;
@@ -1355,6 +1357,17 @@ impl MvpAgent {
                 );
             }
         }
+    }
+
+    /// Send [`SessionCommand::Shutdown`] to every live session actor and wait
+    /// up to `grace` for them to exit (SessionEnd hooks, memory save, etc.).
+    ///
+    /// Call on non-leader process quit **after** the cancel token fires but
+    /// **before** dropping the agent / exiting the process, so session actors
+    /// are not killed mid-hook. Mirrors the leader auto-update / relaunch
+    /// flush path ([`crate::agent::activity::AgentActivity::flush_all_sessions`]).
+    pub async fn flush_all_sessions(&self, grace: std::time::Duration) {
+        self.activity.flush_all_sessions(grace).await;
     }
     /// Get a session's cwd by session_id.
     /// Returns None if the session is not found.
