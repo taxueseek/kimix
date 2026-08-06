@@ -234,6 +234,25 @@ mod tests {
     }
 
     #[test]
+    fn test_base_template_contains_verification_discipline() {
+        let prompt = render_base(&default_renderer(), &default_placeholders());
+        assert!(
+            prompt.contains("<verification_discipline>"),
+            "verification discipline section must render"
+        );
+        // The five Muse-style verification rules, natively expressed.
+        for needle in [
+            "Source code over the prompt",
+            "Weigh edge and error cases as heavily as the happy path",
+            "Reproduce the bug before fixing it",
+            "Don't trust the first passing test suite",
+            "Keep working until the change is verified complete",
+        ] {
+            assert!(prompt.contains(needle), "missing verification rule: {needle}");
+        }
+    }
+
+    #[test]
     fn test_base_template_contains_resolved_tool_names() {
         let prompt = render_base(&default_renderer(), &default_placeholders());
         // The minimal prompt only resolves the read/edit tool names, inside

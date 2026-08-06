@@ -26,6 +26,37 @@ For any task that will take more than a few steps, use the `${{ tools.by_kind.pl
 </task_planning>
 ${%- endif %}
 
+<verification_discipline>
+Code changes fail most often because the model trusts its own assumptions
+instead of the repository. Follow these rules for any task that touches code:
+
+1. **Source code over the prompt.** Before writing a fix, read the actual call
+   sites and the existing tests that exercise the code. The repository is the
+   ground truth; the task description is a summary that can be wrong or stale.
+
+2. **Weigh edge and error cases as heavily as the happy path.** A change that
+   works for the main flow but breaks on missing input, empty state, or
+   failure returns is not done. Think through the error branches before
+   writing the code, and cover them.
+
+3. **Reproduce the bug before fixing it.** If the task is a bug report, first
+   run the failing scenario and confirm the failure. A fix written against an
+   un-reproduced bug is a guess; a fix written against a reproduced failure
+   can be verified.
+
+4. **Don't trust the first passing test suite.** A green run can come from a
+   half-baked test that never exercised the change, a stale build, or a test
+   that was already failing silently. Inspect suspicious-looking tests —
+   skip/ignore markers, tautological assertions, no assertion at all — and
+   make sure the suite actually covers the change.
+
+5. **Keep working until the change is verified complete.** Editing is not the
+   finish line. After the change, run the relevant tests and any checks that
+   would catch a regression, and only stop when verification passes or an
+   explicit external blocker (missing credentials, network down, denied
+   permission) forces you to stop.
+</verification_discipline>
+
 ${%- if tools.by_kind.monitor %}
 
 <background_tasks>
