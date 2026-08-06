@@ -238,6 +238,10 @@ pub(super) fn do_cancel_turn(app: &mut AppView, cancel_subagents: bool) -> Vec<E
     } else {
         agent.session.cancel_turn(&mut agent.scrollback);
     }
+    // Arm the stuck-cancel watchdog: if no terminal turn signal arrives within
+    // `STUCK_CANCEL_TIMEOUT`, `reconcile_stuck_cancels` force-finishes the turn
+    // locally so the UI never strands on "Cancelling…" forever.
+    agent.session.cancel_requested_at = Some(Instant::now());
     agent.cancel_turn_view = None;
     agent.cancel_turn_buttons.clear();
     drain_permission_queue(agent);
@@ -283,6 +287,94 @@ pub(super) fn do_cancel_turn(app: &mut AppView, cancel_subagents: bool) -> Vec<E
 /// before writing the RPC response), so an expiry means the response is
 /// genuinely lost, not merely slow.
 pub(crate) const TURN_END_RECONCILE_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Maximum time a turn may stay in `TurnCancelling` before the pager
+/// force-finishes it locally. Covers the cases where BOTH terminal rails
+/// (the `session/prompt` RPC response and the `prompt_complete` broadcast)
+/// are lost — leader wedged on a blocking tool, IPC dropped mid-cancel. The
+/// cancel request was already delivered to the shell, so force-finishing the
+/// UI does not lose any server-side work; it only stops the spinner from
+/// stranding forever. Override with `KIMIX_STUCK_CANCEL_TIMEOUT_SECS`.
+pub(crate) const STUCK_CANCEL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// Watchdog for turns stuck in `TurnCancelling` (or `CommandCancelling`) past
+/// [`STUCK_CANCEL_TIMEOUT`]. Runs on the animation tick (which stays alive
+/// while any agent is non-idle).
+///
+/// Without this, a cancel whose terminal signal never arrives leaves the UI
+/// on "Cancelling…" indefinitely — Esc dead, new prompts piling into a queue
+/// that never drains, and the user forced to quit (losing the session view).
+/// The force-finish mirrors the essential subset of the PromptResponse
+/// teardown (state, marker, prompt queue), exactly like the lost-RPC
+/// reconcile, and logs so the wedge is attributable.
+pub(crate) fn reconcile_stuck_cancels(app: &mut AppView) -> Option<Vec<Effect>> {
+    let timeout = std::env::var("KIMIX_STUCK_CANCEL_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .map(std::time::Duration::from_secs)
+        .unwrap_or(STUCK_CANCEL_TIMEOUT);
+    let overdue: Vec<AgentId> = app
+        .agents
+        .iter()
+        .filter(|(_, a)| {
+            (a.session.state.is_cancelling())
+                && a.session
+                    .cancel_requested_at
+                    .is_some_and(|t| t.elapsed() >= timeout)
+        })
+        .map(|(id, _)| *id)
+        .collect();
+    if overdue.is_empty() {
+        return None;
+    }
+
+    let mut effects = Vec::new();
+    let mut force_finished = false;
+    for id in overdue {
+        {
+            let Some(agent) = app.agents.get_mut(&id) else {
+                continue;
+            };
+            let was_cancelling = agent.session.state.is_cancelling();
+            let elapsed = agent.turn_elapsed().unwrap_or_default();
+            crate::unified_log::warn(
+                "turn.cancel_stuck_force_finished",
+                agent.session.session_id.as_ref().map(|s| s.0.as_ref()),
+                Some(serde_json::json!({
+                    "prompt_id": agent.session.current_prompt_id,
+                    "timeout_secs": timeout.as_secs(),
+                    "was_cancelling": was_cancelling,
+                })),
+            );
+            let prompt_id = agent.session.current_prompt_id.clone();
+            agent.session.finish_turn(&mut agent.scrollback);
+            if was_cancelling {
+                crate::app::turn_completion::push_turn_terminal_marker(
+                    agent,
+                    Some(SessionEvent::TurnCancelled { elapsed }),
+                    prompt_id.as_deref(),
+                    false,
+                );
+            }
+            agent.mark_turn_finished();
+            agent.activity_started_at = None;
+            agent.last_activity = None;
+            drain_permission_queue(agent);
+            agent.cancel_turn_view = None;
+            agent.cancel_turn_buttons.clear();
+            force_finished = true;
+        }
+    }
+    // The turn was force-finished locally; drain any queued prompts like a
+    // normal turn end (scoped borrow released above).
+    if force_finished {
+        effects.extend(crate::app::dispatch::dispatch(
+            crate::app::actions::Action::DrainQueue,
+            app,
+        ));
+    }
+    Some(effects)
+}
 
 /// Finish turns whose end was announced by `Kimix/session/prompt_complete`
 /// but whose `session/prompt` RPC response never arrived.

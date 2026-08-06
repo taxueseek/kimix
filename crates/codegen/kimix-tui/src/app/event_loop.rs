@@ -1713,6 +1713,16 @@ pub(crate) async fn run(
                     last_draw_at = Instant::now();
                     draw_scheduled_at = None;
                 } else if app.tick() {
+                    // Stuck-cancel watchdog: force-finish turns stuck in
+                    // "Cancelling…" past the timeout (both terminal rails
+                    // lost). Runs while the animation tick is alive, which is
+                    // guaranteed while any agent is non-idle.
+                    let stuck = dispatch::reconcile_stuck_cancels(&mut app);
+                    if let Some(effs) = stuck {
+                        if process_effects(effs, &mut tasks, &mut app, &progress_tx) {
+                            break;
+                        }
+                    }
                     idle_tick_no_op_streak = 0;
                     app.draw(terminal);
                     last_draw_at = Instant::now();

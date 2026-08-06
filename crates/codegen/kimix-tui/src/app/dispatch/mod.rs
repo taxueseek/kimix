@@ -43,7 +43,7 @@ pub(in crate::app) use rewind::{find_user_prompt_entry_for_shell_index, shell_pr
 pub(crate) use router::dispatch;
 pub(crate) use settings::ui::refresh_open_settings_modals;
 pub(crate) use status::commit_minimal_update_notice;
-pub(crate) use turn::reconcile_overdue_turn_ends;
+pub(crate) use turn::{reconcile_overdue_turn_ends, reconcile_stuck_cancels};
 
 // Test-only consumers (cfg(test) mods elsewhere in the crate); a plain
 // re-export trips -D unused-imports in the lib build.

@@ -375,7 +375,7 @@ fn build_fork_placeholder(
             acp_tx: app.acp_tx.clone(),
             session_id: None,
             models: app.models.clone(),
-            state: AgentState::Idle,
+            state: AgentState::Idle, cancel_requested_at: None,
             tracker: AcpUpdateTracker::new(),
             cwd: parent_cwd.to_path_buf(),
             is_worktree: false,

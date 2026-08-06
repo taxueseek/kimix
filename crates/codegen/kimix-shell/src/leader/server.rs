@@ -1238,6 +1238,17 @@ pub async fn run_leader_server(
             "Sent client-disconnect detach notification for disconnected client"); }
             debug!(client_id = id.0, "Client removed"); if clients.is_empty() &&
             had_clients && ! no_exit_on_disconnect {
+            // All clients disconnected (user quit). Ask the agent to flush
+            // every session's persistence buffer before this process exits —
+            // a direct teardown drops the persistence actors without their
+            // channel-close flush, losing the tail of a conversation.
+            let _ = acp_tx.send(
+                r#"{"jsonrpc":"2.0","method":"kimix/internal/flush_sessions","params":{}}"#
+                    .to_string(),
+            );
+            // Give the agent a moment to drain the flush before the process
+            // tears down (bounded per session by the agent-side 5s barrier).
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             info!("Leader server shutting down (all clients disconnected)"); break; } }
             ServerEvent::Message(id, ClientMessage::Control { request_id, command }) => {
             if let Some(client) = clients.get(& id) { let client_tx = client.tx.clone();

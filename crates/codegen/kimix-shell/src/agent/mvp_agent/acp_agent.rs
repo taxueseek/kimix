@@ -2130,6 +2130,18 @@ impl acp::Agent for MvpAgent {
             "kimix/memory/flush" | "kimix/memory/rewrite" => {
                 crate::extensions::memory::handle(self, &args).await
             }
+            "kimix/internal/flush_sessions" => {
+                // Leader shutdown: flush every session's persistence buffer
+                // before the process exits. A direct teardown drops the
+                // persistence actors without their channel-close flush,
+                // losing the tail of a conversation when the user quits
+                // mid-turn. Bounded per session (5s) inside
+                // `flush_all_sessions`.
+                self.flush_all_sessions().await;
+                crate::extensions::to_ext_response(
+                    Ok(serde_json::json!({ "ok" : true })),
+                )
+            }
             "kimix/skills/refresh-baseline" => {
                 self.refresh_skill_baseline_for_all_sessions();
                 crate::extensions::to_ext_response(

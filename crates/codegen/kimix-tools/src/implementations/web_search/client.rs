@@ -28,12 +28,20 @@ use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderName, Header
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering as AtomicOrdering};
 
-/// Total request timeout. Mirrors kimi-cli search.py:74 (`total=180`):
-/// the service crawls pages when `include_content` is set.
-const SEARCH_TIMEOUT_SECS: u64 = 180;
+/// Total request timeout. Tuned down from 180s: a stuck search held the whole
+/// turn hostage (cancel could not interrupt the in-flight HTTP future quickly,
+/// leaving the UI on "Cancelling…" for minutes). 60s bounds a hung search to a
+/// single minute while still allowing page crawling when `include_content` is set.
+/// Override with `KIMIX_WEB_SEARCH_TIMEOUT_SECS`.
+fn search_timeout_secs() -> u64 {
+    std::env::var("KIMIX_WEB_SEARCH_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(60)
+}
 /// `timeout_seconds` request field — the server-side search budget
 /// (search.py:93).
-const SERVER_TIMEOUT_SECS: u64 = 30;
+const SERVER_TIMEOUT_SECS: u64 = 20;
 /// Consecutive failures before circuit opens (skip remote, fail fast).
 const CIRCUIT_FAILURE_THRESHOLD: u32 = 3;
 /// Circuit open duration in seconds.
@@ -142,7 +150,7 @@ impl WebSearchClient {
         }
         let http = reqwest::Client::builder()
             .default_headers(headers)
-            .timeout(std::time::Duration::from_secs(SEARCH_TIMEOUT_SECS))
+            .timeout(std::time::Duration::from_secs(search_timeout_secs()))
             .build()
             .map_err(|e| tool_error(format!("Failed to build HTTP client: {e}")))?;
         Ok(Self {

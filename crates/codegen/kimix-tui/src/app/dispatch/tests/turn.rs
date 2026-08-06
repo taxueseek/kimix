@@ -522,6 +522,66 @@ fn reconcile_suppresses_send_now_cancel_marker() {
     );
 }
 
+/// A cancel whose terminal signal never arrives must be force-finished by the
+/// stuck-cancel watchdog once `cancel_requested_at` passes the timeout — the
+/// UI must never strand on "Cancelling…" forever.
+#[test]
+fn stuck_cancel_watchdog_force_finishes_after_timeout() {
+    let mut app = test_app_with_agent();
+    let id = AgentId(0);
+    {
+        let agent = app.agents.get_mut(&id).unwrap();
+        agent.session.state = AgentState::TurnCancelling;
+        agent.session.current_prompt_id = Some("pid-stuck-cancel".into());
+        agent.session.cancel_requested_at =
+            Some(std::time::Instant::now() - std::time::Duration::from_secs(30));
+    }
+
+    let fired = reconcile_stuck_cancels(&mut app);
+
+    assert!(fired.is_some(), "an overdue stuck cancel must fire");
+    let agent = &app.agents[&id];
+    assert!(
+        agent.session.state.is_idle(),
+        "watchdog must exit TurnCancelling"
+    );
+    assert!(agent.session.current_prompt_id.is_none());
+    assert!(agent.session.cancel_requested_at.is_none());
+    let has_cancelled_marker = (0..agent.scrollback.len()).any(|i| {
+        matches!(
+            agent.scrollback.entry(i).map(|e| &e.block),
+            Some(RenderBlock::SessionEvent(ev))
+                if matches!(ev.event, SessionEvent::TurnCancelled { .. })
+        )
+    });
+    assert!(
+        has_cancelled_marker,
+        "watchdog must surface the 'Turn cancelled' marker"
+    );
+}
+
+/// A cancel within the timeout window must NOT be force-finished yet.
+#[test]
+fn stuck_cancel_watchdog_waits_within_timeout() {
+    let mut app = test_app_with_agent();
+    let id = AgentId(0);
+    {
+        let agent = app.agents.get_mut(&id).unwrap();
+        agent.session.state = AgentState::TurnCancelling;
+        agent.session.current_prompt_id = Some("pid-fresh-cancel".into());
+        agent.session.cancel_requested_at = Some(std::time::Instant::now());
+    }
+
+    let fired = reconcile_stuck_cancels(&mut app);
+
+    assert!(fired.is_none(), "a fresh cancel must not fire the watchdog");
+    let agent = &app.agents[&id];
+    assert!(
+        agent.session.state.is_cancelling(),
+        "fresh cancel stays in TurnCancelling"
+    );
+}
+
 /// Older-shell fallback on the reconcile rail: no wire trigger, armed expectation.
 #[test]
 fn reconcile_suppresses_expected_send_now_cancel_without_wire_trigger() {

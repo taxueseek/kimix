@@ -439,7 +439,7 @@ pub(super) mod paste_key_tests {
                 acp_tx: tx,
                 session_id: None,
                 models: ModelState::default(),
-                state: AgentState::Idle,
+                state: AgentState::Idle, cancel_requested_at: None,
                 tracker: crate::acp::tracker::AcpUpdateTracker::new(),
                 cwd: std::path::PathBuf::from("/tmp"),
                 is_worktree: false,

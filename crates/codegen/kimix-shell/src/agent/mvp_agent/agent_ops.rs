@@ -1333,6 +1333,29 @@ impl MvpAgent {
             Err(_) => Err("timeout"),
         }
     }
+
+    /// Flush every live session's persistence buffer (leader shutdown path).
+    ///
+    /// Called before the leader process exits so buffered writes (chat
+    /// messages, session updates) survive the runtime teardown — a direct
+    /// process exit drops the persistence actors without running their
+    /// channel-close flush, which is what previously lost the tail of a
+    /// conversation when the user quit mid-turn.
+    pub(crate) async fn flush_all_sessions(&self) {
+        let ids: Vec<acp::SessionId> = self.sessions.borrow().keys().cloned().collect();
+        if ids.is_empty() {
+            return;
+        }
+        tracing::info!(count = ids.len(), "Leader shutdown: flushing session persistence");
+        for id in &ids {
+            if let Err(reason) = self.flush_session(id).await {
+                tracing::warn!(
+                    session_id = % id.0, reason,
+                    "Leader shutdown flush failed"
+                );
+            }
+        }
+    }
     /// Get a session's cwd by session_id.
     /// Returns None if the session is not found.
     pub fn get_session_cwd(&self, session_id: &acp::SessionId) -> Option<PathBuf> {

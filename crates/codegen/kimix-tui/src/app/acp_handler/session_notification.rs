@@ -328,7 +328,7 @@ pub(super) fn handle_session_notification(notif: &acp::ExtNotification, app: &mu
                 session_id: Some(acp::SessionId::new(child_session_id.clone())),
                 models: agent.session.models.clone(),
                 state: AgentState::TurnRunning,
-                tracker: AcpUpdateTracker::new(),
+            cancel_requested_at: None,                tracker: AcpUpdateTracker::new(),
                 cwd: effective_child_cwd,
                 is_worktree: effective_is_worktree,
                 forked_from: None,

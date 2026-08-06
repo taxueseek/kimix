@@ -604,6 +604,12 @@ pub struct AgentSession {
     pub session_id: Option<acp::SessionId>,
     pub models: ModelState,
     pub state: AgentState,
+    /// Monotonic time the current cancel was requested (set by
+    /// `do_cancel_turn`). Drives the stuck-cancel watchdog: if the terminal
+    /// turn signal never arrives (leader disconnect, actor wedged on a
+    /// blocking tool), the watchdog force-finishes the turn locally so the UI
+    /// never strands on "Cancelling…" forever. Cleared on `finish_turn`.
+    pub cancel_requested_at: Option<std::time::Instant>,
     pub cwd: PathBuf,
     /// Whether this session is running inside a git worktree.
     pub is_worktree: bool,
@@ -783,6 +789,7 @@ impl AgentSession {
     pub fn finish_turn(&mut self, scrollback: &mut ScrollbackState) {
         self.tracker.finish_turn(scrollback);
         self.state = AgentState::Idle;
+        self.cancel_requested_at = None;
         self.rate_limited = false;
         self.model_incompatible = false;
         self.in_flight_prompt = None;
@@ -979,7 +986,7 @@ mod tests {
             session_id: None,
             models: ModelState::default(),
             state: AgentState::Idle,
-            tracker: AcpUpdateTracker::new(),
+            cancel_requested_at: None,            tracker: AcpUpdateTracker::new(),
             cwd: PathBuf::from("/tmp"),
             is_worktree: false,
             forked_from: None,

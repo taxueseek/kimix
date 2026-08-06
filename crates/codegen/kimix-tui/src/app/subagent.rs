@@ -546,7 +546,7 @@ mod tests {
             acp_tx: tx,
             session_id: Some(acp::SessionId::new(Arc::from("child"))),
             models: ModelState::default(),
-            state: AgentState::Idle,
+            state: AgentState::Idle, cancel_requested_at: None,
             tracker: AcpUpdateTracker::new(),
             cwd: PathBuf::from("/tmp"),
             is_worktree: false,
