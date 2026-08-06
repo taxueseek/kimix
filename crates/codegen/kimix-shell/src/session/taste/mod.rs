@@ -28,7 +28,99 @@ pub fn taste_store_path() -> PathBuf {
     if let Ok(p) = std::env::var("KIMIX_TASTE_FILE") {
         return PathBuf::from(p);
     }
-    crate::session::taste::kimix_home().join("taste").join("taste.md")
+    crate::session::taste::kimix_home()
+        .join("taste")
+        .join("taste.md")
+}
+
+/// Ordered taste stores, project-first. A project-level `.kimix/taste/taste.md`
+/// (or `KIMIX_PROJECT_TASTE_FILE`) overrides the global store on conflicts;
+/// global learnings still apply for anything the project does not pin.
+///
+/// Mirror of the Command Code three-tier layout (project → global → remote),
+/// with the remote tier deferred until a package registry exists.
+pub fn taste_stores() -> Vec<PathBuf> {
+    let mut stores = Vec::new();
+    if let Ok(p) = std::env::var("KIMIX_PROJECT_TASTE_FILE") {
+        if !p.is_empty() {
+            stores.push(PathBuf::from(p));
+        }
+    } else if let Ok(cwd) = std::env::current_dir() {
+        let project = cwd.join(".kimix").join("taste").join("taste.md");
+        if project.exists() {
+            stores.push(project);
+        }
+    }
+    let global = taste_store_path();
+    if global.exists() {
+        stores.push(global);
+    }
+    stores
+}
+
+/// A validation issue found by [`taste_lint`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TasteIssue {
+    /// Which store the issue came from (`"project"` / `"global"`).
+    pub source: &'static str,
+    /// 1-based line number in the store file.
+    pub line: usize,
+    /// Why the line was rejected.
+    pub reason: String,
+}
+
+/// Validate a taste store, reporting lines that do not match the canonical
+/// format (or carry an out-of-range confidence). Returns the issues; an empty
+/// vec means the store is clean.
+pub fn taste_lint(path: &std::path::Path) -> Vec<TasteIssue> {
+    let Ok(content) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    content
+        .lines()
+        .enumerate()
+        .filter_map(|(i, line)| {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                return None; // blank / comment lines are allowed
+            }
+            match parse_taste_line(trimmed) {
+                Some(_) => None,
+                None => Some(TasteIssue {
+                    source: if path == taste_store_path() {
+                        "global"
+                    } else {
+                        "project"
+                    },
+                    line: i + 1,
+                    reason: "not in canonical format: `- <learning>. Confidence: <0.0-1.0>`"
+                        .to_string(),
+                }),
+            }
+        })
+        .collect()
+}
+
+/// Read all canonical learnings from every store, project-first. On a
+/// duplicate learning text the project entry wins (it overrides the global
+/// default); global-only learnings are retained.
+fn read_merged_learnings() -> Vec<(String, f32)> {
+    let mut merged: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
+    for store in taste_stores() {
+        let Ok(content) = fs::read_to_string(&store) else {
+            continue;
+        };
+        for line in content.lines() {
+            if let Some((learning, confidence)) = parse_taste_line(line) {
+                // Project stores come first, so later (global) entries never
+                // overwrite a project-pinned learning.
+                merged.entry(learning.to_string()).or_insert(confidence);
+            }
+        }
+    }
+    let mut items: Vec<(String, f32)> = merged.into_iter().collect();
+    items.sort_by(|a, b| a.0.cmp(&b.0));
+    items
 }
 
 fn kimix_home() -> PathBuf {
@@ -59,31 +151,31 @@ pub fn parse_taste_line(line: &str) -> Option<(&str, f32)> {
     Some((learning, confidence))
 }
 
-/// Render the `<taste>` system-prompt block from the store.
+/// Render the `<taste>` system-prompt block from the merged stores.
 ///
-/// `None` when the store is missing/empty/disabled (`KIMIX_TASTE_DISABLED=1`)
+/// `None` when all stores are missing/empty/disabled (`KIMIX_TASTE_DISABLED=1`)
 /// — the caller then omits the block entirely. Non-canonical lines are
 /// dropped, so a hand-edited file never injects garbage into the prompt.
 pub fn render_taste_section() -> Option<String> {
-    if std::env::var("KIMIX_TASTE_DISABLED").map(|v| v == "1").unwrap_or(false) {
+    if std::env::var("KIMIX_TASTE_DISABLED")
+        .map(|v| v == "1")
+        .unwrap_or(false)
+    {
         return None;
     }
-    let path = taste_store_path();
-    let content = fs::read_to_string(&path).ok()?;
-    let mut valid_lines: Vec<&str> = content
-        .lines()
-        .filter(|l| parse_taste_line(l).is_some())
+    let learnings = read_merged_learnings();
+    if learnings.is_empty() {
+        return None;
+    }
+    let rendered: Vec<String> = learnings
+        .iter()
+        .map(|(learning, confidence)| format!("- {learning}. Confidence: {confidence:.2}"))
         .collect();
-    valid_lines.sort();
-    valid_lines.dedup();
-    if valid_lines.is_empty() {
-        return None;
-    }
     Some(format!(
         "Below is the current set of learned coding preferences for this \
          workspace. Follow them unless the user explicitly overrides.\n\n\
          {}",
-        valid_lines.join("\n")
+        rendered.join("\n")
     ))
 }
 
@@ -157,7 +249,12 @@ pub fn collect_git_signals(
             Ok(p) => p,
             Err(_) => continue,
         };
-        let subject: String = commit.summary().ok().flatten().unwrap_or_default().to_string();
+        let subject: String = commit
+            .summary()
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+            .to_string();
         let parent_tree = parent.tree().ok();
         let commit_tree = commit.tree().ok();
         let Some(diff) = repo
@@ -195,12 +292,16 @@ pub fn collect_git_signals(
                         continue;
                     };
                     match line.origin() {
-                        '-' => removed_line = Some(trim_signal(
-                            std::str::from_utf8(line.content()).unwrap_or(""),
-                        )),
-                        '+' => added_line = Some(trim_signal(
-                            std::str::from_utf8(line.content()).unwrap_or(""),
-                        )),
+                        '-' => {
+                            removed_line = Some(trim_signal(
+                                std::str::from_utf8(line.content()).unwrap_or(""),
+                            ))
+                        }
+                        '+' => {
+                            added_line = Some(trim_signal(
+                                std::str::from_utf8(line.content()).unwrap_or(""),
+                            ))
+                        }
                         _ => {}
                     }
                 }
@@ -322,8 +423,9 @@ mod tests {
 
     #[test]
     fn render_section_drops_invalid_lines_and_sorts() {
-        let section = render_content("garbage line\n- b rule. Confidence: 0.9\n- a rule. Confidence: 0.5\n")
-            .unwrap();
+        let section =
+            render_content("garbage line\n- b rule. Confidence: 0.9\n- a rule. Confidence: 0.5\n")
+                .unwrap();
         assert!(section.contains("a rule"), "sorted first");
         assert!(section.contains("b rule"));
         assert!(!section.contains("garbage"));
@@ -333,6 +435,69 @@ mod tests {
     fn render_section_none_when_no_valid_lines() {
         assert!(render_content("no canonical lines here\n").is_none());
         assert!(render_content("").is_none());
+    }
+
+    #[test]
+    fn taste_lint_reports_invalid_lines_and_skips_blank_comments() {
+        let dir = std::env::temp_dir().join(format!("kimix-taste-lint-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("taste.md");
+        fs::write(
+            &path,
+            "- good rule. Confidence: 0.8\n# comment line\n\nmalformed line\n- bad. Confidence: 9\n",
+        )
+        .unwrap();
+        let issues = taste_lint(&path);
+        assert_eq!(issues.len(), 2, "two invalid lines reported: {issues:?}");
+        assert_eq!(issues[0].line, 4);
+        assert_eq!(issues[1].line, 5);
+        assert!(issues.iter().all(|i| i.reason.contains("canonical format")));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn merged_learnings_project_overrides_global() {
+        let dir = std::env::temp_dir().join(format!("kimix-taste-merge-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir.join("project/.kimix/taste"));
+        let _ = fs::create_dir_all(&dir.join("global"));
+        let project = dir.join("project/.kimix/taste/taste.md");
+        let global = dir.join("global/taste.md");
+        fs::write(
+            &project,
+            "- prefer 2-space indent. Confidence: 0.9\n- project only. Confidence: 0.7\n",
+        )
+        .unwrap();
+        fs::write(
+            &global,
+            "- prefer 2-space indent. Confidence: 0.5\n- global only. Confidence: 0.6\n",
+        )
+        .unwrap();
+
+        // Env mutation is single-threaded within this test (Rust 2024
+        // marks these unsafe; the test owns the process env).
+        unsafe {
+            std::env::set_var("KIMIX_PROJECT_TASTE_FILE", &project);
+            std::env::set_var("KIMIX_TASTE_FILE", &global);
+        }
+
+        let merged = read_merged_learnings();
+        unsafe {
+            std::env::remove_var("KIMIX_PROJECT_TASTE_FILE");
+            std::env::remove_var("KIMIX_TASTE_FILE");
+        }
+
+        // project wins the duplicate; both unique learnings survive.
+        let indent = merged
+            .iter()
+            .find(|(l, _)| l == "prefer 2-space indent")
+            .unwrap();
+        assert!(
+            (indent.1 - 0.9).abs() < 1e-6,
+            "project overrides global: {indent:?}"
+        );
+        assert!(merged.iter().any(|(l, _)| l == "project only"));
+        assert!(merged.iter().any(|(l, _)| l == "global only"));
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// 冒烟：对当前 crate 所在 git 仓库提取真实信号（CI/本地仓库均可）。
@@ -374,7 +539,11 @@ mod tests {
             },
         ];
         let lines = render_learnings(&signals, "demo", 10);
-        assert_eq!(lines.len(), 2, "different removed lines → distinct learnings");
+        assert_eq!(
+            lines.len(),
+            2,
+            "different removed lines → distinct learnings"
+        );
         assert!(lines[0].contains("bar()") && lines[1].contains("bar()"));
         assert!(
             lines[0].contains("Confidence: 0.60") || lines[1].contains("Confidence: 0.60"),
