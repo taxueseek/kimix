@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 
 use kimix_sampling_types::{
     ConversationItem, DanglingToolCallReason, SamplingConfig, TokenUsage,
-    dedup_duplicate_tool_results, repair_dangling_tool_calls,
+    heal_conversation_pairs,
 };
 
 use crate::types::Credentials;
@@ -217,19 +217,16 @@ impl ChatState {
     /// lack matching `ToolResult` entries. Without this, the in-memory state
     /// would carry broken conversation history until the next `build_request`.
     pub fn new(mut conversation: Vec<ConversationItem>, sampling_config: SamplingConfig) -> Self {
-        let deduped = dedup_duplicate_tool_results(&mut conversation);
-        if deduped > 0 {
+        let heal = heal_conversation_pairs(
+            &mut conversation,
+            DanglingToolCallReason::UserCancelled,
+        );
+        if !heal.is_clean() {
             tracing::info!(
-                deduped_count = deduped,
-                "Removed duplicate tool results in initial conversation"
-            );
-        }
-        let repaired =
-            repair_dangling_tool_calls(&mut conversation, DanglingToolCallReason::UserCancelled);
-        if repaired > 0 {
-            tracing::info!(
-                repaired_count = repaired,
-                "Repaired dangling tool calls in initial conversation (likely from a previous crash)"
+                dangling_repaired = heal.dangling_repaired,
+                dup_results_removed = heal.dup_results_removed,
+                orphan_results_removed = heal.orphan_results_removed,
+                "Healed tool-call pairs in initial conversation (crash recovery / history rewrite)"
             );
         }
 

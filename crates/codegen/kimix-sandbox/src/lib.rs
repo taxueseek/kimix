@@ -21,10 +21,16 @@
 //! ```
 pub mod child_net;
 mod deny;
+pub mod exec_transform;
 mod logging;
 mod paths;
 mod profiles;
 mod types;
+pub use exec_transform::{
+    ApprovalPolicy, BwrapPlan, ExecPolicy, WriteDecision, allows_write, bwrap_plan_for_profile,
+    is_protected_write_path, path_within_workspace, profile_for_sandbox_mode,
+    resolve_legacy_policy, sandbox_mode_for_profile, PROTECTED_WRITE_PREFIXES,
+};
 pub use logging::SandboxLogger;
 #[cfg(all(feature = "enforce", unix))]
 use nono::Sandbox;

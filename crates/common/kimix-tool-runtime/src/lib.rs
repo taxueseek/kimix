@@ -11,6 +11,7 @@
 pub mod context;
 pub mod dispatch;
 pub mod error;
+pub mod input_repair;
 pub mod local_registry;
 pub mod notification;
 pub mod render;
@@ -24,6 +25,7 @@ pub use context::{
 };
 pub use dispatch::ToolDispatch;
 pub use error::{ToolError, ToolErrorKind};
+pub use input_repair::{RepairEvent, RepairReport, repair_tool_input, repair_tool_input_in_place};
 pub use local_registry::LocalRegistry;
 pub use notification::{
     BashExecutionBackgrounded, BashExecutionComplete, BashExecutionFailed, BashExecutionTimeout,

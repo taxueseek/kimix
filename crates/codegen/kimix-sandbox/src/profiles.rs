@@ -23,7 +23,10 @@ use crate::paths::{
 /// Sensitive credential paths denied by default in workspace, devbox, and
 /// read-only profiles. Uses `dirs::home_dir()` for absolute resolution; `~`
 /// is not expanded by the sandbox engine.
-fn default_sensitive_deny_paths() -> Vec<PathBuf> {
+///
+/// Public so pure policy helpers (`exec_transform`) share one list without
+/// depending on the `enforce` feature.
+pub fn default_sensitive_deny_paths() -> Vec<PathBuf> {
     let Some(home) = dirs::home_dir() else {
         return vec![];
     };

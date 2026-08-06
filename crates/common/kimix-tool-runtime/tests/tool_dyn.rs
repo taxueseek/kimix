@@ -295,6 +295,21 @@ async fn tool_dyn_invalid_args_become_invalid_arguments_terminal() {
     assert!(stream.next().await.is_none(), "stream should be exhausted");
 }
 
+/// OSS models often wrap object args in a one-element array or stringly
+/// nest the payload; the ToolDyn blanket must repair before deserialize.
+#[tokio::test]
+async fn tool_dyn_repairs_oss_dirty_args_before_deserialize() {
+    let tool: ArcTool = Arc::new(BlockingEcho);
+    let dirty = json!([{ "text": "repaired" }]);
+    let mut stream = tool.execute(ToolCallContext::default(), dirty).await;
+    match stream.next().await.unwrap() {
+        ToolStreamItem::Terminal(Ok(typed)) => {
+            assert_eq!(typed.value, json!({"text": "repaired"}));
+        }
+        other => panic!("expected repaired args to succeed, got {other:?}"),
+    }
+}
+
 #[tokio::test]
 async fn tool_dyn_unencodable_output_becomes_execution_terminal() {
     let tool: ArcTool = Arc::new(UnencodableTool);

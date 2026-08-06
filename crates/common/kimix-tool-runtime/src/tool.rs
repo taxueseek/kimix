@@ -355,6 +355,23 @@ impl<T: Tool> ToolDyn for T {
     }
 
     async fn execute(&self, ctx: ToolCallContext, args: Value) -> ToolStream<TypedToolOutput> {
+        // OSS models often emit near-valid args (stringified JSON, singleton
+        // arrays, stringly-typed numbers, field aliases). Repair against the
+        // typed Args schema before serde; serde remains the final gate.
+        let schema = serde_json::to_value(schemars::schema_for!(T::Args)).ok();
+        let (args, report) = crate::input_repair::repair_tool_input(args, schema.as_ref());
+        if !report.is_empty() {
+            tracing::debug!(
+                tool = %Tool::id(self),
+                repairs = report.events.len(),
+                rules = ?report
+                    .events
+                    .iter()
+                    .map(|e| e.rule)
+                    .collect::<Vec<_>>(),
+                "repaired tool arguments before deserialize"
+            );
+        }
         let typed_args: T::Args = match serde_json::from_value(args) {
             Ok(v) => v,
             Err(e) => return terminal_only(Err(ToolError::invalid_arguments(e.to_string()))),

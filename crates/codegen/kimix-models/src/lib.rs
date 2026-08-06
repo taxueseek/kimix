@@ -15,6 +15,11 @@
 //!   CLI flag > ENV var > config.toml > server-delivered > these defaults
 use std::sync::LazyLock;
 
+pub mod feature_map;
+pub use feature_map::{
+    ModelFeatureMap, feature_default_thinking, feature_map_for_model,
+};
+
 // ── Platform registry (PRD F2) ──────────────────────────────────────────────
 
 /// Env var holding the moonshot-cn API key (wins over the generic name).

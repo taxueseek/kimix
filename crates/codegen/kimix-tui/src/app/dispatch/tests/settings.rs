@@ -1374,7 +1374,7 @@ fn set_simple_mode_propagates_to_every_agent() {
             session_id: Some("test-session-b".into()),
             models: ModelState::default(),
             state: AgentState::Idle,
-            tracker: AcpUpdateTracker::new(),
+            cancel_requested_at: None,            tracker: AcpUpdateTracker::new(),
             cwd: PathBuf::from("/tmp"),
             is_worktree: false,
             forked_from: None,

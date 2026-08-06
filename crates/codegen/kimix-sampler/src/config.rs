@@ -13,6 +13,7 @@ use kimix_sampling_types::{
 use serde::{Deserialize, Serialize};
 
 use crate::attribution::SharedAttributionCallback;
+use crate::dialect::ChatCompletionsDialect;
 use crate::retry::{DEFAULT_MAX_RETRIES, RATE_LIMIT_RETRY_THRESHOLD};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -53,6 +54,12 @@ pub struct SamplerConfig {
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub api_backend: ApiBackend,
+    /// Chat Completions wire dialect (Kimi vs pure OpenAI-compatible).
+    /// Ignored when `api_backend` is not ChatCompletions. Defaults to Kimi
+    /// for backward compatibility; prefer
+    /// [`ChatCompletionsDialect::infer_from_base_url`] for custom OSS hosts.
+    #[serde(default)]
+    pub chat_completions_dialect: ChatCompletionsDialect,
     #[serde(default)]
     pub auth_scheme: AuthScheme,
     /// Extra request headers applied verbatim. The sampler never inspects
@@ -137,6 +144,7 @@ impl Default for SamplerConfig {
             temperature: None,
             top_p: None,
             api_backend: ApiBackend::default(),
+            chat_completions_dialect: ChatCompletionsDialect::default(),
             auth_scheme: AuthScheme::default(),
             extra_headers: IndexMap::new(),
             context_window: 0,

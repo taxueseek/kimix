@@ -1707,7 +1707,7 @@ mod tests {
             session_id: Some(acp::SessionId::new("test-session")),
             models,
             state: AgentState::Idle,
-            tracker: crate::acp::tracker::AcpUpdateTracker::new(),
+            cancel_requested_at: None,            tracker: crate::acp::tracker::AcpUpdateTracker::new(),
             cwd: PathBuf::from("/tmp"),
             is_worktree: false,
             forked_from: None,

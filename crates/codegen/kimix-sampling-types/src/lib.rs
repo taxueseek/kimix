@@ -8,8 +8,10 @@
 pub mod conversation;
 pub mod doom_loop;
 pub mod error;
+pub mod heal;
 pub mod messages;
 pub mod serde_helpers;
+pub mod stream_triage;
 pub mod types;
 
 pub use self::conversation::*;
@@ -20,6 +22,14 @@ pub use self::doom_loop::{
 pub use self::error::{
     EmptyReason, EmptyResponseContext, ResponseModelMetadata, Result, SamplingError,
     is_context_length_error, is_quota_denial,
+};
+pub use self::heal::{
+    HealReport, HealTelemetry, heal_conversation_pairs, heal_telemetry, reset_heal_telemetry,
+    strip_orphan_tool_results,
+};
+pub use self::stream_triage::{
+    StreamErrorAction, TriageContext, looks_like_tool_pair_violation, triage_error_facts,
+    triage_sampling_error,
 };
 pub use self::types::*;
 

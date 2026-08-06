@@ -1581,6 +1581,7 @@ impl SessionActor {
         let mut loop_index: u32 = 0;
         let mut todo_gate_fires: u32 = 0;
         let mut auth_retry_schedule = AuthRetrySchedule::new();
+        let mut pair_heal_used = false;
         let mut turn_span_totals = TurnSpanTotals::default();
         let mut model_fingerprint: Option<String> = None;
         let mut structured_output_retries: u32 = 0;
@@ -1712,9 +1713,17 @@ impl SessionActor {
                 )),
             );
             let model_timer = std::time::Instant::now();
-            let (response, latency) = match self.run_turn_via_sampler(request.clone()).await? {
+            let (response, latency) = match self
+                .run_turn_via_sampler_with_heal_budget(request.clone(), pair_heal_used)
+                .await?
+            {
                 SamplerTurnOutcome::Response(r, latency) => (r, latency),
                 SamplerTurnOutcome::CompactAndResubmit => {
+                    auth_retry_schedule.reset();
+                    continue;
+                }
+                SamplerTurnOutcome::HealAndResubmit => {
+                    pair_heal_used = true;
                     auth_retry_schedule.reset();
                     continue;
                 }

@@ -12,7 +12,7 @@ pub fn make_agent_view(session_id: Option<&str>, cwd: &str) -> crate::app::agent
         session_id: session_id.map(agent_client_protocol::SessionId::new),
         models: crate::acp::model_state::ModelState::default(),
         state: AgentState::Idle,
-        tracker: crate::acp::tracker::AcpUpdateTracker::new(),
+            cancel_requested_at: None,        tracker: crate::acp::tracker::AcpUpdateTracker::new(),
         cwd: std::path::PathBuf::from(cwd),
         is_worktree: false,
         forked_from: None,

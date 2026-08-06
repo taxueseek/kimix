@@ -28,6 +28,7 @@ pub mod config;
 pub mod doom_loop;
 pub mod events;
 pub mod handle;
+mod dialect;
 mod kimi_compat;
 pub mod metrics;
 pub mod retry;
@@ -46,6 +47,7 @@ pub use config::{
     AuthScheme, BearerResolver, HeaderInjector, OriginClientInfo, RetryPolicy, SamplerConfig,
     SharedBearerResolver, SharedHeaderInjector,
 };
+pub use dialect::ChatCompletionsDialect;
 pub use doom_loop::DoomLoopSignalCollector;
 pub use events::{SamplingChannel, SamplingErrorInfo, SamplingErrorKind, SamplingEvent};
 pub use handle::SamplerHandle;

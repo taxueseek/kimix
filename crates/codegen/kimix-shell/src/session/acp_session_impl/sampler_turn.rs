@@ -328,6 +328,10 @@ impl SessionActor {
                 extra_headers.insert("x-compaction-at".to_string(), value.to_string());
             }
         }
+        // Chat-state does not persist dialect; re-infer from base URL so OSS
+        // endpoints stay OpenAiCompat after reconstruct.
+        let chat_completions_dialect =
+            kimix_sampler::ChatCompletionsDialect::infer_from_base_url(&cfg.base_url);
         SamplingConfig {
             api_key: creds.api_key,
             base_url: cfg.base_url,
@@ -336,6 +340,7 @@ impl SessionActor {
             temperature: cfg.temperature,
             top_p: cfg.top_p,
             api_backend: cfg.api_backend,
+            chat_completions_dialect,
             auth_scheme,
             extra_headers,
             context_window: cfg.context_window.get(),
@@ -582,6 +587,17 @@ impl SessionActor {
         self: &Arc<Self>,
         error: kimix_sampler::SamplingErrorInfo,
     ) -> Result<SamplerFailureRecovery, acp::Error> {
+        self.handle_sampling_failure_inner(error, false).await
+    }
+
+    /// Like [`Self::handle_sampling_failure`] with a once-per-turn pair-heal
+    /// budget. When `pair_heal_already_used` is true, tool-pair Repair falls
+    /// through to surface instead of looping.
+    pub(crate) async fn handle_sampling_failure_inner(
+        self: &Arc<Self>,
+        error: kimix_sampler::SamplingErrorInfo,
+        pair_heal_already_used: bool,
+    ) -> Result<SamplerFailureRecovery, acp::Error> {
         use kimix_sampler::SamplingErrorKind;
         if self.should_compact_on_error(&error).await {
             let cw = error
@@ -644,6 +660,59 @@ impl SessionActor {
             )
             .data(detailed_message);
             return Err(acp_err);
+        }
+        // Mid-stream tool-pair triage (P4): heal history then resubmit once.
+        // Auth / compact / rate-limit paths above stay authoritative.
+        if !pair_heal_already_used {
+            let action = kimix_sampling_types::triage_error_facts(
+                error.kind.as_str(),
+                error.status_code,
+                &error.message,
+                error.is_retryable,
+                error.is_quota_exceeded(),
+                kimix_sampling_types::TriageContext::fresh()
+                    .with_dangling(false)
+                    .with_tool_pair(kimix_sampling_types::looks_like_tool_pair_violation(
+                        &error.message,
+                    )),
+            );
+            if matches!(action, kimix_sampling_types::StreamErrorAction::Repair) {
+                // turn_active=None → not blocked; sampling already failed so no
+                // concurrent tool execution owns the conversation.
+                match self.chat_state_handle.repair_history(false, None).await {
+                    Some(Ok(report)) => {
+                        tracing::info!(
+                            session_id = % self.session_info.id.0,
+                            duplicates_removed = report.duplicates_removed,
+                            synthetic_results_inserted = report.synthetic_results_inserted,
+                            stripped = report.stripped_tool_result_ids.len(),
+                            "stream triage: repaired tool pairs, resubmitting"
+                        );
+                        kimix_log::unified_log::info(
+                            "shell.turn.pair_heal_resubmit",
+                            Some(self.session_info.id.0.as_ref()),
+                            Some(serde_json::json!({
+                                "duplicates_removed": report.duplicates_removed,
+                                "synthetic_results_inserted": report.synthetic_results_inserted,
+                                "stripped_count": report.stripped_tool_result_ids.len(),
+                            })),
+                        );
+                        return Ok(SamplerFailureRecovery::HealAndResubmit);
+                    }
+                    Some(Err(_)) => {
+                        tracing::warn!(
+                            session_id = % self.session_info.id.0,
+                            "stream triage: repair_history blocked; falling through"
+                        );
+                    }
+                    None => {
+                        tracing::warn!(
+                            session_id = % self.session_info.id.0,
+                            "stream triage: chat state dead during pair heal"
+                        );
+                    }
+                }
+            }
         }
         let auth_recovery_eligible = matches!(error.kind, SamplingErrorKind::Auth) && {
             let (model_id, base_url) = self
@@ -873,6 +942,17 @@ impl SessionActor {
         self: &Arc<Self>,
         request: ConversationRequest,
     ) -> Result<SamplerTurnOutcome, acp::Error> {
+        self.run_turn_via_sampler_with_heal_budget(request, false)
+            .await
+    }
+
+    /// Same as [`Self::run_turn_via_sampler`] with an explicit once-per-turn
+    /// pair-heal budget so tool-pair Repair cannot spin the turn loop.
+    pub(crate) async fn run_turn_via_sampler_with_heal_budget(
+        self: &Arc<Self>,
+        request: ConversationRequest,
+        pair_heal_already_used: bool,
+    ) -> Result<SamplerTurnOutcome, acp::Error> {
         self.prepare_sampler_for_turn().await;
         let stream_drained_rx = {
             let (tx, rx) = tokio::sync::oneshot::channel();
@@ -913,12 +993,18 @@ impl SessionActor {
             Err(rich_err) => {
                 self.turn_stream_drained.lock().take();
                 let info = kimix_sampler::SamplingErrorInfo::from(&rich_err);
-                match self.handle_sampling_failure(info).await? {
+                match self
+                    .handle_sampling_failure_inner(info, pair_heal_already_used)
+                    .await?
+                {
                     SamplerFailureRecovery::CompactAndResubmit => {
                         Ok(SamplerTurnOutcome::CompactAndResubmit)
                     }
                     SamplerFailureRecovery::RefreshAuthAndResubmit => {
                         Ok(SamplerTurnOutcome::RefreshAuthAndResubmit)
+                    }
+                    SamplerFailureRecovery::HealAndResubmit => {
+                        Ok(SamplerTurnOutcome::HealAndResubmit)
                     }
                 }
             }

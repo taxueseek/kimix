@@ -1,7 +1,6 @@
 //! Mutation handlers for the ChatStateActor.
 use kimix_sampling_types::{
-    ContentPart, ConversationItem, DanglingToolCallReason, dedup_duplicate_tool_results,
-    repair_dangling_tool_calls,
+    ContentPart, ConversationItem, DanglingToolCallReason, heal_conversation_pairs,
 };
 
 use super::ChatStateActor;
@@ -51,18 +50,15 @@ impl ChatStateActor {
         // In-place integrity repair can add/remove items ahead of an active capture's
         // boundary, so snapshot + rebase the offset like the replace/restore paths.
         self.snapshot_turn_slice();
-        let deduped = dedup_duplicate_tool_results(&mut self.state.conversation);
-        if deduped > 0 {
+        // Full pair heal: dedup → dangling synthetic results → orphan strip.
+        // Telemetry is process-local (see `heal_telemetry`).
+        let heal = heal_conversation_pairs(&mut self.state.conversation, reason);
+        if !heal.is_clean() {
             tracing::info!(
-                deduped_count = deduped,
-                "Removed duplicate tool results in conversation"
-            );
-        }
-        let repaired = repair_dangling_tool_calls(&mut self.state.conversation, reason);
-        if repaired > 0 || deduped > 0 {
-            tracing::info!(
-                repaired_count = repaired,
-                "Repaired dangling tool calls in conversation"
+                dangling_repaired = heal.dangling_repaired,
+                dup_results_removed = heal.dup_results_removed,
+                orphan_results_removed = heal.orphan_results_removed,
+                "Healed tool-call pairs in conversation"
             );
             self.persistence.replace_history(&self.state.conversation);
         }

@@ -14,6 +14,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Homebrew formula 模板 `contrib/homebrew/kimix.rb`（自建 tap 后
   `brew install kimix`）
 - README 安装章节新增 npx / npm、Homebrew、cargo install 三种安装方式
+- **OSS-native 韧性（0.1.19）**：
+  - Chat Completions **方言**：`ChatCompletionsDialect` 按 `base_url` 推断
+    （Kimi vs OpenAiCompat），避免向 OSS 端点泄漏 thinking 重写字段
+  - **input_repair**（`kimix-tool-runtime`）：工具参数反序列化前修字符串化
+    JSON、别名、标量类型
+  - **PolicySandbox**（`kimix-sandbox::exec_transform`）：审批轴 × profile 轴；
+    workspace-write 保护 `.git` / `.kimix/sandbox.toml`；纯 `BwrapPlan`
+  - **pair heal**（`heal_conversation_pairs`）：加载与 BuildConversation 边界
+    治愈 dangling / orphan / dedup，带遥测
+  - **流错误三分**（`stream_triage`）：Repair / Retry / Surface；会话环路
+    对 tool-pair 违规 heal 后 **每 turn 最多 resubmit 一次**
+  - **feature_map**（`kimix-models`）：tools / parallel / thinking 轻量启发
+  - 文档：`docs/oss-models.md` 验收清单；`docs/KNOWN_ISSUES.md` 多供应商说明
+- **0.1.19 修复（取消卡住 / 退出丢数据 / 搜索超时）**：
+  - 取消兜底超时：`TurnCancelling` 超过 15s 无终态信号时强制本地结束并打
+    「已取消」标记（`KIMIX_STUCK_CANCEL_TIMEOUT_SECS` 可调），不再永久卡在
+    「取消中…」
+  - 退出前持久化 flush：客户端全部断开时，leader 先发内部
+    `flush_sessions` 通知，逐会话走 `FlushAndAck` 真同步屏障落盘，修复
+    按退出丢失对话尾部数据
+  - 搜索超时收紧：web_search 总超时 180s → 60s（`KIMIX_WEB_SEARCH_TIMEOUT_SECS`
+    可调），服务端预算 30s → 20s
 
 ## [0.1.16] - 2026-07-31
 

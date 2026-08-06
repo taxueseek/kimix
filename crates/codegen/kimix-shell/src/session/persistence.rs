@@ -1370,6 +1370,7 @@ impl PersistenceHandle {
     pub fn is_noop(&self) -> bool {
         self.noop
     }
+
 }
 
 struct SessionPersistence {

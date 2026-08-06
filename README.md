@@ -157,13 +157,18 @@ kimix -p "你好"    # 无头模式，直接提问
 
 ### 供应商与 API 密钥
 
-Kimix 连接固定的三平台注册表：
+内置平台注册表为三家（OAuth / API Key 开箱即用）：
 
 | 平台标识      | 基础 URL                         | 认证方式                          |
 | ------------- | -------------------------------- | --------------------------------- |
 | `kimi-code`   | `https://api.kimi.com/coding/v1` | Kimi Code 订阅 OAuth（`kimix login`） |
 | `moonshot-cn` | `https://api.moonshot.cn/v1`     | Moonshot 开放平台 API Key         |
 | `moonshot-ai` | `https://api.moonshot.ai/v1`     | Moonshot 开放平台 API Key         |
+
+自 0.1.19 起，还可通过配置自定义 `base_url` 接入 **OpenAI 兼容** OSS 网关
+（DeepSeek、Qwen、vLLM 等）：非 Kimi/Moonshot host 走 `OpenAiCompat` 方言，
+配合工具参数 repair、会话 pair heal 与 PolicySandbox。详见
+[`docs/oss-models.md`](./docs/oss-models.md)。
 
 Moonshot API Key 通过环境变量或 `~/.kimix/config.toml` 配置（环境变量优先，值不记录日志）：
 
@@ -368,13 +373,18 @@ through the built-in self-updater (`kimix update`, gated by `KIMIX_AUTO_UPDATE`)
 
 ### Providers and API Keys
 
-Kimix talks to a fixed three-platform registry:
+Built-in platforms (OAuth / API key out of the box):
 
 | Platform id   | Base URL                         | Auth                                      |
 | ------------- | -------------------------------- | ----------------------------------------- |
 | `kimi-code`   | `https://api.kimi.com/coding/v1` | Kimi Code subscription OAuth (`kimix login`) |
 | `moonshot-cn` | `https://api.moonshot.cn/v1`     | Moonshot open-platform API key            |
 | `moonshot-ai` | `https://api.moonshot.ai/v1`     | Moonshot open-platform API key            |
+
+Since 0.1.19 you can also point a custom `base_url` at an **OpenAI-compatible**
+OSS gateway (DeepSeek, Qwen, vLLM, …). Non-Kimi/Moonshot hosts use the
+`OpenAiCompat` dialect, with tool-arg repair, conversation pair heal, and
+PolicySandbox. See [`docs/oss-models.md`](./docs/oss-models.md).
 
 Moonshot API keys come from the environment or `~/.kimix/config.toml`
 (environment wins; values are never logged):

@@ -138,27 +138,12 @@ fn handle_initialized(server: &SandboxedServer, req: &RpcRequest) -> RpcResponse
             }
         }
         method::FS_WRITE_FILE => {
-            if server.mode.is_read_only() {
-                return RpcResponse::err(
-                    req.id,
-                    RpcError::new(
-                        error_code::FORBIDDEN,
-                        "exec-server is read-only; write rejected",
-                    ),
-                );
-            }
             let params: FsWriteParams = match serde_json::from_value(req.params.clone()) {
                 Ok(p) => p,
                 Err(e) => return invalid_params(req, e),
             };
-            if !within_workspace(&server.workspace, &params.path) {
-                return RpcResponse::err(
-                    req.id,
-                    RpcError::new(
-                        error_code::FORBIDDEN,
-                        format!("path outside workspace: {}", params.path),
-                    ),
-                );
+            if let Some(resp) = reject_write(server, req.id, &params.path) {
+                return resp;
             }
             match write_file(&params.path, &params.content) {
                 Ok(()) => RpcResponse::ok(req.id, serde_json::json!({ "ok": true })),
@@ -169,25 +154,13 @@ fn handle_initialized(server: &SandboxedServer, req: &RpcRequest) -> RpcResponse
             }
         }
         method::FS_CREATE_DIRECTORY => {
-            if server.mode.is_read_only() {
-                return RpcResponse::err(
-                    req.id,
-                    RpcError::new(error_code::FORBIDDEN, "exec-server is read-only; mkdir rejected"),
-                );
-            }
             let params: FsCreateDirectoryParams = match serde_json::from_value(req.params.clone())
             {
                 Ok(p) => p,
                 Err(e) => return invalid_params(req, e),
             };
-            if !within_workspace(&server.workspace, &params.path) {
-                return RpcResponse::err(
-                    req.id,
-                    RpcError::new(
-                        error_code::FORBIDDEN,
-                        format!("path outside workspace: {}", params.path),
-                    ),
-                );
+            if let Some(resp) = reject_write(server, req.id, &params.path) {
+                return resp;
             }
             match std::fs::create_dir_all(&params.path) {
                 Ok(()) => RpcResponse::ok(req.id, serde_json::json!({ "ok": true })),
@@ -229,13 +202,13 @@ fn write_response(out: &mut impl Write, resp: &RpcResponse) -> anyhow::Result<()
 }
 
 /// Apply the kernel sandbox to the **current process** (the child).
+///
+/// Profile selection goes through [`kimix_sandbox::profile_for_sandbox_mode`]
+/// (ExecTransform) so mode→profile mapping cannot drift from other surfaces.
 fn apply_kernel_sandbox(workspace: &str, mode: SandboxMode) -> anyhow::Result<()> {
-    use kimix_sandbox::ProfileName;
-    let profile = match mode {
-        SandboxMode::Off => ProfileName::Off,
-        SandboxMode::ReadOnly => ProfileName::ReadOnly,
-        SandboxMode::WorkspaceWrite => ProfileName::Workspace,
-    };
+    let profile = kimix_sandbox::profile_for_sandbox_mode(mode.as_str()).ok_or_else(|| {
+        anyhow::anyhow!("unknown sandbox mode for profile mapping: {}", mode.as_str())
+    })?;
     let mut manager = kimix_sandbox::SandboxManager::new(profile.clone(), Path::new(workspace));
     let applied = manager.apply(Path::new(workspace))?;
     // Off mode never applies anything; enforcement then relies on the
@@ -245,7 +218,7 @@ fn apply_kernel_sandbox(workspace: &str, mode: SandboxMode) -> anyhow::Result<()
     }
     tracing::info!(
         mode = mode.as_str(),
-        profile = ? profile,
+        profile = % profile,
         kernel_sandbox = mode != SandboxMode::Off,
         "exec-server: child sandbox initialized"
     );
@@ -258,6 +231,54 @@ static KERNEL_APPLIED: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 
 fn kernel_applied() -> bool {
     KERNEL_APPLIED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Handler-level write gate via ExecTransform (`allows_write`).
+///
+/// Returns `Some(error response)` when the write is forbidden; `None` to proceed.
+fn reject_write(server: &SandboxedServer, req_id: u64, path: &str) -> Option<RpcResponse> {
+    let profile = kimix_sandbox::profile_for_sandbox_mode(server.mode.as_str())
+        .unwrap_or(kimix_sandbox::ProfileName::Workspace);
+    // Prefer canonical containment when possible; fall back to lexical path.
+    let target = PathBuf::from(path);
+    let decision = if !within_workspace(&server.workspace, path)
+        && !kimix_sandbox::path_within_workspace(&server.workspace, &target)
+    {
+        kimix_sandbox::WriteDecision::DenyOutsideWorkspace
+    } else {
+        // Use workspace-relative check for protected prefixes even when
+        // canonicalize differs; pass absolute path under workspace when known.
+        let check_path = if target.is_absolute() {
+            target.clone()
+        } else {
+            server.workspace.join(&target)
+        };
+        kimix_sandbox::allows_write(&profile, &server.workspace, &check_path)
+    };
+    match decision {
+        kimix_sandbox::WriteDecision::Allow => None,
+        kimix_sandbox::WriteDecision::DenyReadOnly => Some(RpcResponse::err(
+            req_id,
+            RpcError::new(
+                error_code::FORBIDDEN,
+                "exec-server is read-only; write rejected",
+            ),
+        )),
+        kimix_sandbox::WriteDecision::DenyOutsideWorkspace => Some(RpcResponse::err(
+            req_id,
+            RpcError::new(
+                error_code::FORBIDDEN,
+                format!("path outside workspace: {path}"),
+            ),
+        )),
+        kimix_sandbox::WriteDecision::DenyProtected => Some(RpcResponse::err(
+            req_id,
+            RpcError::new(
+                error_code::FORBIDDEN,
+                format!("path is protected under workspace-write policy: {path}"),
+            ),
+        )),
+    }
 }
 
 /// Path containment check (portable handler-level guard). No fs access —
@@ -442,6 +463,36 @@ mod tests {
         let req = RpcRequest::new(1, "bogus/method", serde_json::json!({}));
         let resp = handle_initialized(&server, &req);
         assert_eq!(resp.error.unwrap().code, error_code::METHOD_NOT_FOUND);
+    }
+
+    #[test]
+    fn workspace_write_rejects_protected_git() {
+        let ws = std::env::temp_dir().join(format!("kimix-exec-git-{}", std::process::id()));
+        std::fs::create_dir_all(ws.join(".git")).unwrap();
+        let ws_c = ws.canonicalize().unwrap();
+        let server = SandboxedServer {
+            workspace: ws_c.clone(),
+            mode: SandboxMode::WorkspaceWrite,
+        };
+        let git_path = ws_c.join(".git/config");
+        let req = RpcRequest::new(
+            1,
+            method::FS_WRITE_FILE,
+            serde_json::to_value(FsWriteParams {
+                path: git_path.to_string_lossy().into_owned(),
+                content: "evil".into(),
+            })
+            .unwrap(),
+        );
+        let resp = handle_initialized(&server, &req);
+        let err = resp.error.expect("protected .git write must be forbidden");
+        assert_eq!(err.code, error_code::FORBIDDEN);
+        assert!(
+            err.message.contains("protected"),
+            "message should mention protected: {}",
+            err.message
+        );
+        let _ = std::fs::remove_dir_all(&ws);
     }
 
     #[test]

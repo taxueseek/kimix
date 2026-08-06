@@ -77,6 +77,7 @@ fn test_config(base_url: String) -> SamplerConfig {
         model: "kimi-for-coding".into(),
         max_completion_tokens: Some(1024),
         api_backend: ApiBackend::ChatCompletions,
+        chat_completions_dialect: Default::default(),
         extra_headers: IndexMap::new(),
         context_window: 128_000,
         max_retries: Some(3),

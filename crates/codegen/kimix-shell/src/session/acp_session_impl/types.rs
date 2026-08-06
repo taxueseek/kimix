@@ -21,6 +21,10 @@ pub(crate) enum SamplerFailureRecovery {
     /// Auth 401 recovery succeeded (devbox re-mint or OIDC refresh).
     /// The turn loop should resubmit once with the fresh token.
     RefreshAuthAndResubmit,
+    /// Tool-pair / history heal ran (dangling, orphan, dedup). Outer loop
+    /// rebuilds the request once; a second pair-heal in the same turn is
+    /// suppressed so we do not spin.
+    HealAndResubmit,
 }
 
 /// Outcome of a single turn attempt via the sampler-based path.
@@ -36,6 +40,8 @@ pub(crate) enum SamplerTurnOutcome {
     CompactAndResubmit,
     /// Auth recovery succeeded; the outer loop should retry once.
     RefreshAuthAndResubmit,
+    /// Conversation pairs healed; outer loop rebuilds and retries once.
+    HealAndResubmit,
 }
 
 /// Outcome of `process_conversation_turn`, distinguishing normal completion from cancellation.

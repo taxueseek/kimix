@@ -36,6 +36,7 @@ pub fn test_sampler_config(
         temperature: Some(0.7),
         top_p: None,
         api_backend,
+        chat_completions_dialect: Default::default(),
         auth_scheme: Default::default(),
         extra_headers: extra_headers
             .iter()

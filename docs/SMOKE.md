@@ -29,3 +29,9 @@ listed command and check the listed observable.
 | 17 | Search/fetch tools (OAuth-gated) | auto | `cargo test -p kimix-tools --lib web_search` and `--lib web_fetch` (Kimi wire contracts) |
 | 18 | Performance budgets | auto | `scripts/bench.sh` — `kimix --version` p95 ≤ 50 ms, TUI first frame ≤ 300 ms (CI `perf` job) |
 | 19 | Coexistence with official kimi-cli | manual | both logged in on one machine; kimix never reads/writes `~/.kimi` or keyring service `kimi-code` (F7 import is read-only; §9 requires a 24 h parallel-use pass) |
+| 20 | OpenAI-compat dialect (no Kimi-only leak) | auto | `cargo test -p kimix-sampler dialect` + `cargo test -p kimix-shell --lib sampling_config_dialect` |
+| 21 | Tool input repair | auto | `cargo test -p kimix-tool-runtime --lib input_repair` |
+| 22 | PolicySandbox write gate | auto | `cargo test -p kimix-sandbox exec_transform` + `cargo test -p kimix-exec-server` (incl. protected `.git`) |
+| 23 | Pair heal + stream triage | auto | `cargo test -p kimix-sampling-types heal` + `cargo test -p kimix-sampling-types stream_triage` |
+| 24 | Model feature map | auto | `cargo test -p kimix-models feature_map` |
+| 25 | OSS-native checklist | manual | see `docs/oss-models.md` acceptance rows (dirty tool JSON → repair; custom base_url; workspace-write rejects `.git`; dangling load heal; pair-error triage = Repair) |

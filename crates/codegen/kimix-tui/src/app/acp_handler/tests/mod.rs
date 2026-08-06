@@ -19,7 +19,7 @@ pub(super) fn make_session(session_id: Option<&str>) -> AgentSession {
         session_id: session_id.map(acp::SessionId::new),
         models: ModelState::default(),
         state: AgentState::Idle,
-        tracker: AcpUpdateTracker::new(),
+            cancel_requested_at: None,        tracker: AcpUpdateTracker::new(),
         cwd: PathBuf::from("/tmp"),
         is_worktree: false,
         forked_from: None,

@@ -5,9 +5,8 @@
 //! defaults. Talks to three backend shapes:
 //!
 
-//! * Chat Completions (`/chat/completions`) — the Kimi dialect; both
-//!   product channels (subscription OAuth, Moonshot API key) ride it.
-//!   Kimi-specific request deviations are absorbed by [`crate::kimi_compat`].
+//! * Chat Completions (`/chat/completions`) — request shape selected by
+//!   [`crate::ChatCompletionsDialect`] (Kimi vs pure OpenAI-compatible).
 //! * Responses API (`/responses`) — kept for custom providers.
 //! * Anthropic Messages API (`/messages`) — kept for custom providers.
 //!
@@ -35,6 +34,7 @@ use kimix_sampling_types::{
 };
 
 use crate::config::{AuthScheme, OriginClientInfo, SamplerConfig};
+use crate::dialect::ChatCompletionsDialect;
 
 // Re-export ApiBackend from the shared types crate for downstream callers.
 pub use kimix_sampling_types::ApiBackend;
@@ -347,6 +347,7 @@ struct ClientDefaults {
     temperature: Option<f32>,
     top_p: Option<f32>,
     api_backend: ApiBackend,
+    chat_completions_dialect: ChatCompletionsDialect,
     auth_scheme: AuthScheme,
     stream_tool_calls: bool,
     doom_loop_recovery: Option<kimix_sampling_types::DoomLoopRecoveryPolicy>,
@@ -509,6 +510,7 @@ impl SamplingClient {
             base_url = %config.base_url,
             model = %config.model,
             api_backend = ?config.api_backend,
+            chat_completions_dialect = %config.chat_completions_dialect.as_str(),
             auth_scheme = ?config.auth_scheme,
             // "unset" (not "none"): `ReasoningEffort::None` is a real wire value;
             // logging the absent Option as "none" looked like we were sending it.
@@ -525,6 +527,7 @@ impl SamplingClient {
             temperature: config.temperature,
             top_p: config.top_p,
             api_backend: config.api_backend,
+            chat_completions_dialect: config.chat_completions_dialect,
             auth_scheme: config.auth_scheme,
             stream_tool_calls: config.stream_tool_calls,
             doom_loop_recovery: config.doom_loop_recovery,
@@ -545,6 +548,11 @@ impl SamplingClient {
     /// The configured API backend for this client.
     pub fn api_backend(&self) -> ApiBackend {
         self.defaults.api_backend.clone()
+    }
+
+    /// Chat Completions wire dialect for this client.
+    pub fn chat_completions_dialect(&self) -> ChatCompletionsDialect {
+        self.defaults.chat_completions_dialect
     }
 
     /// Set the prompt-cache key injected into every request body.
@@ -848,14 +856,14 @@ impl SamplingClient {
             "Sending chat completion request"
         );
 
-        // Serialize, then run the Kimi dialect adaptations (single
-        // adaptation point for every request-side deviation; see
-        // `crate::kimi_compat`).
+        // Serialize, then run dialect adaptations (single adaptation
+        // point for every request-side deviation; see `crate::dialect`).
         let mut request_body = serde_json::to_value(&payload).map_err(|e| {
             tracing::error!("Failed to serialize chat/completions request: {}", e);
             SamplingError::Serialization(e)
         })?;
-        crate::kimi_compat::adapt_chat_completions_body(
+        crate::dialect::adapt_chat_completions_body(
+            self.defaults.chat_completions_dialect,
             &mut request_body,
             self.prompt_cache_key.as_deref(),
         );
@@ -897,12 +905,9 @@ impl SamplingClient {
         let payload = self.apply_defaults(request)?;
         let model_id = payload.model.clone().unwrap_or_default();
 
-        // Wrap the request with the streaming fields the Kimi API expects
-        // (`stream: true` + `stream_options.include_usage: true`, exactly
-        // what kimi-cli sends —
-        // packages/kosong/src/kosong/chat_provider/kimi.py:174-181), then
-        // serialize and run the Kimi dialect adaptations (single adaptation
-        // point for every request-side deviation; see `crate::kimi_compat`).
+        // Wrap the request with streaming fields (`stream: true` +
+        // `stream_options.include_usage: true`), then serialize and run
+        // dialect adaptations (see `crate::dialect`).
         let streaming_request = StreamingChatRequest {
             inner: &payload,
             stream: true,
@@ -920,7 +925,8 @@ impl SamplingClient {
         // (OpenAI/OpenCode-Go dialect); the same `hosted_tools` the Responses
         // path injects as `rs::Tool::WebSearch`.
         inject_hosted_chat_tools(&mut request_body, &hosted_tools);
-        crate::kimi_compat::adapt_chat_completions_body(
+        crate::dialect::adapt_chat_completions_body(
+            self.defaults.chat_completions_dialect,
             &mut request_body,
             self.prompt_cache_key.as_deref(),
         );
@@ -2003,6 +2009,7 @@ mod tests {
             temperature: None,
             top_p: None,
             api_backend: ApiBackend::ChatCompletions,
+            chat_completions_dialect: Default::default(),
             auth_scheme: AuthScheme::Bearer,
             extra_headers: IndexMap::new(),
             context_window: 8192,
@@ -2221,6 +2228,7 @@ mod tests {
         let cfg = SamplerConfig {
             api_key: Some("anthropic-key-abc123".to_string()),
             api_backend: ApiBackend::Messages,
+            chat_completions_dialect: Default::default(),
             auth_scheme: AuthScheme::XApiKey,
             ..minimal_config()
         };
@@ -2239,6 +2247,7 @@ mod tests {
         let cfg = SamplerConfig {
             api_key: Some("bearer-key-abc123".to_string()),
             api_backend: ApiBackend::Messages,
+            chat_completions_dialect: Default::default(),
             auth_scheme: AuthScheme::Bearer,
             ..minimal_config()
         };
@@ -2376,6 +2385,7 @@ mod tests {
         let cfg = SamplerConfig {
             api_key: Some("anthropic-key-abc123".to_string()),
             api_backend: ApiBackend::Messages,
+            chat_completions_dialect: Default::default(),
             auth_scheme: AuthScheme::XApiKey,
             ..minimal_config()
         };
@@ -2405,6 +2415,7 @@ mod tests {
         let cfg = SamplerConfig {
             api_key: Some("stale-bearer".to_string()),
             api_backend: ApiBackend::Messages,
+            chat_completions_dialect: Default::default(),
             auth_scheme: AuthScheme::Bearer,
             bearer_resolver: Some(std::sync::Arc::new(StaticBearerResolver("fresh-bearer"))),
             ..minimal_config()
@@ -2433,6 +2444,7 @@ mod tests {
         let cfg = SamplerConfig {
             api_key: Some("stale-bearer".to_string()),
             api_backend: ApiBackend::Responses,
+            chat_completions_dialect: Default::default(),
             auth_scheme: AuthScheme::Bearer,
             bearer_resolver: Some(std::sync::Arc::new(StaticBearerResolver("fresh-bearer"))),
             ..minimal_config()
@@ -2461,6 +2473,7 @@ mod tests {
         let cfg = SamplerConfig {
             api_key: Some("stale-anthropic".to_string()),
             api_backend: ApiBackend::Messages,
+            chat_completions_dialect: Default::default(),
             auth_scheme: AuthScheme::XApiKey,
             bearer_resolver: Some(std::sync::Arc::new(StaticBearerResolver("fresh-anthropic"))),
             ..minimal_config()

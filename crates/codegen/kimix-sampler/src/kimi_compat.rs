@@ -13,10 +13,9 @@
 //! `ChatChunkChoice::usage`) and the L2 stream transform
 //! (`stream::chat_completions` synthesizes missing tool-call ids).
 //!
-//! The `ApiBackend::ChatCompletions` backend is the Kimi dialect: both
-//! product channels (subscription OAuth and Moonshot API keys) ride it.
-//! Custom providers that need vanilla OpenAI semantics for reasoning use
-//! the `Responses` backend, which stays available in model configuration.
+//! Invoked only for [`crate::ChatCompletionsDialect::Kimi`]. Pure
+//! OpenAI-compatible hosts use [`crate::dialect`]'s OpenAiCompat path
+//! instead — ChatCompletions transport alone no longer implies Kimi.
 use serde_json::Value;
 
 /// Adapt a fully-serialized chat/completions request body to the Kimi

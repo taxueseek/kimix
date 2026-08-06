@@ -892,6 +892,8 @@ async fn read_parent_sampling_config(
             let auth_scheme = crate::agent::config::try_resolve_model_credentials(&cfg.model, None)
                 .map(|r| r.auth_scheme)
                 .unwrap_or_default();
+            let chat_completions_dialect =
+                kimix_sampler::ChatCompletionsDialect::infer_from_base_url(&cfg.base_url);
             let inherited = kimix_sampler::SamplerConfig {
                 api_key: creds.api_key,
                 base_url: cfg.base_url,
@@ -900,6 +902,7 @@ async fn read_parent_sampling_config(
                 temperature: cfg.temperature,
                 top_p: cfg.top_p,
                 api_backend: cfg.api_backend,
+                chat_completions_dialect,
                 auth_scheme,
                 extra_headers,
                 context_window: cfg.context_window.get(),

@@ -4195,6 +4195,8 @@ pub fn sampling_config_for_model(
              hosted tools will not be declared on this backend"
         );
     }
+    let chat_completions_dialect =
+        kimix_sampler::ChatCompletionsDialect::infer_from_base_url(&credentials.base_url);
     SamplerConfig {
         api_key: credentials.api_key,
         model: model_name,
@@ -4203,6 +4205,7 @@ pub fn sampling_config_for_model(
         temperature,
         top_p,
         api_backend,
+        chat_completions_dialect,
         auth_scheme: credentials.auth_scheme,
         extra_headers,
         context_window: info.context_window.get(),
@@ -5495,6 +5498,42 @@ reasoning_effort = "low"
         model.info.context_window = NonZeroU64::new(256_000).unwrap();
         let config = sampling_config_for_model(&model, resolve_credentials(&model, None), None);
         assert_eq!(config.context_window, 256_000);
+    }
+    #[test]
+    fn sampling_config_dialect_kimi_for_first_party_openai_compat_for_oss() {
+        use kimix_sampler::ChatCompletionsDialect;
+        let kimi = test_model_entry(
+            "kimi-for-coding",
+            "https://api.kimi.com/coding/v1",
+            Some("k"),
+            None,
+            None,
+        );
+        let cfg = sampling_config_for_model(&kimi, resolve_credentials(&kimi, None), None);
+        assert_eq!(cfg.chat_completions_dialect, ChatCompletionsDialect::Kimi);
+
+        let moonshot = test_model_entry(
+            "kimi",
+            "https://api.moonshot.cn/v1",
+            Some("k"),
+            None,
+            None,
+        );
+        let cfg = sampling_config_for_model(&moonshot, resolve_credentials(&moonshot, None), None);
+        assert_eq!(cfg.chat_completions_dialect, ChatCompletionsDialect::Kimi);
+
+        let oss = test_model_entry(
+            "deepseek-chat",
+            "https://api.deepseek.com/v1",
+            Some("k"),
+            None,
+            None,
+        );
+        let cfg = sampling_config_for_model(&oss, resolve_credentials(&oss, None), None);
+        assert_eq!(
+            cfg.chat_completions_dialect,
+            ChatCompletionsDialect::OpenAiCompat
+        );
     }
     #[test]
     fn parses_model_api_backend_responses() {
