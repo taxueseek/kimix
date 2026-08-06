@@ -126,6 +126,71 @@ impl AgentActivity {
         self.lock_live_sessions().len()
     }
 
+    /// Per-session bound for [`Self::flush_all_session_persistence`].
+    /// Matches `MvpAgent::flush_session` so both paths share the same budget.
+    pub const PERSISTENCE_FLUSH_TIMEOUT: Duration = Duration::from_secs(5);
+
+    /// Flush every live session's **persistence buffer** (chat_history /
+    /// updates) via [`SessionCommand::FlushComplete`] → `FlushAndAck`, and
+    /// **await** each oneshot. Does not shut actors down.
+    ///
+    /// This is the durable barrier for "quit without losing the last turn".
+    /// Leader disconnect used to fire `kimix/internal/flush_sessions` over
+    /// ACP and only sleep 500ms — the agent often had not finished writing
+    /// when the process exited. Call this from the leader IPC server with a
+    /// direct handle on the activity registry instead.
+    pub async fn flush_all_session_persistence(&self) {
+        let snapshot: Vec<_> = self
+            .lock_live_sessions()
+            .iter()
+            .map(|e| (e.id.clone(), e.cmd_tx.clone()))
+            .collect();
+        if snapshot.is_empty() {
+            return;
+        }
+        tracing::info!(
+            count = snapshot.len(),
+            "leader shutdown: flushing session persistence (await barrier)"
+        );
+        for (id, tx) in snapshot {
+            let (respond_to, rx) = tokio::sync::oneshot::channel();
+            if tx
+                .send(SessionCommand::FlushComplete { respond_to })
+                .is_err()
+            {
+                tracing::warn!(
+                    session_id = %id,
+                    "leader shutdown persistence flush: send failed (actor gone)"
+                );
+                continue;
+            }
+            match tokio::time::timeout(Self::PERSISTENCE_FLUSH_TIMEOUT, rx).await {
+                Ok(Ok(())) => {}
+                Ok(Err(_)) => {
+                    tracing::warn!(
+                        session_id = %id,
+                        "leader shutdown persistence flush: channel closed"
+                    );
+                }
+                Err(_) => {
+                    tracing::warn!(
+                        session_id = %id,
+                        timeout_secs = Self::PERSISTENCE_FLUSH_TIMEOUT.as_secs(),
+                        "leader shutdown persistence flush: timed out"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Durable process-exit sequence for the leader: await persistence
+    /// (chat tail on disk), then Shutdown session actors (SessionEnd hooks /
+    /// memory) within `grace`. Replaces the old "fire RPC + sleep 500ms".
+    pub async fn flush_for_process_exit(&self, grace: Duration) {
+        self.flush_all_session_persistence().await;
+        self.flush_all_sessions(grace).await;
+    }
+
     /// Send [`SessionCommand::Shutdown`] to every live session actor
     /// (replay-buffer flush → hooks → memory save → actor returns) and wait
     /// up to `grace` for the actors to exit, observed via
@@ -140,6 +205,9 @@ impl AgentActivity {
     /// Call **before** cancelling the leader's root token so session state
     /// is durable before the `LocalSet` drop aborts remaining tasks. Actors
     /// that miss the grace are logged and abandoned.
+    ///
+    /// Prefer [`Self::flush_for_process_exit`] on full process quit so the
+    /// chat buffer hits disk before actors tear down.
     pub async fn flush_all_sessions(&self, grace: Duration) {
         let deadline = tokio::time::Instant::now() + grace;
         // Every distinct channel signaled so far (id kept for logging).
@@ -413,5 +481,31 @@ mod tests {
     async fn flush_with_no_sessions_is_noop() {
         let activity = AgentActivity::default();
         activity.flush_all_sessions(Duration::from_secs(1)).await;
+    }
+
+    /// Persistence flush must await FlushComplete (not fire-and-forget).
+    #[tokio::test(start_paused = true)]
+    async fn persistence_flush_awaits_flush_complete() {
+        let activity = AgentActivity::default();
+        let (mut rx, _p, _i) = register_raw(&activity, "s1");
+        let actor = tokio::spawn(async move {
+            while let Some(cmd) = rx.recv().await {
+                if let SessionCommand::FlushComplete { respond_to } = cmd {
+                    let _ = respond_to.send(());
+                    return true;
+                }
+            }
+            false
+        });
+        activity.flush_all_session_persistence().await;
+        assert!(actor.await.unwrap(), "FlushComplete must be delivered and acked");
+    }
+
+    #[tokio::test]
+    async fn process_exit_flush_with_no_sessions_is_noop() {
+        let activity = AgentActivity::default();
+        activity
+            .flush_for_process_exit(Duration::from_secs(1))
+            .await;
     }
 }

@@ -127,12 +127,20 @@ pub(crate) fn dispatch(action: Action, app: &mut AppView) -> Vec<Effect> {
     app.reconcile_foreign_resume_launch();
     let effects = match action {
         Action::Quit | Action::QuitConfirmed => {
-            let mut effects = unregister_all_active_sessions(app);
+            // Esc → immediate /exit was the dominant production failure mode:
+            // turn still TurnCancelling, user quits within 1–2s, 15s watchdog
+            // never fires, and resume misses the tail. Force-finish first so
+            // markers settle and the agent worker flush sees a clean state.
+            let mut effects =
+                super::turn::force_finish_cancelling_for_quit(app).unwrap_or_default();
+            effects.extend(unregister_all_active_sessions(app));
             effects.push(Effect::Quit);
             effects
         }
         Action::QuitForUpdate => {
-            let mut effects = unregister_all_active_sessions(app);
+            let mut effects =
+                super::turn::force_finish_cancelling_for_quit(app).unwrap_or_default();
+            effects.extend(unregister_all_active_sessions(app));
             app.quit_for_update = true;
             effects.push(Effect::Quit);
             effects
@@ -162,7 +170,9 @@ pub(crate) fn dispatch(action: Action, app: &mut AppView) -> Vec<Effect> {
                     session_id,
                 });
             }
-            let mut effects = unregister_all_active_sessions(app);
+            let mut effects =
+                super::turn::force_finish_cancelling_for_quit(app).unwrap_or_default();
+            effects.extend(unregister_all_active_sessions(app));
             effects.push(Effect::Quit);
             effects
         }

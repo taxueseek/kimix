@@ -1060,8 +1060,9 @@ fn spawn_relaunch_drain(
                 tokio::time::sleep(RELAUNCH_GRACE_POLL) => {}
             }
         }
+        // Persistence first (chat tail on disk), then Shutdown actors.
         agent_activity
-            .flush_all_sessions(RELAUNCH_FLUSH_GRACE)
+            .flush_for_process_exit(RELAUNCH_FLUSH_GRACE)
             .await;
         let _ = shutdown_tx.send(super::protocol::ShutdownReason::AutoUpdate);
         cancel.cancel();
@@ -1181,11 +1182,23 @@ pub async fn run_leader_server(
     let relaunching = Arc::new(AtomicBool::new(false));
     loop {
         tokio::select! {
-            biased; _ = cancel.cancelled() => { let reason = shutdown_reason_rx.borrow()
-            .clone(); info!(? reason, "Leader server shutting down (cancelled)"); if
-            pending_requests > 0 { debug!(pending_requests,
-            "Resetting agent_busy on shutdown"); agent_busy.store(false,
-            Ordering::Relaxed); } broadcast_shutdown(& clients, reason). await; break; }
+            biased;
+            _ = cancel.cancelled() => {
+                let reason = shutdown_reason_rx.borrow().clone();
+                info!(?reason, "Leader server shutting down (cancelled)");
+                if pending_requests > 0 {
+                    debug!(pending_requests, "Resetting agent_busy on shutdown");
+                    agent_busy.store(false, Ordering::Relaxed);
+                }
+                // Durable barrier before tear-down (persistence + SessionEnd).
+                // Auto-update already flushes before cancel; a second call is
+                // a cheap no-op once actors are gone.
+                agent_activity
+                    .flush_for_process_exit(crate::agent::activity::SESSION_FLUSH_GRACE)
+                    .await;
+                broadcast_shutdown(&clients, reason).await;
+                break;
+            }
             accept_result = listener.accept() => { match accept_result { Ok((stream, _))
             => { had_clients = true; let client_id = ClientId::new(); let (tx, rx) =
             kanal::unbounded_async(); clients.insert(client_id, ClientState { tx, mode :
@@ -1236,20 +1249,23 @@ pub async fn run_leader_server(
             } }); let _ = acp_tx.send(evict_notification.to_string()); info!(client_id =
             id.0, session_count = detached_sessions.len(),
             "Sent client-disconnect detach notification for disconnected client"); }
-            debug!(client_id = id.0, "Client removed"); if clients.is_empty() &&
-            had_clients && ! no_exit_on_disconnect {
-            // All clients disconnected (user quit). Ask the agent to flush
-            // every session's persistence buffer before this process exits —
-            // a direct teardown drops the persistence actors without their
-            // channel-close flush, losing the tail of a conversation.
-            let _ = acp_tx.send(
-                r#"{"jsonrpc":"2.0","method":"kimix/internal/flush_sessions","params":{}}"#
-                    .to_string(),
-            );
-            // Give the agent a moment to drain the flush before the process
-            // tears down (bounded per session by the agent-side 5s barrier).
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            info!("Leader server shutting down (all clients disconnected)"); break; } }
+            debug!(client_id = id.0, "Client removed");
+            if clients.is_empty() && had_clients && !no_exit_on_disconnect {
+                // All clients disconnected (user quit). Await a true
+                // persistence + Shutdown barrier — the old path fired
+                // `kimix/internal/flush_sessions` over ACP and only slept
+                // 500ms, so the process often exited before chat_history
+                // hit disk ("quit lost the last turn").
+                info!(
+                    "All clients disconnected; flushing sessions before leader exit"
+                );
+                agent_activity
+                    .flush_for_process_exit(crate::agent::activity::SESSION_FLUSH_GRACE)
+                    .await;
+                info!("Leader server shutting down (all clients disconnected)");
+                break;
+            }
+            }
             ServerEvent::Message(id, ClientMessage::Control { request_id, command }) => {
             if let Some(client) = clients.get(& id) { let client_tx = client.tx.clone();
             let control_state = control_state.clone(); let cancel = cancel.clone(); let

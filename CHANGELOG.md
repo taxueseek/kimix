@@ -7,6 +7,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.20] - 2026-08-07
+
+### Fixed
+- **退出 / 取消一劳永逸收口**（相对 0.1.19 半吊子修复，用 0.1.20 做版本区分）：
+  - Leader 全客户端断开 / cancel / auto-update / relaunch：改为
+    `AgentActivity::flush_for_process_exit`——先 **await** `FlushComplete`
+    落盘，再 `Shutdown` 等 actor 退出；去掉「发 RPC + sleep 500ms」竞态
+  - `/exit` / quit 时若仍在 `TurnCancelling`：立刻本地 force-finish
+    （不等看门狗超时），再走 agent flush
+  - stuck-cancel 看门狗：每帧 animation tick 都跑，不再被 `app.tick()`
+    返回 false 饿死；默认超时 15s → **5s**（`KIMIX_STUCK_CANCEL_TIMEOUT_SECS`）
+  - 对准生产日志里「Esc 后 1–2 秒就退出」的真实操作路径
+  - 保留 0.1.19 的 in-process `AgentShutdownGuard` join 路径，并补齐
+    leader / quit 两条之前漏掉的口
+
+### Added
+- npm 分发包版本与 workspace 对齐到 **0.1.20**
+
+## [0.1.19] - 2026-08-06
+
 ### Added
 - npm 分发包 `kimix`（`npm/`）：`npx kimix` 即装即用，postinstall 从 GitHub
   Releases 下载对应平台二进制并校验 SHA256SUMS；发布前 `prepublishOnly`
@@ -14,7 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Homebrew formula 模板 `contrib/homebrew/kimix.rb`（自建 tap 后
   `brew install kimix`）
 - README 安装章节新增 npx / npm、Homebrew、cargo install 三种安装方式
-- **OSS-native 韧性（0.1.19）**：
+- **OSS-native 韧性**：
   - Chat Completions **方言**：`ChatCompletionsDialect` 按 `base_url` 推断
     （Kimi vs OpenAiCompat），避免向 OSS 端点泄漏 thinking 重写字段
   - **input_repair**（`kimix-tool-runtime`）：工具参数反序列化前修字符串化
@@ -27,15 +47,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     对 tool-pair 违规 heal 后 **每 turn 最多 resubmit 一次**
   - **feature_map**（`kimix-models`）：tools / parallel / thinking 轻量启发
   - 文档：`docs/oss-models.md` 验收清单；`docs/KNOWN_ISSUES.md` 多供应商说明
-- **0.1.19 修复（取消卡住 / 退出丢数据 / 搜索超时）**：
-  - 取消兜底超时：`TurnCancelling` 超过 15s 无终态信号时强制本地结束并打
-    「已取消」标记（`KIMIX_STUCK_CANCEL_TIMEOUT_SECS` 可调），不再永久卡在
-    「取消中…」
-  - 退出前持久化 flush：客户端全部断开时，leader 先发内部
-    `flush_sessions` 通知，逐会话走 `FlushAndAck` 真同步屏障落盘，修复
-    按退出丢失对话尾部数据
-  - 搜索超时收紧：web_search 总超时 180s → 60s（`KIMIX_WEB_SEARCH_TIMEOUT_SECS`
-    可调），服务端预算 30s → 20s
+- **取消卡住 / 退出丢数据 / 搜索超时（首轮，有已知缺口）**：
+  - 取消兜底超时：`TurnCancelling` 超时强制本地结束（初版 15s）
+  - 退出前持久化：leader 断开时发 `flush_sessions`（初版仅 sleep 500ms，
+    0.1.20 改为 await 真屏障）
+  - 搜索超时收紧：web_search 180s → 60s
+  - in-process 退出：`AgentShutdownGuard` flush + join（对照 grok-build）
 
 ## [0.1.16] - 2026-07-31
 

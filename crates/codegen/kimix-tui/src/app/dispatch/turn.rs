@@ -295,7 +295,10 @@ pub(crate) const TURN_END_RECONCILE_GRACE: std::time::Duration = std::time::Dura
 /// cancel request was already delivered to the shell, so force-finishing the
 /// UI does not lose any server-side work; it only stops the spinner from
 /// stranding forever. Override with `KIMIX_STUCK_CANCEL_TIMEOUT_SECS`.
-pub(crate) const STUCK_CANCEL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+///
+/// Default is 5s (was 15s): users who Esc then immediately `/exit` never
+/// waited 15s, so the old watchdog never ran in production logs.
+pub(crate) const STUCK_CANCEL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// Watchdog for turns stuck in `TurnCancelling` (or `CommandCancelling`) past
 /// [`STUCK_CANCEL_TIMEOUT`]. Runs on the animation tick (which stays alive
@@ -308,19 +311,53 @@ pub(crate) const STUCK_CANCEL_TIMEOUT: std::time::Duration = std::time::Duration
 /// teardown (state, marker, prompt queue), exactly like the lost-RPC
 /// reconcile, and logs so the wedge is attributable.
 pub(crate) fn reconcile_stuck_cancels(app: &mut AppView) -> Option<Vec<Effect>> {
-    let timeout = std::env::var("KIMIX_STUCK_CANCEL_TIMEOUT_SECS")
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok())
-        .map(std::time::Duration::from_secs)
-        .unwrap_or(STUCK_CANCEL_TIMEOUT);
+    force_finish_cancelling_turns(app, CancelForcePolicy::AfterTimeout { drain_queue: true })
+}
+
+/// Force-finish every turn still in `TurnCancelling` **now** — used on quit
+/// so "Esc → immediate exit" cannot leave partial UI state and so the agent
+/// worker's session flush sees a settled turn. Does **not** drain the prompt
+/// queue (process is exiting).
+pub(crate) fn force_finish_cancelling_for_quit(app: &mut AppView) -> Option<Vec<Effect>> {
+    force_finish_cancelling_turns(app, CancelForcePolicy::Immediate { drain_queue: false })
+}
+
+enum CancelForcePolicy {
+    /// Only finish turns whose `cancel_requested_at` is past the stuck timeout.
+    AfterTimeout { drain_queue: bool },
+    /// Finish every cancelling turn regardless of age (quit / emergency).
+    Immediate { drain_queue: bool },
+}
+
+fn force_finish_cancelling_turns(
+    app: &mut AppView,
+    policy: CancelForcePolicy,
+) -> Option<Vec<Effect>> {
+    let (timeout, drain_queue, reason) = match policy {
+        CancelForcePolicy::AfterTimeout { drain_queue } => {
+            let timeout = std::env::var("KIMIX_STUCK_CANCEL_TIMEOUT_SECS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .map(std::time::Duration::from_secs)
+                .unwrap_or(STUCK_CANCEL_TIMEOUT);
+            (Some(timeout), drain_queue, "stuck_timeout")
+        }
+        CancelForcePolicy::Immediate { drain_queue } => (None, drain_queue, "quit"),
+    };
     let overdue: Vec<AgentId> = app
         .agents
         .iter()
         .filter(|(_, a)| {
-            (a.session.state.is_cancelling())
-                && a.session
+            if !a.session.state.is_cancelling() {
+                return false;
+            }
+            match timeout {
+                None => true,
+                Some(t) => a
+                    .session
                     .cancel_requested_at
-                    .is_some_and(|t| t.elapsed() >= timeout)
+                    .is_some_and(|started| started.elapsed() >= t),
+            }
         })
         .map(|(id, _)| *id)
         .collect();
@@ -342,7 +379,8 @@ pub(crate) fn reconcile_stuck_cancels(app: &mut AppView) -> Option<Vec<Effect>> 
                 agent.session.session_id.as_ref().map(|s| s.0.as_ref()),
                 Some(serde_json::json!({
                     "prompt_id": agent.session.current_prompt_id,
-                    "timeout_secs": timeout.as_secs(),
+                    "timeout_secs": timeout.map(|t| t.as_secs()),
+                    "reason": reason,
                     "was_cancelling": was_cancelling,
                 })),
             );
@@ -366,8 +404,8 @@ pub(crate) fn reconcile_stuck_cancels(app: &mut AppView) -> Option<Vec<Effect>> 
         }
     }
     // The turn was force-finished locally; drain any queued prompts like a
-    // normal turn end (scoped borrow released above).
-    if force_finished {
+    // normal turn end (scoped borrow released above) — skip on quit.
+    if force_finished && drain_queue {
         effects.extend(crate::app::dispatch::dispatch(
             crate::app::actions::Action::DrainQueue,
             app,

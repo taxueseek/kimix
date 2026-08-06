@@ -153,9 +153,11 @@ pub(crate) async fn run_auto_update_checker(
             } else {
                 info!("Leader auto-update: update installed and agent is idle, shutting down");
             }
-            // Flush session actors BEFORE cancelling — cancellation drops
-            // the LocalSet, which aborts actors mid-instruction.
-            activity.flush_all_sessions(AUTO_UPDATE_FLUSH_GRACE).await;
+            // Persistence barrier + session Shutdown BEFORE cancelling —
+            // cancellation drops the LocalSet, which aborts actors mid-write.
+            activity
+                .flush_for_process_exit(AUTO_UPDATE_FLUSH_GRACE)
+                .await;
             // Signal the shutdown reason BEFORE cancelling so the IPC server reads
             // AutoUpdate when it processes the cancellation.
             let _ = shutdown_tx.send(crate::leader::ShutdownReason::AutoUpdate);

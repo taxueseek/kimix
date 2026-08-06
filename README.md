@@ -61,15 +61,23 @@ kimix 自身已经具备「用 kimix 更新迭代 kimix」的能力。
 
 ### 版本历程
 
-**v0.1.19**（当前）— 修 bug 不返工、取消不卡死、退出不丢对话
+**v0.1.20**（当前）— 退出真落盘、取消真脱困（相对 0.1.19 的收口版）
 
-> 这版把「改完就跑」的毛病改掉了：动手前先读代码和测试、先复现再修、不信任第一条绿的测试、验证通过才算完，修 bug 少走弯路，token 花在刀刃上。顺带收拾了取消卡死、退出丢数据、搜索拖后腿三个老毛病。
+> 0.1.19 写了「取消不卡死、退出不丢对话」，但 leader 只 sleep 500ms、Esc 后秒退看门狗来不及、看门狗还被 animation tick 饿死。0.1.20 对准生产日志里的真实路径补齐，用新版本号和 0.1.19 明确区分。
 
-- **修 bug 不再瞎猜**：改代码前先看调用点和现有测试，修前先复现问题，不信第一个通过的测试套件，跑完验证才算完成——省掉大量「修了没验证、验证了是假绿」的返工。
-- **取消不再卡死**：按取消后最多 15 秒收尾（可配），不会再无限转圈「取消中…」。
-- **退出不丢对话**：退出前自动把缓冲数据写盘，按退出不会丢掉最后的对话。
-- **搜索不拖后腿**：卡住的搜索快速超时返回，不再把整个会话拖住几分钟。
-- **偏好更懂你**：项目的 `.kimix/taste/` 偏好优先于全局，冲突时项目说了算，还能校验偏好文件格式。
+- **退出真 await 落盘**：leader 断开 / 更新 / relaunch 先 await `FlushComplete`，再 Shutdown actor，不再「发 RPC + 睡 500ms」。
+- **Esc → 立刻 /exit 不丢状态**：quit 时若仍在「取消中…」，先本地 force-finish 再 flush。
+- **取消看门狗可靠触发**：每帧 tick 都跑；默认 5 秒脱困（`KIMIX_STUCK_CANCEL_TIMEOUT_SECS` 可调）。
+- **验收纪律**：装完必须杀旧进程；`kimix --version` 须含 `0.1.20`。
+
+---
+
+**v0.1.19** — 修 bug 不返工、取消/退出首轮加固（有已知缺口，见 0.1.20）
+
+> 验证纪律五规则、取消兜底、退出 flush 初版、搜索超时、taste 项目级覆盖。退出/取消的完整收口在 **0.1.20**。
+
+- **修 bug 不再瞎猜**：改代码前先看调用点和现有测试，修前先复现问题，不信第一个通过的测试套件，跑完验证才算完成。
+- **取消兜底（初版 15s）**、**退出 flush（初版）**、**搜索超时收紧**、**taste 项目级覆盖**。
 
 ---
 
@@ -157,7 +165,7 @@ cargo install --git https://github.com/taxueseek/kimix kimix-bin
 安装完成后：
 
 ```sh
-kimix --version   # kimix 0.1.19 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.20 … unofficial Kimi Code CLI community build
 kimix login       # Kimi Code 订阅登录（设备码 OAuth 流程）
 kimix             # 启动全屏 TUI
 kimix -p "你好"    # 无头模式，直接提问
@@ -286,15 +294,22 @@ Use cases:
 </table>
 ### Release History
 
-**v0.1.19 (current)** — Fix without rework, cancel without hanging, quit without losing chats
+**v0.1.20 (current)** — Quit actually flushes; cancel actually unsticks (closes 0.1.19 gaps)
 
-> This release kills the "edit and run away" habit: read the call sites and tests before touching code, reproduce before fixing, don't trust the first green run, and only stop once verification passes — fewer wasted cycles, tokens spent where they count. It also cleans up three long-standing annoyances: stuck cancels, lost chats on quit, and searches that hold the whole session hostage.
+> 0.1.19 claimed "cancel without hanging / quit without losing chats", but leader only slept 500ms, Esc-then-instant-exit never hit the 15s watchdog, and the watchdog could be starved by `app.tick()`. 0.1.20 ships those path fixes under a new version so installs are unambiguous.
 
-- **Fixes stop being guesses**: read the actual call sites and existing tests before editing, reproduce the bug before fixing it, distrust the first passing test suite, and keep working until the change is verified complete — cutting out the rework loop of "fixed but unverified, verified but fake-green".
-- **Cancel no longer hangs**: a cancel wraps up within 15 seconds (configurable) instead of spinning on "Cancelling…" forever.
-- **Quitting no longer loses chats**: pending data is flushed to disk before exit, so your last conversation survives.
-- **Searches stop dragging**: a stuck search times out fast instead of holding the session for minutes.
-- **Preferences respect the project**: a project's `.kimix/taste/` overrides the global store, with format validation on the taste file.
+- **True await on quit**: leader disconnect / auto-update / relaunch await `FlushComplete` then Shutdown actors — no more fire-and-forget + 500ms sleep.
+- **Esc → immediate /exit**: force-finish any `TurnCancelling` turn on quit before flush.
+- **Reliable stuck-cancel watchdog**: runs every animation tick; default timeout **5s** (`KIMIX_STUCK_CANCEL_TIMEOUT_SECS`).
+- **Install discipline**: kill old processes after upgrade; `kimix --version` must show `0.1.20`.
+
+---
+
+**v0.1.19** — Fix-without-rework + first-pass cancel/quit hardening (gaps closed in 0.1.20)
+
+> Verification discipline, first-pass cancel timeout / exit flush / search timeout, project taste. Full cancel/quit closure is **0.1.20**.
+
+- **Fixes stop being guesses**, **cancel timeout (initial 15s)**, **exit flush (initial)**, **search timeout**, **project taste**.
 
 ---
 
@@ -384,7 +399,7 @@ cargo install --git https://github.com/taxueseek/kimix kimix-bin
 Once installed:
 
 ```sh
-kimix --version   # kimix 0.1.19 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.20 … unofficial Kimi Code CLI community build
 kimix login       # sign in with your Kimi Code subscription (device-code OAuth)
 kimix             # start the TUI
 kimix -p "Hello"  # headless mode

@@ -582,6 +582,32 @@ fn stuck_cancel_watchdog_waits_within_timeout() {
     );
 }
 
+/// Quit must force-finish Cancelling immediately (Esc → /exit within 1–2s).
+#[test]
+fn quit_force_finishes_cancelling_without_waiting_timeout() {
+    use crate::app::dispatch::force_finish_cancelling_for_quit;
+
+    let mut app = test_app_with_agent();
+    let id = AgentId(0);
+    {
+        let agent = app.agents.get_mut(&id).unwrap();
+        agent.session.state = AgentState::TurnCancelling;
+        agent.session.current_prompt_id = Some("pid-quit-cancel".into());
+        // Just cancelled — well inside the stuck timeout.
+        agent.session.cancel_requested_at = Some(std::time::Instant::now());
+    }
+
+    let fired = force_finish_cancelling_for_quit(&mut app);
+
+    assert!(fired.is_some(), "quit must force-finish Cancelling immediately");
+    let agent = &app.agents[&id];
+    assert!(
+        agent.session.state.is_idle(),
+        "quit force-finish must exit TurnCancelling"
+    );
+    assert!(agent.session.cancel_requested_at.is_none());
+}
+
 /// Older-shell fallback on the reconcile rail: no wire trigger, armed expectation.
 #[test]
 fn reconcile_suppresses_expected_send_now_cancel_without_wire_trigger() {

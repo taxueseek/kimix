@@ -1704,31 +1704,37 @@ pub(crate) async fn run(
                 // (`dispatch::reconcile_overdue_turn_ends`). `needs_animation()`
                 // keeps ticks alive while reconcile is armed.
                 let reconciled = dispatch::reconcile_overdue_turn_ends(&mut app);
+                // Stuck-cancel watchdog runs on **every** animation tick while
+                // cancelling, not only when `app.tick()` returns true (spinner
+                // frame). Gating it behind `tick()` left production logs with
+                // zero `turn.cancel_stuck_force_finished` events and users
+                // stranded on "Cancelling…" until they quit.
+                let stuck = dispatch::reconcile_stuck_cancels(&mut app);
+                let mut drew = false;
                 if let Some(effs) = reconciled {
                     idle_tick_no_op_streak = 0;
                     if process_effects(effs, &mut tasks, &mut app, &progress_tx) {
                         break;
                     }
-                    app.draw(terminal);
-                    last_draw_at = Instant::now();
-                    draw_scheduled_at = None;
-                } else if app.tick() {
-                    // Stuck-cancel watchdog: force-finish turns stuck in
-                    // "Cancelling…" past the timeout (both terminal rails
-                    // lost). Runs while the animation tick is alive, which is
-                    // guaranteed while any agent is non-idle.
-                    let stuck = dispatch::reconcile_stuck_cancels(&mut app);
-                    if let Some(effs) = stuck {
-                        if process_effects(effs, &mut tasks, &mut app, &progress_tx) {
-                            break;
-                        }
-                    }
+                    drew = true;
+                }
+                if let Some(effs) = stuck {
                     idle_tick_no_op_streak = 0;
+                    if process_effects(effs, &mut tasks, &mut app, &progress_tx) {
+                        break;
+                    }
+                    drew = true;
+                }
+                if app.tick() {
+                    idle_tick_no_op_streak = 0;
+                    drew = true;
+                } else if !drew {
+                    idle_tick_no_op_streak = idle_tick_no_op_streak.saturating_add(1);
+                }
+                if drew {
                     app.draw(terminal);
                     last_draw_at = Instant::now();
                     draw_scheduled_at = None;
-                } else {
-                    idle_tick_no_op_streak = idle_tick_no_op_streak.saturating_add(1);
                 }
                 // Keep ticking as long as there are running animations
                 // or pending actions waiting to expire. Back off when the
