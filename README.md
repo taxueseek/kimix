@@ -61,7 +61,19 @@ kimix 自身已经具备「用 kimix 更新迭代 kimix」的能力。
 
 ### 版本历程
 
-**v0.1.16**（当前）— 缓存省钱、长输出不卡、子代理有秩序
+**v0.1.19**（当前）— 修 bug 不返工、取消不卡死、退出不丢对话
+
+> 这版把「改完就跑」的毛病改掉了：动手前先读代码和测试、先复现再修、不信任第一条绿的测试、验证通过才算完，修 bug 少走弯路，token 花在刀刃上。顺带收拾了取消卡死、退出丢数据、搜索拖后腿三个老毛病。
+
+- **修 bug 不再瞎猜**：改代码前先看调用点和现有测试，修前先复现问题，不信第一个通过的测试套件，跑完验证才算完成——省掉大量「修了没验证、验证了是假绿」的返工。
+- **取消不再卡死**：按取消后最多 15 秒收尾（可配），不会再无限转圈「取消中…」。
+- **退出不丢对话**：退出前自动把缓冲数据写盘，按退出不会丢掉最后的对话。
+- **搜索不拖后腿**：卡住的搜索快速超时返回，不再把整个会话拖住几分钟。
+- **偏好更懂你**：项目的 `.kimix/taste/` 偏好优先于全局，冲突时项目说了算，还能校验偏好文件格式。
+
+---
+
+**v0.1.16** — 缓存省钱、长输出不卡、子代理有秩序
 
 > 这版把「缓存」从玄学变成可查的数字：每次请求命中多少都记账；上下文压缩完还会自动预热，下一轮不用重付全价。长输出和长会话的内存也收紧了，子代理加了并发控制，还能一次开多路只读探索。
 
@@ -145,7 +157,7 @@ cargo install --git https://github.com/taxueseek/kimix kimix-bin
 安装完成后：
 
 ```sh
-kimix --version   # kimix 0.1.16 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.19 … unofficial Kimi Code CLI community build
 kimix login       # Kimi Code 订阅登录（设备码 OAuth 流程）
 kimix             # 启动全屏 TUI
 kimix -p "你好"    # 无头模式，直接提问
@@ -274,7 +286,19 @@ Use cases:
 </table>
 ### Release History
 
-**v0.1.16 (current)** — Cache savings you can measure, smoother long output, orderly subagents
+**v0.1.19 (current)** — Fix without rework, cancel without hanging, quit without losing chats
+
+> This release kills the "edit and run away" habit: read the call sites and tests before touching code, reproduce before fixing, don't trust the first green run, and only stop once verification passes — fewer wasted cycles, tokens spent where they count. It also cleans up three long-standing annoyances: stuck cancels, lost chats on quit, and searches that hold the whole session hostage.
+
+- **Fixes stop being guesses**: read the actual call sites and existing tests before editing, reproduce the bug before fixing it, distrust the first passing test suite, and keep working until the change is verified complete — cutting out the rework loop of "fixed but unverified, verified but fake-green".
+- **Cancel no longer hangs**: a cancel wraps up within 15 seconds (configurable) instead of spinning on "Cancelling…" forever.
+- **Quitting no longer loses chats**: pending data is flushed to disk before exit, so your last conversation survives.
+- **Searches stop dragging**: a stuck search times out fast instead of holding the session for minutes.
+- **Preferences respect the project**: a project's `.kimix/taste/` overrides the global store, with format validation on the taste file.
+
+---
+
+**v0.1.16** — Cache savings you can measure, smoother long output, orderly subagents
 
 > This release turns "cache" from folklore into numbers you can check: every request's cache-hit rate is recorded, and after a compaction the new prefix is pre-warmed so the next turn pays full price again. Long output and long sessions get tighter memory bounds, subagents gain concurrency control, and you can fan out multiple read-only explorers at once.
 
@@ -360,7 +384,7 @@ cargo install --git https://github.com/taxueseek/kimix kimix-bin
 Once installed:
 
 ```sh
-kimix --version   # kimix 0.1.16 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.19 … unofficial Kimi Code CLI community build
 kimix login       # sign in with your Kimi Code subscription (device-code OAuth)
 kimix             # start the TUI
 kimix -p "Hello"  # headless mode
