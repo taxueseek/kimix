@@ -475,7 +475,7 @@ mod tests {
             &tool,
             test_ctx_with_call_id(resources.into_shared(), "tool_call"),
             KillTaskToolInput {
-                task_id: "task-1".into(),
+            task_id: "task-1".into(),
             },
         )
         .await
@@ -498,7 +498,7 @@ mod tests {
             &tool,
             test_ctx_with_call_id(resources.into_shared(), "tool_call"),
             KillTaskToolInput {
-                task_id: "task-2".into(),
+            task_id: "task-2".into(),
             },
         )
         .await
@@ -518,7 +518,7 @@ mod tests {
             &tool,
             test_ctx_with_call_id(resources.into_shared(), "tool_call"),
             KillTaskToolInput {
-                task_id: "task-3".into(),
+            task_id: "task-3".into(),
             },
         )
         .await
@@ -544,7 +544,7 @@ mod tests {
             &tool,
             test_ctx_with_call_id(resources.into_shared(), "tool_call"),
             KillTaskToolInput {
-                task_id: "task-x".into(),
+            task_id: "task-x".into(),
             },
         )
         .await;
@@ -569,7 +569,7 @@ mod tests {
             &tool,
             make_ctx_with_version("test-call", resources.into_shared(), "legacy-0.4.10"),
             KillTaskToolInput {
-                task_id: "task-abc".into(),
+            task_id: "task-abc".into(),
             },
         )
         .await
@@ -595,7 +595,7 @@ mod tests {
             &tool,
             test_ctx_with_call_id(resources.into_shared(), "test-call"),
             KillTaskToolInput {
-                task_id: "task-abc".into(),
+            task_id: "task-abc".into(),
             },
         )
         .await
@@ -660,7 +660,7 @@ mod tests {
             &KillTaskTool,
             test_ctx_with_call_id(shared, "test-call"),
             KillTaskToolInput {
-                task_id: "sub-1".into(),
+            task_id: "sub-1".into(),
             },
         )
         .await
@@ -699,7 +699,7 @@ mod tests {
             &KillTaskTool,
             test_ctx_with_call_id(shared, "test-call"),
             KillTaskToolInput {
-                task_id: "sub-done".into(),
+            task_id: "sub-done".into(),
             },
         )
         .await
@@ -736,7 +736,7 @@ mod tests {
             &KillTaskTool,
             test_ctx_with_call_id(shared, "test-call"),
             KillTaskToolInput {
-                task_id: "sub-nope".into(),
+            task_id: "sub-nope".into(),
             },
         )
         .await

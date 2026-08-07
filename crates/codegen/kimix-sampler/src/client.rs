@@ -29,8 +29,8 @@ use kimix_sampling_types::error::{parse_error_bytes, try_parse_stream_error};
 use kimix_sampling_types::{
     ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, ConversationRequest,
     ConversationResponse, CreateResponseWrapper, DOOM_LOOP_CHECK_HEADER, MessagesRequestWrapper,
-    ResponseModelMetadata, Result, SamplingError, build_messages_request, is_check_event, messages,
-    rs,
+    ResponseModelMetadata, Result, SamplingError, ToolChoice, build_messages_request,
+    is_check_event, messages, rs,
 };
 
 use crate::config::{AuthScheme, OriginClientInfo, SamplerConfig};
@@ -796,6 +796,25 @@ impl SamplingClient {
 
         if request.top_p.is_none() {
             request.top_p = self.defaults.top_p;
+        }
+
+        // Open-weight models on OpenAI-compatible endpoints (DeepSeek, Qwen,
+        // GLM, local vLLM, …) otherwise leak their native tool-call envelope
+        // as plain text on tool-free turns — an authoritative
+        // `tool_choice: "none"` tells them to stop. Gated to open models and
+        // the openai-compatible dialect so premium models (which reject
+        // `tool_choice` without tools) and the Kimi dialect (its own
+        // tool/schema handling) keep their original behavior. Hosted tools
+        // are checked too because the stream path injects them after this
+        // point, so a bare `tools` check would wrongly suppress web_search.
+        // Mirrors maka-agent's `toolChoice:'none'` fix.
+        if request.tool_choice.is_none()
+            && request.tools.as_deref().is_none_or(|t| t.is_empty())
+            && request.hosted_tools.is_empty()
+            && self.defaults.chat_completions_dialect == ChatCompletionsDialect::OpenAiCompat
+            && crate::ModelCategory::classify(&self.defaults.model, &self.base_url).is_open_source()
+        {
+            request.tool_choice = Some(ToolChoice::none());
         }
 
         Ok(request)
@@ -2027,6 +2046,101 @@ mod tests {
             doom_loop_recovery: None,
             header_injector: None,
         }
+    }
+
+    // ── open-model tool_choice gating (maka `toolChoice:'none'` fix) ──────
+    //
+    // These tests assume `KIMIX_MODEL_CATEGORY` is unset (the normal case);
+    // if a host forces it, `ModelCategory::classify` short-circuits and the
+    // open/premium assertions may flip. CI does not set the var.
+
+    fn client_with(model: &str, base_url: &str, dialect: ChatCompletionsDialect) -> SamplingClient {
+        let config = SamplerConfig {
+            model: model.to_string(),
+            base_url: base_url.to_string(),
+            chat_completions_dialect: dialect,
+            ..minimal_config()
+        };
+        SamplingClient::new(config).expect("client constructs from minimal config")
+    }
+
+    #[test]
+    fn apply_defaults_sets_tool_choice_none_for_open_model_no_tools() {
+        // DeepSeek on an OpenAI-compatible endpoint, no tools → "none" so the
+        // model stops leaking its native tool-call envelope as plain text.
+        let client = client_with(
+            "deepseek-chat",
+            "https://api.deepseek.com",
+            ChatCompletionsDialect::OpenAiCompat,
+        );
+        let req = ChatCompletionRequest::from_messages(vec![ChatRequestMessage::user("hi")]);
+        let out = client.apply_defaults(req).expect("apply_defaults ok");
+        let tc = out
+            .tool_choice
+            .as_ref()
+            .expect("open model + no tools should force tool_choice");
+        assert_eq!(
+            serde_json::to_value(tc).unwrap(),
+            serde_json::json!("none"),
+            "tool_choice must serialize to the bare string \"none\""
+        );
+    }
+
+    #[test]
+    fn apply_defaults_leaves_tool_choice_unset_for_premium_no_tools() {
+        // GPT-4o on OpenAI: premium → no tool_choice (OpenAI rejects it
+        // without tools).
+        let client = client_with(
+            "gpt-4o",
+            "https://api.openai.com",
+            ChatCompletionsDialect::OpenAiCompat,
+        );
+        let req = ChatCompletionRequest::from_messages(vec![ChatRequestMessage::user("hi")]);
+        let out = client.apply_defaults(req).expect("apply_defaults ok");
+        assert!(
+            out.tool_choice.is_none(),
+            "premium model with no tools must NOT get a forced tool_choice"
+        );
+    }
+
+    #[test]
+    fn apply_defaults_skips_forcing_none_when_tools_present() {
+        // Open model but function tools present → leave tool_choice unset so
+        // the model may call them.
+        let client = client_with(
+            "deepseek-chat",
+            "https://api.deepseek.com",
+            ChatCompletionsDialect::OpenAiCompat,
+        );
+        let tool = kimix_sampling_types::types::ToolDefinition::function(
+            "foo",
+            Some("do a thing".to_string()),
+            serde_json::json!({}),
+        );
+        let req = ChatCompletionRequest::from_messages(vec![ChatRequestMessage::user("hi")])
+            .with_tools(vec![tool]);
+        let out = client.apply_defaults(req).expect("apply_defaults ok");
+        assert!(
+            out.tool_choice.is_none(),
+            "tools present → do not force tool_choice=none"
+        );
+    }
+
+    #[test]
+    fn apply_defaults_skips_forcing_none_for_kimi_dialect() {
+        // Kimi dialect has its own tool/schema handling; even for an open
+        // model on the Kimi dialect, don't inject openai-style tool_choice.
+        let client = client_with(
+            "kimi-k2",
+            "https://api.moonshot.cn",
+            ChatCompletionsDialect::Kimi,
+        );
+        let req = ChatCompletionRequest::from_messages(vec![ChatRequestMessage::user("hi")]);
+        let out = client.apply_defaults(req).expect("apply_defaults ok");
+        assert!(
+            out.tool_choice.is_none(),
+            "Kimi dialect must keep its original tool_choice behavior"
+        );
     }
 
     /// Verify the serialized shape of StreamingChatRequest matches the

@@ -58,7 +58,7 @@ fn build_subagent_request(
             model,
             model_override_provenance: ModelOverrideProvenance::Tool,
             reasoning_effort: None,
-            persona: None,
+            persona: kimix_tool_types::sanitize_optional_arg(input.persona.clone()),
             capability_mode: input.capability_mode,
             isolation: input.isolation,
             // Model-issued `task` spawns never override the harness; the
@@ -517,7 +517,9 @@ impl kimix_tool_runtime::Tool for TaskTool {
         // 6. Return result
         if result.success {
             let resume_from_hint = result.subagent_id.clone();
-            let persona_hint: Option<String> = None;
+            // Echo the requested persona so resume can pass the same name.
+            let persona = kimix_tool_types::sanitize_optional_arg(input.persona.clone());
+            let persona_hint = persona.clone();
             Ok(ToolOutput::SubagentCompleted(SubagentCompletedOutput {
                 // SubagentCompletedOutput.output is `String` (serde-visible
                 // boundary). One allocation per completion; cheaper paths
@@ -529,7 +531,7 @@ impl kimix_tool_runtime::Tool for TaskTool {
                 turns: result.turns,
                 duration_ms: result.duration_ms,
                 worktree_path: result.worktree_path,
-                persona: None,
+                persona,
                 resume_from_hint,
                 persona_hint,
             }))
@@ -633,6 +635,7 @@ mod tests {
                 resume_from: None,
                 cwd: None,
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -666,6 +669,7 @@ mod tests {
                 resume_from: None,
                 cwd: None,
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -698,6 +702,7 @@ mod tests {
                 resume_from: None,
                 cwd: None,
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -758,6 +763,7 @@ mod tests {
                 resume_from: None,
                 cwd: None,
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -816,6 +822,7 @@ mod tests {
                 resume_from: None,
                 cwd: None,
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -860,6 +867,7 @@ mod tests {
                 resume_from: None,
                 cwd: None,
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -945,6 +953,7 @@ mod tests {
             resume_from: None,
             cwd: None,
             model: None,
+            persona: None,
             task_id: None,
             count: None,
         }
@@ -1301,6 +1310,18 @@ mod tests {
     }
 
     #[test]
+    fn task_tool_input_schema_includes_persona() {
+        let schema = serde_json::to_value(schemars::schema_for!(TaskToolInput)).unwrap();
+        let desc = schema["properties"]["persona"]["description"]
+            .as_str()
+            .expect("persona description");
+        assert!(
+            desc.contains("implementer") || desc.contains("persona"),
+            "schema must document persona: {desc}"
+        );
+    }
+
+    #[test]
     fn runtime_overrides_struct_default_is_all_none() {
         let overrides = SubagentRuntimeOverrides::default();
         assert!(overrides.model.is_none());
@@ -1321,6 +1342,7 @@ mod tests {
             resume_from: None,
             cwd: None,
             model: Some("test-model".into()),
+            persona: None,
             task_id: Some("task-123".into()),
             count: None,
         };
@@ -1592,6 +1614,7 @@ mod tests {
             resume_from: None,
             cwd: None,
             model: None,
+            persona: None,
             task_id: None,
             count: None,
         })
@@ -1643,6 +1666,7 @@ mod tests {
                 resume_from: None,
                 cwd: None,
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -1676,6 +1700,7 @@ mod tests {
                 resume_from: None,
                 cwd: None,
                 model: None,
+                persona: None,
                 task_id: None,
                 count: Some(2),
             },
@@ -1702,6 +1727,7 @@ mod tests {
                 resume_from: None,
                 cwd: None,
                 model: None,
+                persona: None,
                 task_id: None,
                 count: Some(2),
             },
@@ -1755,6 +1781,7 @@ mod tests {
                 resume_from: None,
                 cwd: None,
                 model: None,
+                persona: None,
                 task_id: None,
                 count: Some(2),
             },
@@ -1801,6 +1828,7 @@ mod tests {
             resume_from: None,
             cwd: None,
             model: None,
+            persona: None,
             task_id: None,
             count: None,
         };
@@ -1849,6 +1877,7 @@ mod tests {
                 resume_from: Some("prev-id".into()),
                 cwd: None,
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -1917,6 +1946,7 @@ mod tests {
                     resume_from: Some(sentinel.into()),
                     cwd: None,
                     model: None,
+                    persona: None,
                     task_id: None,
                     count: None,
                 },
@@ -1964,6 +1994,7 @@ mod tests {
             resume_from: None,
             cwd: None,
             model: None,
+            persona: None,
             task_id: None,
             count: None,
         };
@@ -1993,6 +2024,7 @@ mod tests {
                 resume_from: None,
                 cwd: Some("/tmp".into()),
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -2049,6 +2081,7 @@ mod tests {
                 resume_from: None,
                 cwd: Some("".into()),
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -2101,6 +2134,7 @@ mod tests {
                 resume_from: None,
                 cwd: Some("null".into()),
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -2153,6 +2187,7 @@ mod tests {
                 resume_from: None,
                 cwd: Some("  ".into()),
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -2208,6 +2243,7 @@ mod tests {
                 resume_from: None,
                 cwd: Some("/nonexistent/path/that/does/not/exist".into()),
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -2243,6 +2279,7 @@ mod tests {
                 resume_from: None,
                 cwd: Some("/nonexistent/path/that/does/not/exist".into()),
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -2300,6 +2337,7 @@ mod tests {
                     resume_from: None,
                     cwd: Some(sentinel.into()),
                     model: None,
+                    persona: None,
                     task_id: None,
                     count: None,
                 },
@@ -2355,6 +2393,7 @@ mod tests {
                 resume_from: None,
                 cwd: Some("/tmp".into()),
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -2414,6 +2453,7 @@ mod tests {
                 resume_from: None,
                 cwd: Some("\"/tmp".into()),
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -2468,6 +2508,7 @@ mod tests {
                 resume_from: None,
                 cwd: Some("/tmp".into()),
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -2518,6 +2559,7 @@ mod tests {
                 resume_from: Some("prev-id".into()),
                 cwd: Some("/tmp/some-dir".into()),
                 model: None,
+                persona: None,
                 task_id: None,
                 count: None,
             },
@@ -2575,6 +2617,46 @@ mod tests {
         handle.await.unwrap();
         match result {
             ToolOutput::SubagentCompleted(sub) => assert!(sub.output.contains("ok")),
+            other => panic!("Expected SubagentCompleted, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn persona_threads_to_runtime_overrides_and_completion() {
+        let (backend, mut rx) = make_backend();
+        let resources = resources_for_task(backend);
+        let shared = resources.into_shared();
+
+        let handle = tokio::spawn(async move {
+            let request = unwrap_spawn(rx.recv().await.unwrap());
+            assert_eq!(
+                request.runtime_overrides.persona.as_deref(),
+                Some("implementer"),
+                "explicit persona must reach SubagentRuntimeOverrides"
+            );
+            request
+                .result_tx
+                .send(SubagentResult {
+                    success: true,
+                    output: "done".into(),
+                    subagent_id: request.id.clone(),
+                    child_session_id: request.id.clone(),
+                    ..Default::default()
+                })
+                .unwrap();
+        });
+
+        let mut input = task_input("general-purpose", false);
+        input.persona = Some("implementer".into());
+        let result = kimix_tool_runtime::Tool::run(&TaskTool, test_ctx(shared), input)
+            .await
+            .unwrap();
+        handle.await.unwrap();
+        match result {
+            ToolOutput::SubagentCompleted(sub) => {
+                assert_eq!(sub.persona.as_deref(), Some("implementer"));
+                assert_eq!(sub.persona_hint.as_deref(), Some("implementer"));
+            }
             other => panic!("Expected SubagentCompleted, got {other:?}"),
         }
     }

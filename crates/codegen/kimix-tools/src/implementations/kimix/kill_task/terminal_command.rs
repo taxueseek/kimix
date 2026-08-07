@@ -154,7 +154,7 @@ mod tests {
             &KillTerminalCommandTool,
             test_ctx_with_call_id(resources.into_shared(), "tool_call"),
             KillTaskToolInput {
-                task_id: "tc-1".into(),
+            task_id: "tc-1".into(),
             },
         )
         .await
@@ -176,7 +176,7 @@ mod tests {
             &KillTerminalCommandTool,
             test_ctx_with_call_id(resources.into_shared(), "tool_call"),
             KillTaskToolInput {
-                task_id: "tc-2".into(),
+            task_id: "tc-2".into(),
             },
         )
         .await
@@ -195,7 +195,7 @@ mod tests {
             &KillTerminalCommandTool,
             test_ctx_with_call_id(resources.into_shared(), "tool_call"),
             KillTaskToolInput {
-                task_id: "tc-3".into(),
+            task_id: "tc-3".into(),
             },
         )
         .await

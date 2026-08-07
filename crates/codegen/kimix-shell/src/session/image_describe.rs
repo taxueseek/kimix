@@ -457,9 +457,13 @@ pub async fn describe_user_images(
             });
         }
     }
+    // Image description is a deterministic extraction task, not a creative
+    // one — pin temperature to 0 so the same image yields a stable
+    // description (matches command-code's split-sampling policy for vision
+    // sub-calls: deterministic sub-calls, provider-default chat loop).
     let request = ConversationRequest::from_items(vec![user_item])
         .with_model(model)
-        .with_temperature(0.2)
+        .with_temperature(0.0)
         .with_max_output_tokens(4_096);
     const DESCRIBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(240);
     let response = tokio::time::timeout(DESCRIBE_TIMEOUT, client.conversation_collect(request))

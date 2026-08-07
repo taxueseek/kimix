@@ -61,30 +61,16 @@ kimix 自身已经具备「用 kimix 更新迭代 kimix」的能力。
 
 ### 版本历程
 
-**v0.1.23**（当前）— `web_search` 工具解耦搜索模型（Grok 同源）
+**v0.1.20**（当前）— 原生 `task.persona` + 内置 personas（路径 A）
 
-> 聊天模型 A 与搜索模型 B 可分离：`[models] web_search` / `KIMIX_WEB_SEARCH_MODEL`。
-> 工具优先走 B 的 Responses 官方搜索；Kimi `/search` 客户端路径保留作后备。
-
-**v0.1.22** — 修 web_search 403 配额误报 / web_fetch Clash fake-ip SSRF 误杀
-
-> 对照 Grok：kimix 的 `web_search` 走 Kimi Code `POST …/search`（独立搜索配额）；
-> `web_fetch` 本地回退时若本机 Clash fake-ip 把公网解析成 `fdfe:dcba:9876::` / `198.18.x`，
-> 会被旧 SSRF 当成内网拦截。0.1.22 修这两条，不改后续功能。
-
-**v0.1.21** — 修「Responding…」粘滞与超长 agentic 环
-
-> 对照 v0.1.16：0.1.19 起 turn-continuation + 无上限工具环，常在**内容已输出完**后仍显示「回复中」数分钟、无法正常输入。0.1.21 只修这条体验，不拆后续功能。
-
-- **状态行不假忙**：流式静默 800ms 后降为 Waiting；工具开始时真正 `finish_running` 上一段回复。
-- **单 turn 默认最多 50 轮**（`KIMIX_MAX_TURNS=0` 无限），避免 100+ 轮空转。
-- **续传更克制**：dangling-intent 只看末句且要动作动词；length/empty 续传保留。
-
----
-
-**v0.1.20** — 退出真落盘、取消真脱困（相对 0.1.19 的收口版）
-
-> leader await flush、quit 时 force-finish Cancelling、stuck-cancel 每帧触发（默认 5s）。
+> 子代理角色走 harness 解析，不再在父会话 `read_file` / 前缀注入 persona 正文。
+> 内置 7 个 persona TOML（implementer / reviewer / security-auditor / design-doc-* /
+> researcher / test-writer）落到 `~/.kimix/bundled/personas/`。
+> 主 7 skill（design / implement / execute-plan）改为 `task(persona=…)`。
+> 父会话只注入短 catalog（利于缓存）；完整 instructions 只进子会话。
+>
+> 同版本号历史上还包含：退出真落盘 / 取消真脱困；其后合入的 web_search 模型解耦、
+> 403/SSRF 修复、Responding 粘滞修复等以本构建为准一并提供。
 
 ---
 
@@ -181,7 +167,7 @@ cargo install --git https://github.com/taxueseek/kimix kimix-bin
 安装完成后：
 
 ```sh
-kimix --version   # kimix 0.1.23 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.20 … unofficial Kimi Code CLI community build
 kimix login       # Kimi Code 订阅登录（设备码 OAuth 流程）
 kimix             # 启动全屏 TUI
 kimix -p "你好"    # 无头模式，直接提问
@@ -310,33 +296,22 @@ Use cases:
 </table>
 ### Release History
 
-**v0.1.23 (current)** — Tool-decoupled web search model (Grok-style)
+**v0.1.20 (current)** — Native `task.persona` + bundled personas (path A)
 
-> Chat model A can differ from search model B via `[models] web_search` /
-> `KIMIX_WEB_SEARCH_MODEL`. Tool prefers B's Responses web_search; Kimi client path kept as fallback.
-
-**v0.1.22** — Fix web_search 403 quota messaging and web_fetch Clash fake-ip SSRF false positives
-
-> vs Grok: kimix `web_search` hits Kimi Code `POST …/search` (separate search quota);
-> local `web_fetch` under Clash fake-ip was SSRF-blocking public hosts as ULA. 0.1.22 fixes both.
-
-**v0.1.21** — Fix sticky "Responding…" and unbounded agentic loops
-
-> vs v0.1.16: 0.1.19+ could keep "Responding…" for minutes after the answer was on screen (tool loops / unfinished agent entry / over-eager continuation). 0.1.21 fixes that UX without removing continuation or tools.
-
-- **Status line demotes after 800ms stream silence**; tool start `finish_running`s the last agent block.
-- **Default `max_turns=50`** (`KIMIX_MAX_TURNS=0` unlimited).
-- **Stricter dangling-intent** (last sentence + action verb); length/empty continuation kept.
+> Subagent roles resolve in the harness; the parent no longer `read_file`s or
+> prepends persona bodies. Seven bundled persona TOMLs land in
+> `~/.kimix/bundled/personas/`. Main-7 skills (design / implement / execute-plan)
+> pass `task(persona=…)`. Parent gets a short catalog only (cache-friendly);
+> full instructions go into the child only.
+>
+> This build number also carries quit/cancel flush, web_search model decoupling,
+> 403/SSRF fixes, and Responding-stickiness fixes from interim trees.
 
 ---
 
-**v0.1.20** — Quit actually flushes; cancel actually unsticks (closes 0.1.19 gaps)
+**v0.1.19** — Fix-without-rework + first-pass cancel/quit hardening
 
----
-
-**v0.1.19** — Fix-without-rework + first-pass cancel/quit hardening (gaps closed in 0.1.20 / 0.1.21)
-
-> Verification discipline, first-pass cancel timeout / exit flush / search timeout, project taste. Full cancel/quit closure is **0.1.20**.
+> Verification discipline, first-pass cancel timeout / exit flush / search timeout, project taste.
 
 - **Fixes stop being guesses**, **cancel timeout (initial 15s)**, **exit flush (initial)**, **search timeout**, **project taste**.
 
@@ -428,7 +403,7 @@ cargo install --git https://github.com/taxueseek/kimix kimix-bin
 Once installed:
 
 ```sh
-kimix --version   # kimix 0.1.23 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.20 … unofficial Kimi Code CLI community build
 kimix login       # sign in with your Kimi Code subscription (device-code OAuth)
 kimix             # start the TUI
 kimix -p "Hello"  # headless mode

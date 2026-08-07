@@ -125,6 +125,11 @@ pub(crate) struct AgentRebuildSpec {
     pub path_not_found_hints: bool,
     pub mcp_state: Arc<tokio::sync::Mutex<crate::session::mcp_servers::McpState>>,
     pub is_non_interactive: bool,
+    /// Whether the active model is open-weight — gates the
+    /// `<open_model_discipline>` prompt section. Set from
+    /// `ModelCategory::classify(model, base_url)` at session spawn; rebuilds
+    /// reuse it so a mid-session agent-type rebuild keeps the model's class.
+    pub is_open_model: bool,
     pub system_prompt_label: String,
     pub owner_session_id: Option<String>,
     pub parent_scheduler_handle:
@@ -216,6 +221,7 @@ impl AgentRebuildSpec {
             path_not_found_hints,
             mcp_state,
             is_non_interactive,
+            is_open_model,
             system_prompt_label,
             owner_session_id,
             parent_scheduler_handle,
@@ -235,6 +241,7 @@ impl AgentRebuildSpec {
         .with_memory_enabled(*memory_enabled)
         .with_memory_paths(memory_global_path.clone(), memory_workspace_path.clone())
         .with_is_non_interactive(*is_non_interactive)
+        .with_is_open_model(*is_open_model)
         .with_system_prompt_label(system_prompt_label.clone())
         .with_session_env(session_env.clone())
         .with_state_path(bridge_state_path.clone())
@@ -414,6 +421,7 @@ pub(crate) fn test_rebuild_spec_default() -> Arc<AgentRebuildSpec> {
             crate::session::mcp_servers::McpState::new(vec![]),
         )),
         is_non_interactive: false,
+        is_open_model: false,
         system_prompt_label: kimix_agent::DEFAULT_SYSTEM_PROMPT_LABEL.to_string(),
         owner_session_id: Some("test-session".to_string()),
         parent_scheduler_handle: None,

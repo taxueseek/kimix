@@ -83,6 +83,11 @@ pub struct AgentBuilder {
     memory_workspace_path: Option<String>,
     taste_section: Option<String>,
     is_non_interactive: bool,
+    /// Whether the active model is open-weight, gating the
+    /// `<open_model_discipline>` prompt block (CoT preamble, no-colon,
+    /// first-person). Set from `ModelCategory::classify(model, base_url)` by
+    /// the shell at agent build / model switch; default `false`.
+    is_open_model: bool,
     system_prompt_label: String,
     /// When true, use compact tool registration (L1+L2 only, skip duplicate variants).
     /// Reduces initial context by ~40% (45 → ~28 tools).
@@ -245,6 +250,7 @@ impl AgentBuilder {
             memory_workspace_path: None,
             taste_section: None,
             is_non_interactive: false,
+            is_open_model: false,
             system_prompt_label: crate::prompt::context::DEFAULT_SYSTEM_PROMPT_LABEL.to_string(),
             // Terminal default: L1+L2 only. Opt out via with_compact_mode(false)
             // for full variant toolsets (codex/opencode/concise/hashline).
@@ -397,6 +403,14 @@ impl AgentBuilder {
     /// shell-prefix tip and the `<user_guide>` TUI pointer).
     pub fn with_is_non_interactive(mut self, value: bool) -> Self {
         self.is_non_interactive = value;
+        self
+    }
+    /// Mark the active model as open-weight (or premium). Gates the
+    /// `<open_model_discipline>` system-prompt section. The shell derives this
+    /// from `ModelCategory::classify(model, base_url)` at build and on
+    /// `set_session_model`.
+    pub fn with_is_open_model(mut self, value: bool) -> Self {
+        self.is_open_model = value;
         self
     }
     pub fn with_system_prompt_label(mut self, label: impl Into<String>) -> Self {
@@ -1222,6 +1236,7 @@ labeling 口径.\n",
                     .to_string(),
             ),
             is_non_interactive: self.is_non_interactive,
+            is_open_model: self.is_open_model,
             system_prompt_label: self.system_prompt_label,
         };
         let system_prompt = prompt_context

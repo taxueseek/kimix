@@ -77,17 +77,33 @@ impl SessionActor {
         self.signals_handle()
             .record_model_usage(&sampling_config.model);
         if apply_prompt_override && !skip_prompt_rewrite {
+            let is_open = kimix_sampler::ModelCategory::classify(
+                &sampling_config.model,
+                &sampling_config.base_url,
+            )
+            .is_open_source();
+            let prompt: std::sync::Arc<str> = if use_concise {
+                std::sync::Arc::<str>::from(
+                    kimix_agent::prompt::template::COMPACT_SYSTEM_PROMPT,
+                )
+            } else {
+                // Re-render with the open-weight flag for the new model, then
+                // cache flag + rendered prompt so `<open_model_discipline>`
+                // tracks the active model. RefMut is held only across the
+                // synchronous set, never across the await (mirrors
+                // `render_prompt_for_definition`'s borrow-across-await pattern).
+                let rendered = self
+                    .agent
+                    .borrow()
+                    .render_prompt_for_open_model(is_open)
+                    .await;
+                self.agent.borrow_mut().set_open_model(is_open, rendered);
+                std::sync::Arc::<str>::from(self.agent.borrow().system_prompt())
+            };
             let mut conversation = self.chat_state_handle.get_conversation().await;
             for item in conversation.iter_mut() {
                 if let ConversationItem::System(sys) = item {
-                    if use_concise {
-                        sys.content = std::sync::Arc::<str>::from(
-                            kimix_agent::prompt::template::COMPACT_SYSTEM_PROMPT,
-                        );
-                    } else {
-                        sys.content =
-                            std::sync::Arc::<str>::from(self.agent.borrow().system_prompt());
-                    }
+                    sys.content = prompt;
                     break;
                 }
             }

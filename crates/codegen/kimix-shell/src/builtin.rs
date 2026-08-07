@@ -1,5 +1,44 @@
 //! Built-in files extracted to `~/.kimix/` on startup.
+
+#[path = "bundled_skill_trees.rs"]
+mod bundled_skill_trees;
+
 const BUNDLED_FILES: &[(&str, &str)] = &[("README.md", include_str!("../README.md"))];
+
+/// Bundled subagent personas (`~/.kimix/bundled/personas/*.toml`).
+///
+/// Discovered at lowest priority by `SubagentsConfig::resolve` (after project /
+/// user personas). Referenced by the `task` tool `persona` parameter.
+const BUNDLED_PERSONAS: &[(&str, &str)] = &[
+    (
+        "design-doc-reviewer.toml",
+        include_str!("../bundled/personas/design-doc-reviewer.toml"),
+    ),
+    (
+        "design-doc-writer.toml",
+        include_str!("../bundled/personas/design-doc-writer.toml"),
+    ),
+    (
+        "implementer.toml",
+        include_str!("../bundled/personas/implementer.toml"),
+    ),
+    (
+        "researcher.toml",
+        include_str!("../bundled/personas/researcher.toml"),
+    ),
+    (
+        "reviewer.toml",
+        include_str!("../bundled/personas/reviewer.toml"),
+    ),
+    (
+        "security-auditor.toml",
+        include_str!("../bundled/personas/security-auditor.toml"),
+    ),
+    (
+        "test-writer.toml",
+        include_str!("../bundled/personas/test-writer.toml"),
+    ),
+];
 
 const HELP_SKILL_MD: &str = include_str!("../skills/help/SKILL.md");
 const CREATE_SKILL_MD: &str = include_str!("../skills/create-skill/SKILL.md");
@@ -11,6 +50,18 @@ pub const CHECK_SKILL_MD: &str = include_str!("../skills/check-work/SKILL.md");
 pub const BEST_OF_N_SKILL_MD: &str = include_str!("../skills/best-of-n/SKILL.md");
 const KIMIX_KNOWLEDGE_SKILL_MD: &str = include_str!("../skills/kimix-knowledge/SKILL.md");
 const MOD_BUILDER_SKILL_MD: &str = include_str!("../skills/mod-builder/SKILL.md");
+const UI_DESIGN_SKILL_MD: &str = include_str!("../skills/ui-design/SKILL.md");
+// Main engineering suite (product main-7).
+const GIT_SKILL_MD: &str = include_str!("../skills/git/SKILL.md");
+const PLAN_SKILL_MD: &str = include_str!("../skills/plan/SKILL.md");
+const DESIGN_SKILL_MD: &str = include_str!("../skills/design/SKILL.md");
+const IMPLEMENT_SKILL_MD: &str = include_str!("../skills/implement/SKILL.md");
+const EXECUTE_PLAN_SKILL_MD: &str = include_str!("../skills/execute-plan/SKILL.md");
+
+/// Multi-file bundled skill trees: skill dir name → (relative path, content).
+/// Includes main-skill extras (scripts/references) and non-skill support trees
+/// such as `shared/personas` used by design/implement/execute-plan.
+const BUNDLED_SKILL_TREES: &[(&str, &[(&str, &str)])] = bundled_skill_trees::ALL_SKILL_TREES;
 
 /// Legacy bundled skill names (renamed or removed).
 ///
@@ -54,9 +105,17 @@ const LEGACY_BUNDLED_SKILL_NAMES: &[&str] =
 /// See the docs on `LEGACY_BUNDLED_SKILL_NAMES` for the full lifecycle
 /// (including when it is safe/optional to remove old entries later).
 const BUNDLED_SKILLS: &[(&str, &str)] = &[
-    ("help", HELP_SKILL_MD),
-    ("create-skill", CREATE_SKILL_MD),
+    // Product main-7 (engineering collaboration loop)
+    ("git", GIT_SKILL_MD),
+    ("plan", PLAN_SKILL_MD),
+    ("design", DESIGN_SKILL_MD),
+    ("implement", IMPLEMENT_SKILL_MD),
+    ("execute-plan", EXECUTE_PLAN_SKILL_MD),
     ("code-review", CODE_REVIEW_SKILL_MD),
+    ("create-skill", CREATE_SKILL_MD),
+    // Reserve / platform
+    ("ui-design", UI_DESIGN_SKILL_MD),
+    ("help", HELP_SKILL_MD),
     ("check-work", CHECK_SKILL_MD),
     ("kimix-knowledge", KIMIX_KNOWLEDGE_SKILL_MD),
     ("mod-builder", MOD_BUILDER_SKILL_MD),
@@ -106,6 +165,10 @@ pub fn extract_bundled_files(kimix_home: &std::path::Path) {
     // version-bump marker change.
     remove_legacy_bundled_skills(kimix_home);
 
+    // Personas are small and must exist even on the same-version fast path
+    // (users upgrading mid-version still get native `task.persona` support).
+    extract_bundled_personas(kimix_home, /* only_missing */ false);
+
     let version = kimix_version::VERSION;
     let marker = kimix_home.join(".metadata_version");
 
@@ -142,8 +205,29 @@ pub fn extract_bundled_files(kimix_home: &std::path::Path) {
         }
     }
 
+    // Multi-file skill trees (references/, assets/, …).
+    extract_skill_trees(kimix_home, /* only_missing */ false);
+
     let _ = std::fs::write(&marker, version);
     tracing::debug!(version, "Extracted bundled files");
+}
+
+/// Write bundled persona TOML files under `{kimix_home}/bundled/personas/`.
+///
+/// Matches `bundle::bundled_root()` when `kimix_home` is the default
+/// `~/.kimix`. Full extract overwrites; call with `only_missing` if needed.
+fn extract_bundled_personas(kimix_home: &std::path::Path, only_missing: bool) {
+    let dir = kimix_home.join("bundled").join("personas");
+    let _ = std::fs::create_dir_all(&dir);
+    for &(filename, content) in BUNDLED_PERSONAS {
+        let path = dir.join(filename);
+        if only_missing && path.exists() {
+            continue;
+        }
+        if let Err(e) = std::fs::write(&path, content) {
+            tracing::debug!(error = %e, filename, "Failed to write bundled persona");
+        }
+    }
 }
 
 /// Extract only missing skill SKILL.md files (same-version fast path).
@@ -157,6 +241,29 @@ fn extract_missing_skills(kimix_home: &std::path::Path) {
         let _ = std::fs::create_dir_all(skill_md.parent().unwrap());
         let content = resolve_skill_content(name, raw, kimix_home);
         let _ = std::fs::write(&skill_md, content);
+    }
+    extract_skill_trees(kimix_home, /* only_missing */ true);
+}
+
+/// Write multi-file bundled skill contents under `skills/<name>/`.
+/// When `only_missing` is true, skip files that already exist (same-version
+/// fast path). Full version-bump extract passes false to overwrite.
+fn extract_skill_trees(kimix_home: &std::path::Path, only_missing: bool) {
+    for &(name, files) in BUNDLED_SKILL_TREES {
+        let base = kimix_home.join("skills").join(name);
+        for &(rel, raw) in files {
+            let path = base.join(rel);
+            if only_missing && path.exists() {
+                continue;
+            }
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let content = resolve_skill_content(name, raw, kimix_home);
+            if let Err(e) = std::fs::write(&path, content) {
+                tracing::debug!(error = %e, name, rel, "Failed to write skill tree file");
+            }
+        }
     }
 }
 
@@ -492,5 +599,126 @@ mod tests {
                 "same-version path must backfill missing bundled skill {name}"
             );
         }
+    }
+
+    #[test]
+    fn extract_ships_ui_design_with_references() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tmp.path();
+        extract_bundled_files(home);
+
+        let skill_md = home.join("skills/ui-design/SKILL.md");
+        assert!(skill_md.exists(), "ui-design SKILL.md must extract");
+        let body = std::fs::read_to_string(&skill_md).unwrap();
+        assert!(
+            body.contains("name: ui-design") || body.contains("# UI Design"),
+            "ui-design body looks wrong"
+        );
+        assert!(
+            body.contains("Name boundary") || body.contains("taste-filter"),
+            "ui-design should carry rename + taste absorb markers"
+        );
+        assert!(
+            home.join("skills/ui-design/references/taste-filter.md")
+                .exists(),
+            "ui-design taste-filter reference must extract"
+        );
+        assert!(
+            home.join("skills/ui-design/references/create.md").exists(),
+            "ui-design create reference must extract"
+        );
+        assert!(is_extracted_bundled_skill(
+            "ui-design",
+            &skill_md,
+            home
+        ));
+    }
+
+    #[test]
+    fn extract_ships_main7_engineering_suite() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tmp.path();
+        extract_bundled_files(home);
+
+        for name in [
+            "git",
+            "plan",
+            "design",
+            "implement",
+            "execute-plan",
+            "code-review",
+            "create-skill",
+        ] {
+            let path = home.join(format!("skills/{name}/SKILL.md"));
+            assert!(path.exists(), "main-7 skill {name} must extract");
+            assert!(is_extracted_bundled_skill(name, &path, home));
+        }
+
+        // Multi-file extras + shared personas for orchestrator skills
+        assert!(
+            home.join("skills/git/scripts/workspace-recovery.sh").exists(),
+            "git recovery script"
+        );
+        assert!(
+            home.join("skills/implement/scripts/memory.py").exists(),
+            "implement memory helper"
+        );
+        assert!(
+            home.join("skills/execute-plan/scripts/validate-plan.py")
+                .exists(),
+            "execute-plan validator"
+        );
+        assert!(
+            home.join("skills/shared/personas/implementer.md").exists(),
+            "shared personas for design/implement/execute-plan"
+        );
+        assert!(
+            home.join("skills/shared/personas/design-doc-writer.md")
+                .exists(),
+            "design-doc-writer persona"
+        );
+
+        // Runtime personas (path A): TOML under bundled/personas
+        for name in [
+            "implementer",
+            "reviewer",
+            "security-auditor",
+            "design-doc-writer",
+            "design-doc-reviewer",
+            "researcher",
+            "test-writer",
+        ] {
+            let path = home.join(format!("bundled/personas/{name}.toml"));
+            assert!(path.exists(), "bundled persona {name}.toml must extract");
+            let body = std::fs::read_to_string(&path).unwrap();
+            assert!(
+                body.contains("instructions"),
+                "persona {name} must have instructions"
+            );
+        }
+
+        let design = std::fs::read_to_string(home.join("skills/design/SKILL.md")).unwrap();
+        assert!(
+            design.contains("Name boundary") || design.contains("ui-design"),
+            "design skill should distinguish architecture from ui-design"
+        );
+        assert!(
+            design.contains("task") && !design.contains("spawn_subagent"),
+            "design skill should use kimix task tool, not grok spawn_subagent"
+        );
+        assert!(
+            design.contains("task.persona") || design.contains("persona:"),
+            "design skill should use native task.persona (path A)"
+        );
+        let implement = std::fs::read_to_string(home.join("skills/implement/SKILL.md")).unwrap();
+        assert!(
+            !implement.contains("Do NOT pass a `persona` parameter"),
+            "implement must not forbid task.persona"
+        );
+        assert!(
+            implement.contains("persona: \"implementer\"")
+                || implement.contains("task.persona"),
+            "implement must instruct passing persona by name"
+        );
     }
 }

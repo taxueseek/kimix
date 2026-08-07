@@ -123,6 +123,7 @@ mod tests {
             "current_date": "2025-01-15",
             "memory_enabled": false,
             "is_non_interactive": false,
+            "is_open_model": false,
             "system_prompt_label": crate::prompt::context::DEFAULT_SYSTEM_PROMPT_LABEL,
         })
     }
@@ -250,6 +251,86 @@ mod tests {
         ] {
             assert!(prompt.contains(needle), "missing verification rule: {needle}");
         }
+    }
+
+    #[test]
+    fn test_base_template_contains_tool_batching() {
+        let prompt = render_base(&default_renderer(), &default_placeholders());
+        assert!(
+            prompt.contains("<tool_batching>"),
+            "tool batching section must render"
+        );
+        assert!(
+            prompt.contains("issue them together in a single response"),
+            "parallel-batching guidance must be present"
+        );
+    }
+
+    #[test]
+    fn test_base_template_contains_evidence_grounding() {
+        let prompt = render_base(&default_renderer(), &default_placeholders());
+        assert!(
+            prompt.contains("<evidence_grounding>"),
+            "evidence grounding section must render"
+        );
+        for needle in [
+            "Ground every claim",
+            "Evidence before synthesis",
+            "independent oracle",
+            "Run tests as configured, unmodified",
+            "Discover verification gates",
+        ] {
+            assert!(prompt.contains(needle), "missing evidence rule: {needle}");
+        }
+    }
+
+    #[test]
+    fn test_task_planning_includes_sequential_todo_discipline() {
+        // default_renderer() registers the Plan tool, so the plan-gated
+        // <task_planning> block — and the sequential-todo discipline folded
+        // into it — must render.
+        let prompt = render_base(&default_renderer(), &default_placeholders());
+        assert!(
+            prompt.contains("keep exactly one item in progress"),
+            "sequential todo discipline must ride inside the plan-gated block"
+        );
+        assert!(
+            prompt.contains("Never mark several items in progress at once"),
+            "anti-parallel-marking rule must be present"
+        );
+    }
+
+    #[test]
+    fn test_open_model_discipline_gated_by_is_open_model() {
+        // Default (premium) render: the open-model block must NOT appear.
+        let prompt = render_base(&default_renderer(), &default_placeholders());
+        assert!(
+            !prompt.contains("<open_model_discipline>"),
+            "open-model discipline must be gated off for premium models"
+        );
+        assert!(
+            !prompt.contains("No colon before tool calls"),
+            "no-colon rule must not leak to premium models"
+        );
+
+        // Open-weight model: the block and its three rules must render.
+        let mut p = default_placeholders();
+        p["is_open_model"] = serde_json::json!(true);
+        let prompt = render_base(&default_renderer(), &p);
+        assert!(
+            prompt.contains("<open_model_discipline>"),
+            "open-model discipline must render for open-weight models"
+        );
+        for needle in [
+            "Explain before you act",
+            "No colon before tool calls",
+            "Investigate in first person",
+        ] {
+            assert!(prompt.contains(needle), "missing open-model rule: {needle}");
+        }
+        // No unresolved tokens in the open-model branch either.
+        assert!(!prompt.contains("${{"), "No unresolved variables");
+        assert!(!prompt.contains("${%"), "No unresolved template blocks");
     }
 
     #[test]

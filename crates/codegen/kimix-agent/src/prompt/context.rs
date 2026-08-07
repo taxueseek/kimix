@@ -149,6 +149,16 @@ pub struct PromptContext {
     /// stdio / generic-ACP).
     #[serde(default)]
     pub is_non_interactive: bool,
+    /// Whether the active model is classified as open-weight (DeepSeek/Kimi/
+    /// Qwen/GLM/ollama/local/openai-compatible non-flagship). When true the
+    /// base template renders `<open_model_discipline>` — output-style
+    /// compensations for where such models drift (mandatory CoT preamble,
+    /// no-colon-before-tool-calls, investigative first-person). Premium
+    /// models leave it off to avoid needless preamble tokens. Detection and
+    /// config override live in the sampler/agent builder; the default is
+    /// `false` so the gate is inert until detection fills it.
+    #[serde(default)]
+    pub is_open_model: bool,
     /// Identity in the primary Kimix system prompt (`You are <label>…`).
     /// Not the UI picker name. Defaults to [`DEFAULT_SYSTEM_PROMPT_LABEL`].
     #[serde(default = "default_system_prompt_label")]
@@ -197,6 +207,7 @@ impl Default for PromptContext {
             working_directory: None,
             current_date: None,
             is_non_interactive: false,
+            is_open_model: false,
             system_prompt_label: default_system_prompt_label(),
         }
     }
@@ -232,11 +243,29 @@ impl PromptContext {
     }
     /// Format the personas section content.
     ///
-    /// Always returns `None` — the `persona` parameter has been removed
-    /// from the task tool input, so persona summaries are no longer
-    /// injected into the conversation.
+    /// Short catalog only (name + one-line summary). Full instructions are
+    /// injected into the **child** by the harness when `task.persona` is set —
+    /// not pasted into the parent transcript (keeps parent cache lean).
+    /// Subagents never receive the catalog (`task` is parent-only).
     pub fn format_personas_section(&self) -> Option<String> {
-        None
+        if self.audience == PromptAudience::Subagent {
+            return None;
+        }
+        if self.persona_summaries.is_empty() {
+            return None;
+        }
+        let mut out = String::from(
+            "<personas>\nAvailable personas for the `task` tool `persona` parameter \
+             (pass the name; do not paste instructions into prompt):\n",
+        );
+        for line in &self.persona_summaries {
+            out.push_str(line);
+            if !line.ends_with('\n') {
+                out.push('\n');
+            }
+        }
+        out.push_str("</personas>");
+        Some(out)
     }
     /// Build the placeholder JSON for template rendering.
     ///
@@ -252,7 +281,8 @@ impl PromptContext {
             .as_deref().unwrap_or(""), "shell_path" : self.shell_path.as_deref()
             .unwrap_or(""), "working_directory" : self.working_directory.as_deref()
             .unwrap_or(""), "current_date" : self.current_date.as_deref().unwrap_or(""),
-            "is_non_interactive" : self.is_non_interactive, "system_prompt_label" : self
+            "is_non_interactive" : self.is_non_interactive, "is_open_model" : self
+            .is_open_model, "system_prompt_label" : self
             .system_prompt_label.as_str(), }
         )
     }
@@ -341,6 +371,7 @@ mod tests {
             working_directory: None,
             current_date: None,
             is_non_interactive: false,
+            is_open_model: false,
             system_prompt_label: default_system_prompt_label(),
         }
     }
@@ -567,13 +598,15 @@ mod tests {
         assert!(ctx.format_personas_section().is_none());
     }
     #[test]
-    fn test_format_personas_section_always_none() {
+    fn test_format_personas_section_renders_short_catalog() {
         let mut ctx = test_context();
         ctx.persona_summaries = vec!["- **reviewer** [user]: Meticulous code reviewer".to_string()];
-        assert!(
-            ctx.format_personas_section().is_none(),
-            "persona section is disabled — persona param removed from task tool"
-        );
+        let section = ctx
+            .format_personas_section()
+            .expect("non-empty summaries should render a short catalog");
+        assert!(section.contains("<personas>"));
+        assert!(section.contains("reviewer"));
+        assert!(section.contains("task"));
     }
     /// AGENTS.md must reach the system prompt for the default template even
     /// AGENTS.md user reminder must be present for the default template
@@ -594,13 +627,14 @@ mod tests {
         assert!(section.contains("XYZZY_AGENTS_MD_MARKER"));
     }
     #[test]
-    fn personas_user_reminder_always_none() {
+    fn personas_user_reminder_wraps_short_catalog() {
         let mut ctx = test_context();
         ctx.persona_summaries = vec!["- **reviewer** [user]: Meticulous code reviewer".to_string()];
-        assert!(
-            ctx.personas_user_reminder().is_none(),
-            "persona reminder is disabled — persona param removed from task tool"
-        );
+        let reminder = ctx
+            .personas_user_reminder()
+            .expect("parent should get short persona catalog reminder");
+        assert!(reminder.contains("<system-reminder>"));
+        assert!(reminder.contains("reviewer"));
     }
     fn child_general_purpose_context() -> PromptContext {
         use crate::prompt::subagent_prompts;
@@ -627,6 +661,7 @@ mod tests {
             working_directory: None,
             current_date: None,
             is_non_interactive: false,
+            is_open_model: false,
             system_prompt_label: default_system_prompt_label(),
         }
     }

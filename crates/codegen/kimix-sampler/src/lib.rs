@@ -31,6 +31,7 @@ pub mod handle;
 mod dialect;
 mod kimi_compat;
 pub mod metrics;
+pub mod model_category;
 pub mod retry;
 pub mod sampling_log;
 mod shared_http;
@@ -52,6 +53,7 @@ pub use doom_loop::DoomLoopSignalCollector;
 pub use events::{SamplingChannel, SamplingErrorInfo, SamplingErrorKind, SamplingEvent};
 pub use handle::SamplerHandle;
 pub use metrics::{InferenceLatencyStats, compute_percentiles};
+pub use model_category::ModelCategory;
 pub use retry::{
     DEFAULT_MAX_RETRIES, RATE_LIMIT_RETRY_THRESHOLD, RetryDecision,
     STREAM_TRANSPORT_RETRY_THRESHOLD, classify_error, format_sampling_error, resolve_max_retries,

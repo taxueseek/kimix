@@ -249,6 +249,31 @@ impl Agent {
 
         ctx.render(&self.tool_bridge).await.unwrap_or_default()
     }
+
+    /// Re-render the system prompt with the open-weight flag set to `is_open`,
+    /// without mutating cached state. Mirrors [`Self::render_prompt_for_definition`]:
+    /// the caller holds the agent via `borrow()` across the await (the same
+    /// pattern `render_prompt_for_definition` already uses), then calls
+    /// [`Self::set_open_model`] synchronously to persist the flag + rendered
+    /// string into the cache. This split keeps a `RefMut` from being held
+    /// across an await.
+    pub async fn render_prompt_for_open_model(&self, is_open: bool) -> String {
+        let mut ctx = self.prompt_context.clone();
+        ctx.is_open_model = is_open;
+        ctx.build_timestamp_utc = chrono::Utc::now().to_rfc3339();
+        ctx.render(&self.tool_bridge).await.unwrap_or_default()
+    }
+
+    /// Persist the open-weight flag and its rendered prompt into the cached
+    /// `prompt_context` + `system_prompt`. Synchronous — pair with
+    /// [`Self::render_prompt_for_open_model`]. The shell calls this on
+    /// `set_session_model` once the new model is known, so the `<open_model_discipline>`
+    /// section tracks the active model and the persisted prompt artifacts stay
+    /// consistent.
+    pub fn set_open_model(&mut self, is_open: bool, rendered: String) {
+        self.prompt_context.is_open_model = is_open;
+        self.system_prompt = rendered;
+    }
 }
 
 #[cfg(test)]

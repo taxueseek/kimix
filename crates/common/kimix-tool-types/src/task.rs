@@ -109,6 +109,21 @@ pub struct TaskToolInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
 
+    /// Named persona to apply to the child subagent.
+    ///
+    /// Resolved by the subagent coordinator from config / `~/.kimix/personas` /
+    /// bundled personas. Instructions are injected into the child conversation
+    /// by the harness — do **not** paste persona text into `prompt`.
+    /// On `resume_from`, pass the same persona name as the source (or omit).
+    #[schemars(
+        description = "Named persona to apply (e.g. \"implementer\", \"reviewer\"). \
+            Resolved from config and bundled personas; the harness injects instructions. \
+            Do not paste persona text into prompt. On resume_from, use the same persona \
+            as the source or omit."
+    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persona: Option<String>,
+
     /// Parallel fan-out: launch N independent subagents with the same prompt
     /// and merge their summaries. Only allowed for read-only exploration
     /// types (`explore`), blocking mode, and without `resume_from`. 1-16,
@@ -1152,6 +1167,7 @@ mod tests {
             resume_from: None,
             cwd: None,
             model: None,
+            persona: None,
             task_id: None,
             count: None,
         };

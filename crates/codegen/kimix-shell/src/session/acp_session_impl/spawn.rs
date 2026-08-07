@@ -734,6 +734,11 @@ pub(crate) async fn spawn_session_actor(
         path_not_found_hints,
         mcp_state: mcp_state.clone(),
         is_non_interactive: startup_hints.non_interactive,
+        is_open_model: kimix_sampler::ModelCategory::classify(
+            &sampling_config.model,
+            &sampling_config.base_url,
+        )
+        .is_open_source(),
         system_prompt_label,
         owner_session_id: Some(session_info.id.0.to_string()),
         parent_scheduler_handle: if startup_hints.is_subagent {
