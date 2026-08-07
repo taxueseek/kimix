@@ -7,6 +7,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.21] - 2026-08-07
+
+### Fixed
+- **「Responding…」粘滞（对照 v0.1.16 / 0.1.19 回归）**：
+  - 工具开始时对 agent 消息 `finish_running`，不再只清指针导致最后一段一直像在流式输出
+  - 状态行：最后一 chunk 后静默 **800ms** 即降级为 Waiting（不再挂「回复中」数分钟）
+  - 主会话默认 `max_turns=50`（`KIMIX_MAX_TURNS=0` 可关），防止单 turn 100+ 轮工具环
+  - turn-continuation 的 dangling-intent：只看**末句**、要求动作动词、intent 预算 2→1，
+    避免答完又被「I'll…」误触发续跑（length/empty 续传仍保留）
+
 ## [0.1.20] - 2026-08-07
 
 ### Fixed

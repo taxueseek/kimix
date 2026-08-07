@@ -1,6 +1,6 @@
 {
   "name": "kimix",
-  "version": "0.1.20",
+  "version": "0.1.21",
   "description": "通用终端 AI 代理（unofficial Kimi Code CLI community build）。支持 npx 即装即用，从 GitHub Releases 下载对应平台二进制。",
   "keywords": [
     "kimi",

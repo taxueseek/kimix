@@ -83,8 +83,13 @@ pub struct ContinuationLimits {
 impl Default for ContinuationLimits {
     fn default() -> Self {
         Self {
+            // Length cut is still useful for weak models (genuine max_tokens).
             length_limit: 3,
-            intent_limit: 2,
+            // Dangling-intent false positives re-open turns after a good
+            // answer ("I'll summarize…" in the last paragraph) and stack with
+            // tool loops → minutes of "Responding…" with no new user value.
+            // Keep one retry only; length/empty arms stay available.
+            intent_limit: 1,
             empty_limit: 2,
         }
     }
@@ -270,15 +275,50 @@ const FALSE_POSITIVE_PREFIXES: &[&str] = &[
     "let me know if",
 ];
 
+/// Action verbs that must appear near the intent phrase so we do not re-open
+/// a turn that merely narrated past work ("I'll summarize… here's the summary").
+const ACTION_VERBS: &[&str] = &[
+    " run ",
+    " call ",
+    " update ",
+    " edit ",
+    " write ",
+    " read ",
+    " fix ",
+    " search ",
+    " execute ",
+    " check ",
+    " create ",
+    " delete ",
+    " install ",
+    " test ",
+    " patch ",
+    " open ",
+    " apply ",
+];
+
 /// True when `text` ends a turn with a deferred-action phrase that the model
 /// announced but did not perform.
+///
+/// Scoped to the **last sentence / last line** only — matching the whole body
+/// re-triggers after long answers that used "I'll" mid-paragraph.
 pub fn ends_with_dangling_intent(text: &str) -> bool {
     let text = strip_markdown_edges(text);
     let text = text.trim();
     if text.is_empty() {
         return false;
     }
-    let lower = text.to_ascii_lowercase();
+    // Drop trailing terminators so we inspect the last full sentence, not "".
+    let core = text.trim_end_matches(['.', '!', '?', ' ', '\n', '\r', '`']);
+    let tail = core
+        .rsplit(['\n', '.', '!', '?'])
+        .next()
+        .unwrap_or(core)
+        .trim();
+    if tail.is_empty() {
+        return false;
+    }
+    let lower = tail.to_ascii_lowercase();
     // Genuine handoffs to the user win over every other signal.
     for marker in FALSE_POSITIVE_PREFIXES {
         if lower.contains(marker) {
@@ -286,11 +326,21 @@ pub fn ends_with_dangling_intent(text: &str) -> bool {
         }
     }
     // A trailing colon ("Next step:", "Now do this:") is a strong promise
-    // marker regardless of phrasing.
-    if text.ends_with(':') {
+    // marker on the final line only.
+    if tail.ends_with(':') {
         return true;
     }
-    INTENT_PHRASES.iter().any(|phrase| lower.contains(phrase))
+    // Intent phrase + action verb in the **last sentence only**.
+    let Some(intent_at) = INTENT_PHRASES
+        .iter()
+        .filter_map(|phrase| lower.rfind(phrase).map(|i| i + phrase.len()))
+        .max()
+    else {
+        return false;
+    };
+    let after = &lower[intent_at..];
+    let padded = format!(" {after} ");
+    ACTION_VERBS.iter().any(|v| padded.contains(v))
 }
 
 /// Strip a single trailing code fence / emphasis edge so intent detection
@@ -420,6 +470,26 @@ mod tests {
     }
 
     #[test]
+    fn mid_body_intent_phrase_does_not_reopen_completed_answer() {
+        // Long answer that used "I'll" mid-paragraph then finished cleanly.
+        let text = "I'll outline the plan first.\n\
+                    ## Summary\n\
+                    All tests pass and the fix is complete.";
+        assert!(
+            !ends_with_dangling_intent(text),
+            "completed answer must not re-open because of mid-body I'll"
+        );
+    }
+
+    #[test]
+    fn narrative_ill_without_action_verb_does_not_continue() {
+        assert!(
+            !ends_with_dangling_intent("I'll explain the root cause below."),
+            "narrative I'll without an action verb is not dangling intent"
+        );
+    }
+
+    #[test]
     fn empty_triggers_then_exhausts() {
         let mut p = ContinuationProvider::default();
         for _ in 0..2 {
@@ -444,7 +514,12 @@ mod tests {
     fn tool_turn_resets_intent_but_not_length() {
         let mut p = ContinuationProvider::default();
         let _ = p.provide(&sig(true, Some(StopReason::Length), "cut", false));
-        let _ = p.provide(&sig(true, Some(StopReason::Stop), "I'll now do it", false));
+        let _ = p.provide(&sig(
+            true,
+            Some(StopReason::Stop),
+            "I'll update the file now",
+            false,
+        ));
         assert_eq!(p.counters(), (0, 1, 1));
         p.on_tool_turn();
         assert_eq!(p.counters(), (0, 1, 0), "intent reset, length preserved");

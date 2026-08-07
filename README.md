@@ -61,18 +61,23 @@ kimix 自身已经具备「用 kimix 更新迭代 kimix」的能力。
 
 ### 版本历程
 
-**v0.1.20**（当前）— 退出真落盘、取消真脱困（相对 0.1.19 的收口版）
+**v0.1.21**（当前）— 修「Responding…」粘滞与超长 agentic 环
 
-> 0.1.19 写了「取消不卡死、退出不丢对话」，但 leader 只 sleep 500ms、Esc 后秒退看门狗来不及、看门狗还被 animation tick 饿死。0.1.20 对准生产日志里的真实路径补齐，用新版本号和 0.1.19 明确区分。
+> 对照 v0.1.16：0.1.19 起 turn-continuation + 无上限工具环，常在**内容已输出完**后仍显示「回复中」数分钟、无法正常输入。0.1.21 只修这条体验，不拆后续功能。
 
-- **退出真 await 落盘**：leader 断开 / 更新 / relaunch 先 await `FlushComplete`，再 Shutdown actor，不再「发 RPC + 睡 500ms」。
-- **Esc → 立刻 /exit 不丢状态**：quit 时若仍在「取消中…」，先本地 force-finish 再 flush。
-- **取消看门狗可靠触发**：每帧 tick 都跑；默认 5 秒脱困（`KIMIX_STUCK_CANCEL_TIMEOUT_SECS` 可调）。
-- **验收纪律**：装完必须杀旧进程；`kimix --version` 须含 `0.1.20`。
+- **状态行不假忙**：流式静默 800ms 后降为 Waiting；工具开始时真正 `finish_running` 上一段回复。
+- **单 turn 默认最多 50 轮**（`KIMIX_MAX_TURNS=0` 无限），避免 100+ 轮空转。
+- **续传更克制**：dangling-intent 只看末句且要动作动词；length/empty 续传保留。
 
 ---
 
-**v0.1.19** — 修 bug 不返工、取消/退出首轮加固（有已知缺口，见 0.1.20）
+**v0.1.20** — 退出真落盘、取消真脱困（相对 0.1.19 的收口版）
+
+> leader await flush、quit 时 force-finish Cancelling、stuck-cancel 每帧触发（默认 5s）。
+
+---
+
+**v0.1.19** — 修 bug 不返工、取消/退出首轮加固（缺口见 0.1.20 / 0.1.21）
 
 > 验证纪律五规则、取消兜底、退出 flush 初版、搜索超时、taste 项目级覆盖。退出/取消的完整收口在 **0.1.20**。
 
@@ -165,7 +170,7 @@ cargo install --git https://github.com/taxueseek/kimix kimix-bin
 安装完成后：
 
 ```sh
-kimix --version   # kimix 0.1.20 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.21 … unofficial Kimi Code CLI community build
 kimix login       # Kimi Code 订阅登录（设备码 OAuth 流程）
 kimix             # 启动全屏 TUI
 kimix -p "你好"    # 无头模式，直接提问
@@ -294,18 +299,21 @@ Use cases:
 </table>
 ### Release History
 
-**v0.1.20 (current)** — Quit actually flushes; cancel actually unsticks (closes 0.1.19 gaps)
+**v0.1.21 (current)** — Fix sticky "Responding…" and unbounded agentic loops
 
-> 0.1.19 claimed "cancel without hanging / quit without losing chats", but leader only slept 500ms, Esc-then-instant-exit never hit the 15s watchdog, and the watchdog could be starved by `app.tick()`. 0.1.20 ships those path fixes under a new version so installs are unambiguous.
+> vs v0.1.16: 0.1.19+ could keep "Responding…" for minutes after the answer was on screen (tool loops / unfinished agent entry / over-eager continuation). 0.1.21 fixes that UX without removing continuation or tools.
 
-- **True await on quit**: leader disconnect / auto-update / relaunch await `FlushComplete` then Shutdown actors — no more fire-and-forget + 500ms sleep.
-- **Esc → immediate /exit**: force-finish any `TurnCancelling` turn on quit before flush.
-- **Reliable stuck-cancel watchdog**: runs every animation tick; default timeout **5s** (`KIMIX_STUCK_CANCEL_TIMEOUT_SECS`).
-- **Install discipline**: kill old processes after upgrade; `kimix --version` must show `0.1.20`.
+- **Status line demotes after 800ms stream silence**; tool start `finish_running`s the last agent block.
+- **Default `max_turns=50`** (`KIMIX_MAX_TURNS=0` unlimited).
+- **Stricter dangling-intent** (last sentence + action verb); length/empty continuation kept.
 
 ---
 
-**v0.1.19** — Fix-without-rework + first-pass cancel/quit hardening (gaps closed in 0.1.20)
+**v0.1.20** — Quit actually flushes; cancel actually unsticks (closes 0.1.19 gaps)
+
+---
+
+**v0.1.19** — Fix-without-rework + first-pass cancel/quit hardening (gaps closed in 0.1.20 / 0.1.21)
 
 > Verification discipline, first-pass cancel timeout / exit flush / search timeout, project taste. Full cancel/quit closure is **0.1.20**.
 
@@ -399,7 +407,7 @@ cargo install --git https://github.com/taxueseek/kimix kimix-bin
 Once installed:
 
 ```sh
-kimix --version   # kimix 0.1.20 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.21 … unofficial Kimi Code CLI community build
 kimix login       # sign in with your Kimi Code subscription (device-code OAuth)
 kimix             # start the TUI
 kimix -p "Hello"  # headless mode

@@ -5485,7 +5485,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-acp-lib"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "agent-client-protocol",
  "async-trait",
@@ -5499,7 +5499,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-agent"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "chrono",
  "dirs 6.0.0",
@@ -5529,7 +5529,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-agent-lifecycle"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "async-trait",
  "tokio",
@@ -5538,7 +5538,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-agent-memory"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -5574,7 +5574,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-auth"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "async-trait",
  "http 1.4.2",
@@ -5587,7 +5587,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-bin"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anyhow",
  "clap",
@@ -5623,7 +5623,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-bridge"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "kimix-agent-memory",
  "kimix-core",
@@ -5632,7 +5632,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-chat-state"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "indexmap",
  "kimix-compaction",
@@ -5649,7 +5649,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-codebase-graph"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "ahash",
  "clap",
@@ -5685,7 +5685,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-compaction"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5698,7 +5698,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-config"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "base64",
  "blake3",
@@ -5721,7 +5721,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-config-types"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "agent-client-protocol",
  "indexmap",
@@ -5735,7 +5735,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-core"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "blake3",
  "chrono",
@@ -5758,7 +5758,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-crash-handler"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "backtrace",
  "libc",
@@ -5769,7 +5769,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-env"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "tracing",
  "url",
@@ -5777,7 +5777,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-exec-protocol"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "serde",
  "serde_json",
@@ -5785,7 +5785,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-exec-server"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anyhow",
  "kimix-exec-protocol",
@@ -5797,7 +5797,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-fast-worktree"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anyhow",
  "bytes",
@@ -5829,7 +5829,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-file-utils"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anyhow",
  "aws-config",
@@ -5853,7 +5853,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-fsnotify"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "criterion",
  "dunce",
@@ -5873,7 +5873,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-gix-status"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "gix",
  "kimix-test-utils",
@@ -5883,7 +5883,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-headless"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
@@ -5907,7 +5907,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-hooks"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "fastrand",
  "kimix-config",
@@ -5926,7 +5926,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-hooks-plugins-types"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "serde",
  "serde_json",
@@ -5934,7 +5934,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-http"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "kimix-auth",
  "kimix-log",
@@ -5949,7 +5949,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-hunk-tracker"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "chrono",
  "dunce",
@@ -5970,11 +5970,11 @@ dependencies = [
 
 [[package]]
 name = "kimix-i18n"
-version = "0.1.20"
+version = "0.1.21"
 
 [[package]]
 name = "kimix-log"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5994,7 +5994,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-markdown"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anstyle",
  "anstyle-lossy",
@@ -6017,7 +6017,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-mcp"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "agent-client-protocol",
  "async-trait",
@@ -6055,7 +6055,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-mermaid"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "fontdb",
  "image",
@@ -6073,7 +6073,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-models"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "kimix-env",
  "serde",
@@ -6082,7 +6082,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-pager-minimal"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "chrono",
  "crossterm 0.28.1",
@@ -6099,7 +6099,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-pager-pty-harness"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
@@ -6124,7 +6124,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-pager-render"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "agent-client-protocol",
  "anstyle",
@@ -6176,7 +6176,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-paths"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "camino",
  "serde",
@@ -6186,7 +6186,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-prompt"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "serde",
  "serde_json",
@@ -6195,7 +6195,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-prompt-queue"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "serde",
  "serde_json",
@@ -6203,7 +6203,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-proto-build"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anyhow",
  "pbjson-build",
@@ -6214,7 +6214,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-ratatui-inline"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "ansi-width",
  "anstyle-parse 0.2.7",
@@ -6231,7 +6231,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-ratatui-textarea"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "arboard",
  "chrono",
@@ -6252,7 +6252,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-sampler"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "async-openai",
  "async-stream",
@@ -6276,7 +6276,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-sampling-types"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "assert_matches",
  "async-openai",
@@ -6292,7 +6292,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-sandbox"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6342,7 +6342,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-shell"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
@@ -6478,7 +6478,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-shell-base"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
@@ -6505,7 +6505,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-sqlite-journal"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "libc",
  "rusqlite",
@@ -6516,7 +6516,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-subagent-resolution"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "kimix-sampling-types",
  "kimix-tool-types",
@@ -6531,7 +6531,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-system-power"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "windows-sys 0.59.0",
  "zbus",
@@ -6539,7 +6539,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-test-support"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
@@ -6561,7 +6561,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-test-utils"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "runfiles",
  "tracing",
@@ -6570,11 +6570,11 @@ dependencies = [
 
 [[package]]
 name = "kimix-token-estimation"
-version = "0.1.20"
+version = "0.1.21"
 
 [[package]]
 name = "kimix-tool-protocol"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "kimix-tool-types",
  "serde",
@@ -6585,7 +6585,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-tool-runtime"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6604,7 +6604,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-tool-types"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "minijinja",
  "schemars 1.2.1",
@@ -6614,7 +6614,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-tools"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -6692,7 +6692,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-tools-api"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "kimix-proto-build",
  "kimix-tool-protocol",
@@ -6705,7 +6705,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-tty-utils"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "libc",
  "nix 0.30.1",
@@ -6715,7 +6715,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-tui"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "agent-client-protocol",
  "ansi-to-tui",
@@ -6804,7 +6804,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-update"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anyhow",
  "dunce",
@@ -6833,14 +6833,14 @@ dependencies = [
 
 [[package]]
 name = "kimix-version"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "semver",
 ]
 
 [[package]]
 name = "kimix-workspace"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
@@ -6919,7 +6919,7 @@ dependencies = [
 
 [[package]]
 name = "kimix-workspace-types"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "base64",
  "chrono",
@@ -8994,7 +8994,7 @@ dependencies = [
 
 [[package]]
 name = "ptyctl"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
@@ -9013,7 +9013,7 @@ dependencies = [
 
 [[package]]
 name = "ptyctl-cli"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anyhow",
  "axum",

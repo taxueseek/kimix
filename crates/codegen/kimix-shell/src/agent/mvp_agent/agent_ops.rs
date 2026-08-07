@@ -2165,12 +2165,24 @@ impl MvpAgent {
                 sampling_config,
                 origin_client.clone(),
             );
+        // Unbounded agentic loops (100+ model rounds in one user turn) leave
+        // the UI on "Responding…" / busy for many minutes after the user
+        // already saw a complete answer — dominant complaint vs v0.1.16 once
+        // 0.1.19 added continuation / longer tool runs. Default safety cap
+        // is overridable; set KIMIX_MAX_TURNS=0 for unlimited.
+        const DEFAULT_MAX_TURNS: usize = 50;
         let max_turns = {
             let cfg = self.cfg.borrow();
-            cfg.cli_agent_overrides
+            let explicit = cfg
+                .cli_agent_overrides
                 .max_turns
                 .or(agent_definition.max_turns)
-                .map(|v| v as usize)
+                .map(|v| v as usize);
+            explicit.or_else(|| match std::env::var("KIMIX_MAX_TURNS") {
+                Ok(s) if s == "0" || s.eq_ignore_ascii_case("unlimited") => None,
+                Ok(s) => s.parse().ok().filter(|&n| n > 0),
+                Err(_) => Some(DEFAULT_MAX_TURNS),
+            })
         };
         {
             let cfg = self.cfg.borrow();

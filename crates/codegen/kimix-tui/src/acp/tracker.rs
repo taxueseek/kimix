@@ -155,6 +155,14 @@ struct BlockingWait {
 /// `strings`-greppable marker proving a binary carries this fix (kept by `#[used]`).
 #[used]
 static PAGER_IMPL_WAIT_STATUS_MIDTURN: &str = "PAGER_IMPL_wait_status_midturn";
+
+/// How long after the last `AgentMessageChunk` we still show "Responding…".
+/// Longer silence means the answer is on screen and the turn is waiting on
+/// tools / the next model round / PromptResponse — label as Waiting, not
+/// Responding. 800ms is above typical inter-token gaps and under human
+/// "is it stuck?" threshold.
+const RESPONDING_QUIET: std::time::Duration = std::time::Duration::from_millis(800);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TurnActivity {
     /// Agent is streaming thinking/chain-of-thought content.
@@ -219,6 +227,12 @@ pub struct AcpUpdateTracker {
     /// Entry currently receiving AgentMessageChunk deltas.
     /// None between turns or before first message chunk.
     current_agent_msg: Option<EntryId>,
+    /// Wall time of the last non-empty `AgentMessageChunk`. Used so the
+    /// status line does not stick on "Responding…" for minutes after the
+    /// model has finished streaming (content is on screen, turn still open
+    /// waiting for tools / PromptResponse / next loop). After
+    /// [`RESPONDING_QUIET`] of silence we demote to Waiting(Model).
+    last_agent_chunk_at: Option<std::time::Instant>,
     /// Entry currently receiving AgentThoughtChunk deltas.
     /// None when agent isn't thinking.
     current_thinking: Option<EntryId>,
@@ -409,7 +423,8 @@ impl AcpUpdateTracker {
     ///    subagent) — outranks Thinking, ToolRunning, and Responding.
     /// 3. Thinking (agent is in chain-of-thought)
     /// 4. ToolRunning (a tool call is pending / executing)
-    /// 5. Responding (agent is streaming text)
+    /// 5. Responding (agent is **actively** streaming text — not quiet after
+    ///    the last chunk; see [`RESPONDING_QUIET`])
     /// 6. None (nothing in-flight; the view turns this into Waiting(Model) or
     ///    Waiting(Subagent) while a turn is running)
     ///
@@ -453,10 +468,22 @@ impl AcpUpdateTracker {
             let title = peeled_if_changed(&title, self.session_cwd.as_deref()).unwrap_or(title);
             return Some(TurnActivity::ToolRunning { title, description });
         }
-        if self.current_agent_msg.is_some() {
+        // Only label "Responding…" while chunks are still arriving. After the
+        // stream goes quiet the answer is already on screen; keeping the label
+        // makes the UI look hung for minutes (tool rounds / PromptResponse lag
+        // / next model wait) — the 0.1.19+ long agentic loops made this the
+        // dominant complaint vs v0.1.16.
+        if self.current_agent_msg.is_some() && self.agent_stream_is_hot() {
             return Some(TurnActivity::Responding);
         }
         None
+    }
+
+    /// True while the agent message stream has produced a chunk within
+    /// [`RESPONDING_QUIET`].
+    fn agent_stream_is_hot(&self) -> bool {
+        self.last_agent_chunk_at
+            .is_some_and(|t| t.elapsed() < RESPONDING_QUIET)
     }
     /// Spinner activity for a suppressed blocking tool, or `None`. Instant
     /// task-output polls (`timeout_ms` 0/missing) are excluded.
@@ -903,6 +930,7 @@ impl AcpUpdateTracker {
         }
         self.last_thinking_elapsed_ms = None;
         self.last_stream_start_ms = None;
+        self.last_agent_chunk_at = None;
         self.compaction_activity = None;
         self.retry_activity = None;
         self.suppressed_tools.clear();
@@ -998,6 +1026,11 @@ impl AcpUpdateTracker {
         {
             entry.created_at = Some(utc_ms_to_local(ts_ms));
         }
+        // Live clock for "Responding…" demotion — even on replay path so
+        // tests that drive chunks without wall time still see a hot stream.
+        if !meta.is_replay {
+            self.last_agent_chunk_at = Some(std::time::Instant::now());
+        }
         if meta.is_replay {
             scrollback.push_chunk_to_agent_deferred(id, &text)
         } else {
@@ -1053,7 +1086,14 @@ impl AcpUpdateTracker {
         is_replay: bool,
     ) -> bool {
         self.finish_thinking(scrollback);
-        self.current_agent_msg = None;
+        // Close the agent message stream for real — previously we only set
+        // `current_agent_msg = None`, leaving the scrollback entry in the
+        // "running" (streaming) state so the last paragraph kept the live
+        // caret / "Responding…" look after the model had moved on to tools.
+        if let Some(id) = self.current_agent_msg.take() {
+            scrollback.finish_running(id);
+        }
+        self.last_agent_chunk_at = None;
         if is_todo_tool(&tc)
             || is_goal_tool(&tc)
             || is_bg_plumbing_tool(&tc)
@@ -4836,6 +4876,52 @@ mod tests {
         let mut tracker = AcpUpdateTracker::new();
         tracker.handle_update(agent_chunk("Here's my answer"), &meta(), &mut sb);
         assert_eq!(tracker.activity(), Some(TurnActivity::Responding));
+    }
+
+    /// After the stream goes quiet, do not keep "Responding…" — the answer is
+    /// already on screen; fall through so the view shows Waiting(Model).
+    #[test]
+    fn activity_demotes_responding_after_quiet() {
+        let mut sb = ScrollbackState::new();
+        let mut tracker = AcpUpdateTracker::new();
+        tracker.handle_update(agent_chunk("final answer"), &meta(), &mut sb);
+        assert_eq!(tracker.activity(), Some(TurnActivity::Responding));
+        // Simulate silence past RESPONDING_QUIET without finishing the turn.
+        tracker.last_agent_chunk_at =
+            Some(std::time::Instant::now() - std::time::Duration::from_secs(2));
+        assert_eq!(
+            tracker.activity(),
+            None,
+            "quiet agent stream must not stick on Responding"
+        );
+        assert!(
+            tracker.current_agent_msg.is_some(),
+            "entry pointer stays until finish_turn / tool call"
+        );
+    }
+
+    /// Starting a tool must finish the streaming agent entry (not just drop
+    /// the pointer) so the last paragraph stops looking "live".
+    #[test]
+    fn tool_call_finishes_running_agent_message() {
+        let mut sb = ScrollbackState::new();
+        let mut tracker = AcpUpdateTracker::new();
+        tracker.handle_update(agent_chunk("I'll run tests"), &meta(), &mut sb);
+        let agent_id = tracker.current_agent_msg.expect("agent entry");
+        assert!(
+            sb.get_by_id(agent_id).is_some_and(|e| e.is_running),
+            "agent entry is running while streaming"
+        );
+        tracker.handle_update(
+            tool_call("tc1", acp::ToolKind::Execute, "cargo test"),
+            &meta(),
+            &mut sb,
+        );
+        assert!(tracker.current_agent_msg.is_none());
+        assert!(
+            sb.get_by_id(agent_id).is_some_and(|e| !e.is_running),
+            "agent entry must finish_running when tools start"
+        );
     }
     #[test]
     fn activity_thinking_to_responding_transition() {
