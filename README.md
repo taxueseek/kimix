@@ -72,6 +72,25 @@ kimix 自身已经具备「用 kimix 更新迭代 kimix」的能力。
 > 同版本号历史上还包含：退出真落盘 / 取消真脱困；其后合入的 web_search 模型解耦、
 > 403/SSRF 修复、Responding 粘滞修复等以本构建为准一并提供。
 
+> **对比 v0.1.19 公开版新增**(本构建增量):
+> - **开模型自动检测 + 自适应策略**:`ModelCategory::classify(model, base_url)` 自动区分
+>   Premium(Claude/GPT/Grok)与 OpenSource(DeepSeek/Kimi/Qwen/GLM/ollama/本地)。开模型
+>   自动加载 CoT 前言 / 工具调用前禁冒号 / 第一人称探究等补偿段;Premium 模型零改动。
+>   env `KIMIX_MODEL_CATEGORY` 可手动覆盖。
+> - **Muse 式验证纪律深化**:在 0.1.19「五规则」基础上加 `<evidence_grounding>`——
+>   ground every claim、evidence before synthesis、independent oracle、
+>   test discipline(绝不缩窄失败跑强行绿)、verification gate discovery
+>   (先读 Makefile/CI/包元数据里的已配置 gate 再跑检查)。
+> - **开模型工具调用修复**:无工具轮 + OpenAI 兼容方言 + 开模型时显式
+>   `tool_choice="none"`,堵 DeepSeek/Qwen/GLM 把原生工具调用信封当普通文本回吐。
+> - **并行工具批处理**:多条相互独立的工具调用(多文件读/多 grep)放进同一消息并行,
+>   减少慢开模型端点的往返;子代理/子会话描述也收紧。
+> - **图像描述确定性**:`image_describe` 子调用 temperature 0.2 → 0.0,同一张图产出稳定描述。
+> - 吸纳来源:maka-agent(`toolChoice:'none'` 边界 / economy-heavy 双策略)、
+>   command-code(强制 CoT / 并行工具 / 分层采样)、Muse Code co-training 实验
+>   (验证纪律五规则 → token -2.7x / 耗时 -2x / 成本 -2.4x,同模型同任务只改 prompting)。
+>   完整实施记录与延后项见 `docs/open-model-optimization-2026-08-07.md`。
+
 ---
 
 **v0.1.19** — 修 bug 不返工、取消/退出首轮加固（缺口见 0.1.20 / 0.1.21）
@@ -306,6 +325,27 @@ Use cases:
 >
 > This build number also carries quit/cancel flush, web_search model decoupling,
 > 403/SSRF fixes, and Responding-stickiness fixes from interim trees.
+
+> **New vs. v0.1.19 public release** (incremental in this build):
+> - **Open-model auto-detection + adaptive strategy**: `ModelCategory::classify(model, base_url)`
+>   splits Premium (Claude/GPT/Grok) from OpenSource (DeepSeek/Kimi/Qwen/GLM/ollama/local).
+>   Open models auto-load CoT preamble / no-colon-before-tool-calls / first-person exploration
+>   compensations; Premium models are untouched. Manual override via `KIMIX_MODEL_CATEGORY`.
+> - **Deeper Muse-style verification discipline**: builds on 0.1.19's five rules with
+>   `<evidence_grounding>` — ground every claim, evidence before synthesis, independent oracle,
+>   test discipline (never narrow a failing run to force green), verification gate discovery
+>   (read Makefile/CI/package metadata for configured gates before running checks).
+> - **Open-model tool-call fix**: tool-free turns + OpenAI-compatible dialect + open model →
+>   explicit `tool_choice="none"`, stopping DeepSeek/Qwen/GLM from leaking their native tool-call
+>   envelope as plain text.
+> - **Parallel tool batching**: independent tool calls (multi-file reads / multi-grep) go in a
+>   single message for parallel execution, cutting round-trips on slow open-model endpoints.
+> - **Deterministic image description**: `image_describe` sub-call temperature 0.2 → 0.0.
+>   Sources absorbed: maka-agent (`toolChoice:'none'` boundary / economy-heavy dual-policy),
+>   command-code (mandatory CoT / parallel tools / split sampling), Muse Code co-training
+>   experiment (verification-five → token -2.7x / time -2x / cost -2.4x, same model + same task,
+>   prompting only). Full implementation record and deferred items: see
+>   `docs/open-model-optimization-2026-08-07.md`.
 
 ---
 
