@@ -184,8 +184,11 @@ impl WebFetchClient {
             }
         }
 
-        // SSRF check.
-        ssrf::check_ssrf(&url).await?;
+        // SSRF check. When an egress proxy is active the client dials the
+        // proxy, not the destination IP — skip destination DNS (Clash
+        // fake-ip otherwise false-positives every public host as ULA).
+        let via_proxy = ssrf::egress_proxy_active(self.params.proxy_endpoint.as_deref());
+        ssrf::check_ssrf(&url, via_proxy).await?;
 
         // Make request and build output.
         let http = self.http.get_or_rebuild()?;

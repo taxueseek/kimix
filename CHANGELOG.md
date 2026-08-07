@@ -7,6 +7,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.22] - 2026-08-07
+
+### Fixed
+- **web_fetch SSRF 误杀公网站点（Clash fake-ip）**：
+  - 本机 DNS 把公网域名解析到 `198.18.0.0/15` / `fdfe:dcba:9876::/48`（Clash fake-ip）
+    时，不再当成 ULA/内网拦截；错误形态曾是
+    `SSRF blocked: docs.cursor.com resolves to private/internal IP fdfe:dcba:9876::…`
+  - 检测到 HTTP(S)_PROXY / ALL_PROXY / 显式 `proxy_endpoint` 时，跳过**目标主机 DNS**
+    SSRF（客户端连的是代理，不是目标 IP）；URL 里写死的私网 IP 字面量仍拦截
+  - `web_fetch` HTTP 客户端自动读取环境代理，无需再配 `KIMIX_WEB_FETCH_PROXY`
+- **web_search 403 配额文案与消耗**：
+  - Kimi `POST {coding_base}/search` 的 403 归类为 **search subscription quota**
+    （与 chat 配额、与 Grok/xAI 搜索后端无关），不再伪装成「服务不可用」
+  - 先单次查询，成功后再做 RRF 扩展；403/401 立即停，避免 2–3× 配额浪费
+  - `KIMIX_WEB_SEARCH_MULTI_QUERY=0` 可强制单查询
+
 ## [0.1.21] - 2026-08-07
 
 ### Fixed

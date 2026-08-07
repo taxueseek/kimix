@@ -66,8 +66,17 @@ impl HttpClient {
             .brotli(true)
             .deflate(true);
 
-        // Route all traffic through the egress proxy when configured.
-        if let Some(ref endpoint) = params.proxy_endpoint {
+        // Route traffic through an egress proxy when configured.
+        // Explicit `[toolset.web_fetch] proxy_endpoint` / `KIMIX_WEB_FETCH_PROXY`
+        // wins; otherwise honor standard HTTP(S)_PROXY / ALL_PROXY env vars so
+        // Clash/system proxy setups work without extra kimix config (parity
+        // with how most CLI tools and the upstream grok path behave).
+        let proxy_url = params
+            .proxy_endpoint
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .or_else(super::ssrf::env_proxy_url);
+        if let Some(ref endpoint) = proxy_url {
             let proxy = reqwest::Proxy::all(endpoint)
                 .map_err(|e| WebFetchError::ProxyConfigError(e.to_string()))?;
             builder = builder.proxy(proxy);

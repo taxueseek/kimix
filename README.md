@@ -61,7 +61,13 @@ kimix 自身已经具备「用 kimix 更新迭代 kimix」的能力。
 
 ### 版本历程
 
-**v0.1.21**（当前）— 修「Responding…」粘滞与超长 agentic 环
+**v0.1.22**（当前）— 修 web_search 403 配额误报 / web_fetch Clash fake-ip SSRF 误杀
+
+> 对照 Grok：kimix 的 `web_search` 走 Kimi Code `POST …/search`（独立搜索配额）；
+> `web_fetch` 本地回退时若本机 Clash fake-ip 把公网解析成 `fdfe:dcba:9876::` / `198.18.x`，
+> 会被旧 SSRF 当成内网拦截。0.1.22 修这两条，不改后续功能。
+
+**v0.1.21** — 修「Responding…」粘滞与超长 agentic 环
 
 > 对照 v0.1.16：0.1.19 起 turn-continuation + 无上限工具环，常在**内容已输出完**后仍显示「回复中」数分钟、无法正常输入。0.1.21 只修这条体验，不拆后续功能。
 
@@ -170,7 +176,7 @@ cargo install --git https://github.com/taxueseek/kimix kimix-bin
 安装完成后：
 
 ```sh
-kimix --version   # kimix 0.1.21 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.22 … unofficial Kimi Code CLI community build
 kimix login       # Kimi Code 订阅登录（设备码 OAuth 流程）
 kimix             # 启动全屏 TUI
 kimix -p "你好"    # 无头模式，直接提问
@@ -299,7 +305,12 @@ Use cases:
 </table>
 ### Release History
 
-**v0.1.21 (current)** — Fix sticky "Responding…" and unbounded agentic loops
+**v0.1.22 (current)** — Fix web_search 403 quota messaging and web_fetch Clash fake-ip SSRF false positives
+
+> vs Grok: kimix `web_search` hits Kimi Code `POST …/search` (separate search quota);
+> local `web_fetch` under Clash fake-ip was SSRF-blocking public hosts as ULA. 0.1.22 fixes both.
+
+**v0.1.21** — Fix sticky "Responding…" and unbounded agentic loops
 
 > vs v0.1.16: 0.1.19+ could keep "Responding…" for minutes after the answer was on screen (tool loops / unfinished agent entry / over-eager continuation). 0.1.21 fixes that UX without removing continuation or tools.
 
@@ -407,7 +418,7 @@ cargo install --git https://github.com/taxueseek/kimix kimix-bin
 Once installed:
 
 ```sh
-kimix --version   # kimix 0.1.21 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.22 … unofficial Kimi Code CLI community build
 kimix login       # sign in with your Kimi Code subscription (device-code OAuth)
 kimix             # start the TUI
 kimix -p "Hello"  # headless mode

@@ -54,6 +54,114 @@ fn tool_error(msg: impl Into<String>) -> kimix_tool_runtime::ToolError {
     )
 }
 
+/// Whether RRF multi-query expansion is allowed after the first hop succeeds.
+/// Default ON; set `KIMIX_WEB_SEARCH_MULTI_QUERY=0` to force single-query
+/// (saves subscription quota when the search service is billable per call).
+fn multi_query_expand_enabled() -> bool {
+    match std::env::var("KIMIX_WEB_SEARCH_MULTI_QUERY") {
+        Ok(v) => {
+            let t = v.trim().to_ascii_lowercase();
+            !(t == "0" || t == "false" || t == "off" || t == "no")
+        }
+        Err(_) => true,
+    }
+}
+
+/// Auth / quota denials: more subqueries cannot recover and only deepen the cost.
+fn is_hard_search_stop(err: &kimix_tool_runtime::ToolError) -> bool {
+    matches!(
+        err.kind,
+        kimix_tool_runtime::ToolErrorKind::Unauthorized
+            | kimix_tool_runtime::ToolErrorKind::UsageLimitReached
+            | kimix_tool_runtime::ToolErrorKind::UsagePoolExhausted
+            | kimix_tool_runtime::ToolErrorKind::PermissionDenied
+    )
+}
+
+/// Whether a 403 body looks like a Kimi/OpenAI-compatible search quota denial.
+/// Mirrors `kimix_sampling_types::is_quota_denial` without pulling that crate
+/// into `kimix-tools`.
+fn is_search_quota_denial(status: u16, message: &str) -> bool {
+    if status != 403 {
+        return false;
+    }
+    let m = message.to_ascii_lowercase();
+    if m.is_empty() {
+        // Field observation: Kimi coding search often returns empty-body 403
+        // when the search subscription cap is hit.
+        return true;
+    }
+    [
+        "access_terminated_error",
+        "usage limit",
+        "quota",
+        "billing cycle",
+        "billing",
+        "insufficient_quota",
+        "out of credits",
+        "exceeded your current quota",
+        "forbidden",
+    ]
+    .iter()
+    .any(|needle| m.contains(needle))
+}
+
+/// Map a Kimi search HTTP status + body into a tool error.
+///
+/// 403 with quota/billing language is **not** "service unavailable" — it is a
+/// subscription cap on `POST {coding_base}/search` (Kimi Code), which is a
+/// different quota pool from chat completions and from xAI/grok search.
+fn map_search_http_error(status: reqwest::StatusCode, body: &str) -> kimix_tool_runtime::ToolError {
+    let code = status.as_u16();
+    let body_trim = body.trim();
+    let body_snip = if body_trim.len() > 240 {
+        format!("{}…", &body_trim[..240])
+    } else {
+        body_trim.to_string()
+    };
+
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return kimix_tool_runtime::ToolError::unauthorized(format!(
+            "Search service returned 401 Unauthorized.{}",
+            if body_snip.is_empty() {
+                String::new()
+            } else {
+                format!(" Body: {body_snip}")
+            }
+        ));
+    }
+
+    if is_search_quota_denial(code, body_trim) {
+        let detail = if body_snip.is_empty() {
+            format!(
+                "web_search got HTTP {code} from Kimi coding search \
+                 (`POST {{coding_base}}/search`). This is the Kimi Code \
+                 **search subscription quota**, not chat quota and not a \
+                 local network fault. Wait for the billing cycle to reset, \
+                 top up Kimi Code, or use a known URL with web_fetch / argo. \
+                 (Grok's web_search uses a different backend and is unaffected.)"
+            )
+        } else {
+            format!(
+                "web_search Kimi search quota/denied (HTTP {code}): {body_snip}. \
+                 Wait for the cycle reset or top up Kimi Code; do not retry \
+                 the same query in a tight loop."
+            )
+        };
+        return kimix_tool_runtime::ToolError::usage_limit_reached(detail);
+    }
+
+    tool_error(format!(
+        "Failed to search. Status: {status}.{}",
+        if body_snip.is_empty() {
+            " This may indicate that the search service is currently unavailable."
+                .to_string()
+        } else {
+            format!(" Body: {body_snip}")
+        }
+    ))
+}
+
 /// One search hit (kimi-cli search.py `SearchResult`).
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct SearchResult {
@@ -227,33 +335,53 @@ impl WebSearchClient {
         // Fetch a bit more per subquery so RRF has room to re-rank.
         let per_query_limit = (limit as usize * 2).clamp(5, 20) as u8;
 
-        let futs: Vec<_> = subqueries
-            .iter()
-            .enumerate()
-            .map(|(i, q)| {
-                let call_id = if i == 0 {
-                    tool_call_id.to_string()
-                } else {
-                    format!("{tool_call_id}-q{i}")
-                };
-                async move {
-                    self.search_once(q, per_query_limit, include_content, &call_id)
-                        .await
-                }
-            })
-            .collect();
-
-        let outcomes = join_all(futs).await;
+        // Run the original query first. Only expand (RRF multi-query) after a
+        // successful first hop — parallel fan-out used to burn 2–3× Kimi
+        // search quota on every call, and a 403 would hit the endpoint thrice
+        // before the model even saw the error.
+        let first = self
+            .search_once(&subqueries[0], per_query_limit, include_content, tool_call_id)
+            .await;
         let mut lists: Vec<Vec<SearchResult>> = Vec::new();
         let mut last_err: Option<kimix_tool_runtime::ToolError> = None;
         let mut any_success = false;
-        for outcome in outcomes {
-            match outcome {
-                Ok(hits) => {
-                    any_success = true;
-                    lists.push(hits);
+        match first {
+            Ok(hits) => {
+                any_success = true;
+                lists.push(hits);
+            }
+            Err(e) => {
+                // Hard stop on auth/quota — further subqueries cannot help and
+                // only deepen the 403.
+                if is_hard_search_stop(&e) {
+                    self.circuit.record_failure();
+                    return Err(e);
                 }
-                Err(e) => last_err = Some(e),
+                last_err = Some(e);
+            }
+        }
+
+        if any_success && subqueries.len() > 1 && multi_query_expand_enabled() {
+            let futs: Vec<_> = subqueries
+                .iter()
+                .enumerate()
+                .skip(1)
+                .map(|(i, q)| {
+                    let call_id = format!("{tool_call_id}-q{i}");
+                    async move {
+                        self.search_once(q, per_query_limit, include_content, &call_id)
+                            .await
+                    }
+                })
+                .collect();
+            for outcome in join_all(futs).await {
+                match outcome {
+                    Ok(hits) => lists.push(hits),
+                    Err(e) => {
+                        // Ignore soft expand failures; first hop already worked.
+                        tracing::debug!(error = %e, "web_search expand subquery failed");
+                    }
+                }
             }
         }
 
@@ -308,17 +436,12 @@ impl WebSearchClient {
                 ))
             })?;
         let status = response.status();
-        if status == reqwest::StatusCode::UNAUTHORIZED {
-            self.record_401_attribution(&bearer);
-            return Err(kimix_tool_runtime::ToolError::unauthorized(
-                "Search service returned 401 Unauthorized".to_string(),
-            ));
-        }
         if !status.is_success() {
-            return Err(tool_error(format!(
-                "Failed to search. Status: {status}. This may indicate that the \
-                 search service is currently unavailable."
-            )));
+            if status == reqwest::StatusCode::UNAUTHORIZED {
+                self.record_401_attribution(&bearer);
+            }
+            let body = response.text().await.unwrap_or_default();
+            return Err(map_search_http_error(status, &body));
         }
         let results = response
             .json::<SearchResponse>()
@@ -373,7 +496,7 @@ mod tests {
                 "text_query": "rust ownership",
                 "limit": 10,
                 "enable_page_crawling": false,
-                "timeout_seconds": 30,
+                "timeout_seconds": 20,
             })))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "search_results": [{
@@ -419,6 +542,29 @@ mod tests {
                 .unwrap();
         let err = client.search("q", 5, false, "c").await.unwrap_err();
         assert!(err.to_string().contains("401"), "{err}");
+        assert_eq!(err.kind, kimix_tool_runtime::ToolErrorKind::Unauthorized);
+    }
+
+    #[tokio::test]
+    async fn search_maps_empty_403_to_usage_limit() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/search"))
+            .respond_with(ResponseTemplate::new(403))
+            .mount(&server)
+            .await;
+        let client =
+            WebSearchClient::new(&enabled_config(&format!("{}/search", server.uri())), None)
+                .unwrap();
+        let err = client.search("q", 5, false, "c").await.unwrap_err();
+        assert_eq!(err.kind, kimix_tool_runtime::ToolErrorKind::UsageLimitReached);
+        assert!(
+            err.to_string().contains("search subscription quota")
+                || err.to_string().contains("quota"),
+            "{err}"
+        );
     }
 
     #[tokio::test]
