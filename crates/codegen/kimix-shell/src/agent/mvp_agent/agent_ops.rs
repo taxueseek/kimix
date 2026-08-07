@@ -782,36 +782,117 @@ impl MvpAgent {
         use kimix_tools::implementations::kimix::deploy_app::AppBuilderDeployerConfig;
         AppBuilderDeployerConfig::Disabled
     }
-    /// Web search config (PRD F5 + hosted path).
+    /// Web search config (PRD F5 + Grok-style tool-decoupled search model).
     ///
-    /// - Kill-switch (`disable_web_search`) → `Disabled` (no client, no hosted).
-    /// - Kimi Code OAuth session → `Enabled` (client HTTP to
-    ///   `POST {coding_base}/search`; live token via api-key provider).
-    /// - Otherwise → `HostedOnly`: do **not** register the local function
-    ///   tool (no subscription search credentials), but still signal that
-    ///   the user wants web search so backend `HostedTool::WebSearch` can
-    ///   attach when the model supports it. Never gate hosted search solely
-    ///   on missing OAuth.
+    /// - Kill-switch (`disable_web_search`) → `Disabled`.
+    /// - Optional **search model B** from `[models] web_search` /
+    ///   `KIMIX_WEB_SEARCH_MODEL` (Responses + server `web_search`) — chat may
+    ///   stay on model A.
+    /// - Optional **Kimi client** `POST {coding_base}/search` when Kimi Code
+    ///   OAuth is present (RRF/evidence path; fallback if model sidecar fails).
+    /// - Neither → `HostedOnly` (chat model may still attach server web_search
+    ///   when it supports backend search).
     pub(super) fn prepare_web_search_config(
         &self,
     ) -> kimix_tools::implementations::WebSearchConfig {
-        use kimix_tools::implementations::WebSearchConfig;
+        use kimix_tools::implementations::{ModelSearchEndpoint, WebSearchConfig};
         if self.cfg.borrow().disable_web_search {
             return WebSearchConfig::Disabled;
         }
-        if let Some(auth) = self.current_or_buffered_auth().filter(|a| a.is_session_auth()) {
+
+        let model_search = self.resolve_web_search_model_endpoint();
+
+        let (search_url, api_key) = if let Some(auth) =
+            self.current_or_buffered_auth().filter(|a| a.is_session_auth())
+        {
             let base = self.cfg.borrow().endpoints.proxy_url();
-            return WebSearchConfig::Enabled {
-                search_url: format!("{}/search", base.trim_end_matches('/')),
-                api_key: auth.key,
-                extra_headers: indexmap::IndexMap::new(),
-            };
+            (
+                format!("{}/search", base.trim_end_matches('/')),
+                auth.key,
+            )
+        } else {
+            (String::new(), String::new())
+        };
+
+        if model_search.is_none() && search_url.is_empty() {
+            tracing::info!(
+                "web_search: no model sidecar and no Kimi Code OAuth; \
+                 HostedOnly — chat-model backend WebSearch may still attach"
+            );
+            return WebSearchConfig::HostedOnly;
         }
-        tracing::info!(
-            "web_search client HTTP unavailable (no Kimi Code OAuth); \
-             HostedOnly — backend WebSearch may still attach"
-        );
-        WebSearchConfig::HostedOnly
+
+        if let Some(ref ms) = model_search {
+            tracing::info!(
+                search_model = %ms.model,
+                base_url = %ms.base_url,
+                kimi_fallback = !search_url.is_empty(),
+                "web_search: tool-decoupled model sidecar configured"
+            );
+        }
+
+        WebSearchConfig::Enabled {
+            search_url,
+            api_key,
+            extra_headers: indexmap::IndexMap::new(),
+            model_search,
+        }
+    }
+
+    /// Resolve `[models] web_search` / `KIMIX_WEB_SEARCH_MODEL` into a
+    /// fully-credentialed [`ModelSearchEndpoint`], or `None`.
+    fn resolve_web_search_model_endpoint(
+        &self,
+    ) -> Option<kimix_tools::implementations::ModelSearchEndpoint> {
+        use kimix_tools::implementations::ModelSearchEndpoint;
+        let slug = {
+            let cfg = self.cfg.borrow();
+            cfg.web_search_model
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned)
+        }?;
+
+        let models = self.models_manager.models();
+        let endpoints = self.models_manager.endpoints();
+        // Prefer live session token when present (Kimi/xAI); aux resolver also
+        // reads env keys / Grok session for the target catalog entry.
+        let session_key = self
+            .current_or_buffered_auth()
+            .map(|a| a.key.clone())
+            .or_else(|| {
+                // When chat is not on session auth, still pass xAI/Grok tokens
+                // for search models that need them.
+                let path = crate::util::kimix_home::kimix_home().join("auth.json");
+                crate::auth::load_xai_session_token_sync(&path)
+            });
+
+        let sampler = crate::agent::config::resolve_aux_model_sampling_config(
+            &slug,
+            &models,
+            &endpoints,
+            session_key.as_deref(),
+            None,
+        )?;
+        let api_key = sampler.api_key.filter(|k| !k.trim().is_empty())?;
+
+        if let Some(entry) = crate::agent::config::find_model_by_id(&models, &slug) {
+            if !entry.info.supports_backend_search {
+                tracing::warn!(
+                    search_model = %slug,
+                    "web_search model does not advertise supports_backend_search; \
+                     Responses web_search may fail — set supports_backend_search = true"
+                );
+            }
+        }
+
+        Some(ModelSearchEndpoint {
+            model: sampler.model,
+            base_url: sampler.base_url,
+            api_key,
+            extra_headers: sampler.extra_headers,
+        })
     }
     /// Returns `Err` with a user-facing message on invalid config; the caller at
     /// the process boundary prints it and exits.

@@ -61,7 +61,12 @@ kimix 自身已经具备「用 kimix 更新迭代 kimix」的能力。
 
 ### 版本历程
 
-**v0.1.22**（当前）— 修 web_search 403 配额误报 / web_fetch Clash fake-ip SSRF 误杀
+**v0.1.23**（当前）— `web_search` 工具解耦搜索模型（Grok 同源）
+
+> 聊天模型 A 与搜索模型 B 可分离：`[models] web_search` / `KIMIX_WEB_SEARCH_MODEL`。
+> 工具优先走 B 的 Responses 官方搜索；Kimi `/search` 客户端路径保留作后备。
+
+**v0.1.22** — 修 web_search 403 配额误报 / web_fetch Clash fake-ip SSRF 误杀
 
 > 对照 Grok：kimix 的 `web_search` 走 Kimi Code `POST …/search`（独立搜索配额）；
 > `web_fetch` 本地回退时若本机 Clash fake-ip 把公网解析成 `fdfe:dcba:9876::` / `198.18.x`，
@@ -176,7 +181,7 @@ cargo install --git https://github.com/taxueseek/kimix kimix-bin
 安装完成后：
 
 ```sh
-kimix --version   # kimix 0.1.22 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.23 … unofficial Kimi Code CLI community build
 kimix login       # Kimi Code 订阅登录（设备码 OAuth 流程）
 kimix             # 启动全屏 TUI
 kimix -p "你好"    # 无头模式，直接提问
@@ -305,7 +310,12 @@ Use cases:
 </table>
 ### Release History
 
-**v0.1.22 (current)** — Fix web_search 403 quota messaging and web_fetch Clash fake-ip SSRF false positives
+**v0.1.23 (current)** — Tool-decoupled web search model (Grok-style)
+
+> Chat model A can differ from search model B via `[models] web_search` /
+> `KIMIX_WEB_SEARCH_MODEL`. Tool prefers B's Responses web_search; Kimi client path kept as fallback.
+
+**v0.1.22** — Fix web_search 403 quota messaging and web_fetch Clash fake-ip SSRF false positives
 
 > vs Grok: kimix `web_search` hits Kimi Code `POST …/search` (separate search quota);
 > local `web_fetch` under Clash fake-ip was SSRF-blocking public hosts as ULA. 0.1.22 fixes both.
@@ -418,7 +428,7 @@ cargo install --git https://github.com/taxueseek/kimix kimix-bin
 Once installed:
 
 ```sh
-kimix --version   # kimix 0.1.22 … unofficial Kimi Code CLI community build
+kimix --version   # kimix 0.1.23 … unofficial Kimi Code CLI community build
 kimix login       # sign in with your Kimi Code subscription (device-code OAuth)
 kimix             # start the TUI
 kimix -p "Hello"  # headless mode

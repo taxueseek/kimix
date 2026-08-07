@@ -7,6 +7,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.23] - 2026-08-07
+
+### Added
+- **工具解耦搜索模型**（对齐上游 Grok `[models] web_search` / `GROK_WEB_SEARCH_MODEL`）：
+  - 配置：`[models] web_search = "deepseek-flash-responses"`（或 `grok-4-5` 等）
+  - 环境变量：`KIMIX_WEB_SEARCH_MODEL`（兼容 `GROK_WEB_SEARCH_MODEL`）
+  - 聊天可用模型 A；`web_search` 工具优先用模型 B 的 Responses + 官方 `web_search`
+  - Kimi coding `/search` 客户端路径（RRF/证据分）**保留**作后备；模型侧路失败可回落
+  - 与会话主模型无关：换日常模型不强制换搜索通道
+
 ## [0.1.22] - 2026-08-07
 
 ### Fixed

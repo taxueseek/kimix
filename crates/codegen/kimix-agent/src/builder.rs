@@ -2239,6 +2239,7 @@ mod tests {
             search_url: "https://api.kimi.example/coding/v1/search".into(),
             api_key: "test-key".into(),
             extra_headers: Default::default(),
+            model_search: None,
         })
         .with_web_fetch_config(WebFetchConfig::Enabled {
             params: Default::default(),
@@ -2363,6 +2364,7 @@ mod tests {
                 search_url: "https://api.kimi.example/coding/v1/search".into(),
                 api_key: "test-key".into(),
                 extra_headers: Default::default(),
+                model_search: None,
             }
         } else {
             WebSearchConfig::Disabled

@@ -468,6 +468,11 @@ pub struct RemoteSettings {
     pub session_summary_model: Option<String>,
     #[serde(default)]
     pub image_description_model: Option<String>,
+    /// Server-side pin for the dedicated `web_search` tool model (Grok-style
+    /// chat/search decoupling). Below `KIMIX_WEB_SEARCH_MODEL` /
+    /// `[models] web_search` in config.toml.
+    #[serde(default)]
+    pub web_search_model: Option<String>,
     /// Server-side pin for the next-prompt suggestion model (tab-autocomplete
     /// ghost text), from the `kimix_settings` remote settings flag. Sits below
     /// env (`KIMIX_PROMPT_SUGGESTIONS_MODEL`) and `[models] prompt_suggestion`

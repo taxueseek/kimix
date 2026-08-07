@@ -515,6 +515,11 @@ pub struct ModelOverrideConfig {
     pub session_summary: Option<String>,
     /// Compiled default (`kimix_models::default_model()`) when unset locally, remotely, and via env.
     pub image_description: Option<String>,
+    /// Dedicated model for the `web_search` **tool** (Grok-style decoupling).
+    /// Chat may use a different model; when set, tool calls run Responses +
+    /// server `web_search` on this model. `None` = no sidecar (Kimi client
+    /// and/or chat-model hosted search only).
+    pub web_search: Option<String>,
     /// Next-prompt suggestion model pin. Unlike the other overrides this does
     /// NOT fill a compiled default — see [`PromptSuggestModelPin`].
     #[serde(skip)]
@@ -562,6 +567,7 @@ impl ModelOverrideConfig {
     /// CLI flag > env var > config.toml > remote settings > compiled default.
     /// `image_description` and `session_summary` always resolve to `Some(_)`
     /// (the bundled default model), never the session model.
+    /// `web_search` has **no** compiled default (`None` = no dedicated search model).
     /// `prompt_suggestion` resolves to a [`PromptSuggestModelPin`] instead of
     /// a model string (no CLI flag; the default and the catalog guard live at
     /// the consumer, `handle_suggest_prompt`).
@@ -577,6 +583,7 @@ impl ModelOverrideConfig {
         let mut result = Self {
             session_summary: non_empty_model_override(parsed_models.session_summary.as_deref()),
             image_description: non_empty_model_override(parsed_models.image_description.as_deref()),
+            web_search: non_empty_model_override(parsed_models.web_search.as_deref()),
             prompt_suggestion: non_empty_model_override(parsed_models.prompt_suggestion.as_deref())
                 .map(PromptSuggestModelPin::Pinned)
                 .unwrap_or_default(),
@@ -587,6 +594,7 @@ impl ModelOverrideConfig {
         let has_local_id = models_table
             .and_then(|m| m.get("image_description"))
             .is_some();
+        let has_local_ws = models_table.and_then(|m| m.get("web_search")).is_some();
         if let Some(remote) = remote {
             if !has_local_ss {
                 result.session_summary =
@@ -595,6 +603,10 @@ impl ModelOverrideConfig {
             if !has_local_id {
                 result.image_description =
                     non_empty_model_override(remote.image_description_model.as_deref());
+            }
+            if !has_local_ws {
+                result.web_search =
+                    non_empty_model_override(remote.web_search_model.as_deref());
             }
             if result.prompt_suggestion == PromptSuggestModelPin::Unpinned
                 && let Some(v) = non_empty_model_override(remote.prompt_suggestion_model.as_deref())
@@ -607,6 +619,12 @@ impl ModelOverrideConfig {
         }
         if let Ok(v) = std::env::var("KIMIX_IMAGE_DESCRIPTION_MODEL") {
             result.image_description = non_empty_model_override(Some(v.as_str()));
+        }
+        // Grok parity: GROK_WEB_SEARCH_MODEL is also accepted as an alias.
+        if let Ok(v) = std::env::var("KIMIX_WEB_SEARCH_MODEL")
+            .or_else(|_| std::env::var("GROK_WEB_SEARCH_MODEL"))
+        {
+            result.web_search = non_empty_model_override(Some(v.as_str()));
         }
         if let Ok(v) = std::env::var("KIMIX_PROMPT_SUGGESTIONS_MODEL")
             && let Some(v) = non_empty_model_override(Some(v.as_str()))

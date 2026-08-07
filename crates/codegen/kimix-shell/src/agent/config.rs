@@ -682,6 +682,10 @@ pub struct ModelsConfig {
     /// images via a separate endpoint.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image_description: Option<String>,
+    /// Dedicated model for the `web_search` tool (chat model may differ).
+    /// Grok parity: `[models] web_search` / `KIMIX_WEB_SEARCH_MODEL`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub web_search: Option<String>,
     /// Model pin for next-prompt suggestions (tab-autocomplete ghost text).
     /// Unset = remote pin, then the client hint / built-in bundled-model
     /// default with the catalog guard; see `ModelOverrideConfig::resolve`.
@@ -1304,6 +1308,10 @@ pub struct Config {
     /// Image describe model (bundled default via `ModelOverrideConfig::resolve`).
     #[serde(skip)]
     pub image_description_model: Option<String>,
+    /// Dedicated web_search tool model (`env > [models] web_search` > remote).
+    /// `None` = no tool-decoupled search model.
+    #[serde(skip)]
+    pub web_search_model: Option<String>,
     /// Next-prompt suggestion model pin (`env > [models] prompt_suggestion >
     /// remote`), consumed catalog-guarded by `handle_suggest_prompt`; see
     /// `ModelOverrideConfig::resolve`.
@@ -1562,6 +1570,7 @@ impl Default for Config {
             requirements: Requirements::default(),
             session_summary_model: None,
             image_description_model: None,
+            web_search_model: None,
             prompt_suggest_model_pin: crate::config::PromptSuggestModelPin::Unpinned,
         }
     }
@@ -1649,6 +1658,7 @@ impl Config {
         let model_overrides = crate::config::ModelOverrideConfig::resolve(None, raw_config, None);
         config.session_summary_model = model_overrides.session_summary;
         config.image_description_model = model_overrides.image_description;
+        config.web_search_model = model_overrides.web_search;
         config.prompt_suggest_model_pin = model_overrides.prompt_suggestion;
         Ok(config)
     }
@@ -1702,6 +1712,7 @@ impl Config {
         );
         self.session_summary_model = models.session_summary;
         self.image_description_model = models.image_description;
+        self.web_search_model = models.web_search;
         self.prompt_suggest_model_pin = models.prompt_suggestion;
         self.cli_experimental_memory = ctx.cli_experimental_memory;
         self.cli_no_memory = ctx.cli_no_memory;

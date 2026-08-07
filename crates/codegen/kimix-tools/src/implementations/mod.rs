@@ -26,4 +26,4 @@ pub use opencode::{
 };
 pub use search_tool::SearchTool;
 pub use use_tool::{UseTool, UseToolInput};
-pub use web_search::WebSearchConfig;
+pub use web_search::{ModelSearchEndpoint, WebSearchConfig};
