@@ -11,7 +11,7 @@ env:
 
 jobs:
   check:
-    name: check (${{ matrix.os }})
+    name: verification (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -28,19 +28,5 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Check
-        run: cargo check --workspace --all-targets
-
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Format
-        run: cargo fmt --all --check
-
-      - name: Test
-        run: cargo test --workspace --all-targets
-
-      - name: Deny
-        run: |
-          cargo install cargo-deny --locked
-          cargo deny check advisories bans sources licenses
+      - name: Run verification gates
+        run: bash scripts/ci/quality-gates.sh
